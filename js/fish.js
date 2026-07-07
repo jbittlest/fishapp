@@ -10,6 +10,13 @@ const Fish = {
   _reqId: 0,
 };
 
+/* Southern-California SALTWATER target species only (iNaturalist taxon IDs), so freshwater
+   fish (largemouth bass etc.) and location-obscured records don't clutter the ocean.
+   Genus/family IDs cover many species each: rockfishes, kelp/sand bass, tunas & bonito,
+   yellowtail & jacks, barracuda, croakers/white seabass, dorado, lingcod, halibut,
+   surfperch, swordfish, tunas, ocean whitefish. */
+const FISH_TAXA = '47762,90725,47266,47232,47263,49172,87641,52540,53745,63687,86731,92881,69676,49174';
+
 function fishInit(map) {
   Fish.layer = L.layerGroup();
   map.on('moveend', () => { if (Fish.on) scheduleFishRefresh(); });
@@ -32,10 +39,11 @@ async function refreshFish() {
   if (map.getZoom() < 8) { Fish.layer.clearLayers(); toast('Zoom in to load fish sightings'); return; }
   const b = map.getBounds();
   const id = ++Fish._reqId;
-  const url = 'https://api.inaturalist.org/v1/observations?taxon_id=47178' + // ray-finned fishes
+  const url = 'https://api.inaturalist.org/v1/observations?taxon_id=' + FISH_TAXA +
     '&nelat=' + b.getNorth().toFixed(4) + '&nelng=' + b.getEast().toFixed(4) +
     '&swlat=' + b.getSouth().toFixed(4) + '&swlng=' + b.getWest().toFixed(4) +
-    '&per_page=100&order_by=observed_on&order=desc&geo=true&photos=true&quality_grade=research';
+    '&per_page=100&order_by=observed_on&order=desc&geo=true&photos=true' +
+    '&quality_grade=research&geoprivacy=open'; // open = not location-obscured
   try {
     const r = await fetch(url);
     if (!r.ok) throw new Error('http ' + r.status);
