@@ -28,7 +28,7 @@
   });
 
   /* ---- Layers ---- */
-  const live = { base: null, enc: null, seamark: null, labels: null, ncei: null };
+  const live = { base: null, enc: null, seamark: null, labels: null, reliefhi: null };
   const prefs = JSON.parse(localStorage.getItem('fishapp.layers') || '{"base":"ocean","enc":true,"seamark":true,"wind":false}');
 
   function setBase(id, isUserAction) {
@@ -37,11 +37,15 @@
     live.base.setZIndex(0);
     /* relief & satellite have no place names — add a labels overlay so you can find things */
     const needsLabels = id === 'gmrt' || id === 'sat';
-    if (needsLabels && !live.labels) { live.labels = makeLayer('labels').addTo(map); live.labels.setZIndex(2); }
+    if (needsLabels && !live.labels) { live.labels = makeLayer('labels').addTo(map); live.labels.setZIndex(3); }
     if (!needsLabels && live.labels) { map.removeLayer(live.labels); live.labels = null; }
-    /* relief gets NOAA hi-res coastal detail layered on top (transparent where unsurveyed) */
-    if (id === 'gmrt' && !live.ncei) { live.ncei = makeLayer('ncei').addTo(map); live.ncei.setZIndex(1); }
-    if (id !== 'gmrt' && live.ncei) { map.removeLayer(live.ncei); live.ncei = null; }
+    /* relief base is fast-but-soft GEBCO (instant); sharpen it when zoomed in (z11+) with
+       GMRT multibeam hillshade layered on top. GMRT is global + opaque, so it fully replaces
+       the soft base wherever it loads — the map shows relief instantly, then sharpens.
+       (NCEI coastal DEM is deliberately NOT stacked here: it's opaque and coarse in deep
+       water, where it would blockily cover the sharper GMRT.) */
+    if (id === 'gmrt' && !live.reliefhi) { live.reliefhi = makeLayer('reliefhi').addTo(map); live.reliefhi.setZIndex(1); }
+    if (id !== 'gmrt' && live.reliefhi) { map.removeLayer(live.reliefhi); live.reliefhi = null; }
     /* picking relief auto-turns-on the NOAA chart so you get crisp vector contours on
        top of the bottom shape. Only on a real tap — a manual toggle-off afterward sticks. */
     if (isUserAction && id === 'gmrt' && !prefs.enc) {
