@@ -43,23 +43,23 @@ async function sstEnable(on) {
   if (on) {
     if (!navigator.onLine) { toast('SST needs internet'); document.getElementById('ovl-sst').checked = false; return; }
     await sstDetermineRange();
-    buildSstFrames();
     if (legend) legend.classList.remove('hidden');
     sstUpdateLegend();
-    showFrame(SST.frames.length - 1);   // latest, static
-    sstStop();
+    buildSstFrames(1);   // static: one frame only, swaps in on load (no blank gap)
     if (!SST._moveBound) {
       window._map.on('moveend', () => {
         if (!SST.on) return;
         clearTimeout(SST._moveTimer);
-        SST._moveTimer = setTimeout(() => { sstDetermineRange().then(() => { buildSstFrames(); sstUpdateLegend(); showFrame(SST.frames.length - 1); }); }, 1100);
+        SST._moveTimer = setTimeout(() => {
+          sstDetermineRange().then(() => { sstUpdateLegend(); buildSstFrames(SST.playing ? SST_LOOP_DAYS : 1); });
+        }, 1000);
       });
       SST._moveBound = true;
     }
   } else {
     sstStop();
-    SST.frames.forEach((f) => window._map.removeLayer(f.ov));
-    SST.frames = [];
+    (SST._live || []).forEach((ov) => window._map.removeLayer(ov));
+    SST._live = []; SST.frames = [];
     if (legend) legend.classList.add('hidden');
   }
 }
@@ -110,18 +110,37 @@ function sstImgUrl(date) {
     '&.size=' + w + '|' + h + '&.colorBar=' + cb;
 }
 
-function buildSstFrames() {
-  sstStop();
-  SST.frames.forEach((f) => window._map.removeLayer(f.ov));
-  SST.frames = [];
+/* Build n day-frames (1 = static latest, SST_LOOP_DAYS = loop). New overlays load at
+   opacity 0 while the OLD ones stay visible; only once the newest new image has loaded do
+   we reveal it and drop the old set — so a pan/zoom never flashes blank. */
+function buildSstFrames(n) {
+  n = n || (SST.playing ? SST_LOOP_DAYS : 1);
+  const token = SST._buildToken = (SST._buildToken || 0) + 1;
   const b = window._map.getBounds();
   const bounds = [[b.getSouth(), b.getWest()], [b.getNorth(), b.getEast()]];
-  for (let d = SST_LAG_DAYS + SST_LOOP_DAYS - 1; d >= SST_LAG_DAYS; d--) {
-    const date = sstDate(d);
-    const ov = L.imageOverlay(sstImgUrl(date), bounds, { opacity: 0, interactive: false });
-    ov.addTo(window._map);
-    SST.frames.push({ date, ov });
+  const frames = [];
+  for (let d = SST_LAG_DAYS + n - 1; d >= SST_LAG_DAYS; d--) {
+    const ov = L.imageOverlay(sstImgUrl(sstDate(d)), bounds, { opacity: 0, interactive: false }).addTo(window._map);
+    frames.push({ date: sstDate(d), ov });   // oldest -> newest
   }
+  SST.frames = frames;
+  SST._live = (SST._live || []).concat(frames.map((f) => f.ov));
+  const newest = frames[frames.length - 1];
+  let done = false;
+  const reveal = () => {
+    if (done || token !== SST._buildToken) return;   // superseded by a newer build
+    done = true;
+    const keep = frames.map((f) => f.ov);
+    (SST._live || []).forEach((ov) => { if (keep.indexOf(ov) < 0) window._map.removeLayer(ov); });
+    SST._live = keep;
+    SST.idx = frames.length - 1;
+    if (!SST.playing) newest.ov.setOpacity(0.75);
+    const el = document.getElementById('sst-date');
+    if (el) el.textContent = newest.date + (SST.playing ? ' ▸' : '');
+  };
+  const img = newest.ov._image;
+  if (img && img.complete && img.naturalWidth) reveal();
+  else { newest.ov.once('load', reveal); newest.ov.once('error', reveal); setTimeout(reveal, 8000); }
 }
 
 function showFrame(i) {
@@ -148,17 +167,16 @@ function sstSetPalette(name) {
   SST.palette = name;
   localStorage.setItem('fishapp.sstpal', name);
   if (!SST.on) return;
-  buildSstFrames();           // re-render frames with the new palette
   sstUpdateLegend();
-  showFrame(SST.frames.length - 1);
-  sstStop();
+  buildSstFrames(SST.playing ? SST_LOOP_DAYS : 1);   // re-render with the new palette
 }
 
 function sstPlay() {
-  if (SST.frames.length < 2 || !navigator.onLine) return;
+  if (!navigator.onLine) return;
   SST.playing = true;
   updateSstPlayBtn();
-  SST.timer = setInterval(() => showFrame(SST.idx + 1), SST_FRAME_MS);
+  if (SST.frames.length < SST_LOOP_DAYS) buildSstFrames(SST_LOOP_DAYS);   // load all days to animate
+  SST.timer = setInterval(() => { if (SST.frames.length) showFrame(SST.idx + 1); }, SST_FRAME_MS);
 }
 
 function sstStop() {
