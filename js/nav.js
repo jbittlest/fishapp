@@ -6,7 +6,7 @@ const Nav = {
   mode: null,                                  // 'route' | 'measure' | null
   route: { line: null, markers: [], pts: [] },
   measure: { line: null, a: null, layer: null },
-  anchor: { ll: null, circle: null, marker: null, radius: 50, watching: false, alarmed: false },
+  anchor: { ll: null, circle: null, marker: null, radiusFt: 150, watching: false, dragging: false, dismissed: false, audio: null, alarmTimer: null },
   trip: { active: false, start: 0, dist: 0, maxKn: 0, sumKn: 0, nKn: 0, lastLL: null },
 };
 
@@ -84,32 +84,82 @@ function measureClick(ll) {
 }
 
 /* ---- Anchor alarm ---- */
+const FT_PER_M = 3.28084;
+function anchorRadiusM() { return Nav.anchor.radiusFt / FT_PER_M; }
+
 function anchorDrop() {
   const ll = GPS.lastLatLng;
-  if (!ll) { toast('No GPS fix yet'); return; }
+  if (!ll) { toast('No GPS fix yet — wait for a fix, then drop'); return; }
   anchorRaise();
   Nav.anchor.ll = ll;
-  Nav.anchor.radius = parseInt(document.getElementById('anchor-radius').value, 10) || 50;
-  Nav.anchor.circle = L.circle(ll, { radius: Nav.anchor.radius, color: '#e8453d', weight: 2, fillColor: '#e8453d', fillOpacity: 0.1 }).addTo(window._map);
+  Nav.anchor.radiusFt = parseInt(document.getElementById('anchor-radius').value, 10) || 150;
+  Nav.anchor.circle = L.circle(ll, { radius: anchorRadiusM(), color: '#e8453d', weight: 2, fillColor: '#e8453d', fillOpacity: 0.1 }).addTo(window._map);
   Nav.anchor.marker = L.marker(ll, { icon: L.divIcon({ className: '', html: '<div style="font-size:22px">⚓</div>', iconSize: [24, 24], iconAnchor: [12, 12] }) }).addTo(window._map);
-  Nav.anchor.watching = true; Nav.anchor.alarmed = false;
+  Nav.anchor.watching = true; Nav.anchor.dragging = false; Nav.anchor.dismissed = false;
+  unlockAudio();          // this tap is a user gesture — unlock audio so the alarm can beep later
+  requestWakeLock();      // keep the screen on so GPS keeps running (iOS suspends when locked)
   updateAnchorUi();
-  toast('⚓ Anchor watch on (' + Nav.anchor.radius + ' m)');
+  toast('⚓ Anchor watch on (' + Nav.anchor.radiusFt + ' ft) — keep the app open, screen on');
 }
 function anchorRaise() {
+  stopAnchorAlarm();
   if (Nav.anchor.circle) window._map.removeLayer(Nav.anchor.circle);
   if (Nav.anchor.marker) window._map.removeLayer(Nav.anchor.marker);
   Nav.anchor.circle = Nav.anchor.marker = Nav.anchor.ll = null;
-  Nav.anchor.watching = false; Nav.anchor.alarmed = false;
+  Nav.anchor.watching = false; Nav.anchor.dragging = false; Nav.anchor.dismissed = false;
   updateAnchorUi();
 }
 function updateAnchorUi() {
   const btn = document.getElementById('btn-anchor');
   if (btn) btn.textContent = Nav.anchor.watching ? '⚓ Raise anchor / stop watch' : '⚓ Drop anchor here';
   const s = document.getElementById('anchor-status');
-  if (s) s.textContent = Nav.anchor.watching ? 'Watching — alarm if you drift past ' + Nav.anchor.radius + ' m' : '';
+  if (s) s.textContent = Nav.anchor.watching ? 'Watching — alarms if you drift past ' + Nav.anchor.radiusFt + ' ft' : '';
 }
 function anchorToggle() { Nav.anchor.watching ? anchorRaise() : anchorDrop(); }
+
+/* Unlock the Web Audio context from a user tap (iOS blocks audio otherwise) */
+function unlockAudio() {
+  try {
+    if (!Nav.anchor.audio) Nav.anchor.audio = new (window.AudioContext || window.webkitAudioContext)();
+    if (Nav.anchor.audio.state === 'suspended') Nav.anchor.audio.resume();
+    const o = Nav.anchor.audio.createOscillator(), g = Nav.anchor.audio.createGain();
+    g.gain.value = 0.0001; o.connect(g); g.connect(Nav.anchor.audio.destination);
+    o.start(); o.stop(Nav.anchor.audio.currentTime + 0.02);   // silent priming blip
+  } catch (e) {}
+}
+
+function startAnchorAlarm() {
+  const overlay = document.getElementById('anchor-alarm');
+  if (overlay) overlay.classList.remove('hidden');
+  anchorBeep();
+  clearInterval(Nav.anchor.alarmTimer);
+  Nav.anchor.alarmTimer = setInterval(anchorBeep, 2000);   // repeat until dismissed / back in circle
+}
+function stopAnchorAlarm() {
+  clearInterval(Nav.anchor.alarmTimer);
+  Nav.anchor.alarmTimer = null;
+  const overlay = document.getElementById('anchor-alarm');
+  if (overlay) overlay.classList.add('hidden');
+}
+function anchorDismissAlarm() {   // silence but keep watching
+  stopAnchorAlarm();
+  Nav.anchor.dragging = false;
+  Nav.anchor.dismissed = true;
+}
+function anchorBeep() {
+  if (navigator.vibrate) navigator.vibrate([500, 200, 500, 200, 500]);   // no-op on iOS, works on Android
+  const ac = Nav.anchor.audio;
+  if (!ac) return;
+  if (ac.state === 'suspended') ac.resume();
+  [0, 0.45, 0.9].forEach((dt) => {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.frequency.value = 920; o.connect(g); g.connect(ac.destination);
+    g.gain.setValueAtTime(0.0001, ac.currentTime + dt);
+    g.gain.exponentialRampToValueAtTime(0.5, ac.currentTime + dt + 0.04);
+    g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + dt + 0.4);
+    o.start(ac.currentTime + dt); o.stop(ac.currentTime + dt + 0.42);
+  });
+}
 
 /* ---- Trip stats ---- */
 function tripToggle() {
@@ -142,30 +192,16 @@ function navOnFix(ll, kn) {
   }
   // anchor drift alarm
   if (Nav.anchor.watching && Nav.anchor.ll) {
-    const dist = ll.distanceTo(Nav.anchor.ll);
-    if (dist > Nav.anchor.radius && !Nav.anchor.alarmed) {
-      Nav.anchor.alarmed = true;
-      anchorAlarm(Math.round(dist));
-    } else if (dist <= Nav.anchor.radius) {
-      Nav.anchor.alarmed = false;
+    const distFt = Math.round(ll.distanceTo(Nav.anchor.ll) * FT_PER_M);
+    if (distFt > Nav.anchor.radiusFt) {
+      if (!Nav.anchor.dragging && !Nav.anchor.dismissed) { Nav.anchor.dragging = true; startAnchorAlarm(); }
+      const el = document.getElementById('aa-dist');
+      if (el) el.textContent = distFt + ' ft from anchor (limit ' + Nav.anchor.radiusFt + ' ft)';
+    } else {
+      Nav.anchor.dismissed = false;
+      if (Nav.anchor.dragging) { Nav.anchor.dragging = false; stopAnchorAlarm(); }
     }
   }
-}
-
-function anchorAlarm(dist) {
-  toast('⚠️ ANCHOR DRAGGING — ' + dist + ' m from anchor!');
-  if (navigator.vibrate) navigator.vibrate([400, 150, 400, 150, 400]);
-  try {
-    const ac = new (window.AudioContext || window.webkitAudioContext)();
-    [0, 0.5, 1].forEach((dt) => {
-      const o = ac.createOscillator(), g = ac.createGain();
-      o.frequency.value = 880; o.connect(g); g.connect(ac.destination);
-      g.gain.setValueAtTime(0.0001, ac.currentTime + dt);
-      g.gain.exponentialRampToValueAtTime(0.3, ac.currentTime + dt + 0.05);
-      g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + dt + 0.35);
-      o.start(ac.currentTime + dt); o.stop(ac.currentTime + dt + 0.4);
-    });
-  } catch (e) {}
 }
 
 function fmtDur(sec) {

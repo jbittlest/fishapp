@@ -232,6 +232,7 @@
   document.getElementById('route-gph').addEventListener('input', routeStats);
   document.getElementById('btn-measure').onclick = () => navSetMode('measure');
   document.getElementById('btn-anchor').onclick = anchorToggle;
+  document.getElementById('aa-dismiss').onclick = anchorDismissAlarm;
   document.getElementById('btn-trip').onclick = tripToggle;
   document.getElementById('btn-trip-reset').onclick = tripReset;
 

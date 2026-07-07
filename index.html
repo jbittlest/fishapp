@@ -121,9 +121,10 @@
   <div id="measure-out" class="hint"></div>
 
   <h3>⚓ Anchor alarm</h3>
-  <label class="fld sm">Watch radius (m)<input type="number" id="anchor-radius" value="50" inputmode="numeric"></label>
+  <label class="fld sm">Watch radius (ft)<input type="number" id="anchor-radius" value="150" inputmode="numeric"></label>
   <button id="btn-anchor" class="primary">⚓ Drop anchor here</button>
   <div id="anchor-status" class="hint"></div>
+  <p class="hint">Keep the app open with the screen on — iOS pauses GPS when the phone locks, so a background alarm isn't possible in a web app.</p>
 
   <h3>📊 Trip stats</h3>
   <div class="tool-row">
@@ -232,6 +233,14 @@
       <button id="catch-cancel">Cancel</button>
       <button id="catch-save" class="primary">Save catch</button>
     </div>
+  </div>
+</div>
+
+<div id="anchor-alarm" class="hidden">
+  <div class="aa-inner">
+    <div class="aa-title">⚠️ ANCHOR DRAGGING</div>
+    <div id="aa-dist"></div>
+    <button id="aa-dismiss">Silence</button>
   </div>
 </div>
 

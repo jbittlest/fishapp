@@ -1,7 +1,7 @@
 /* Service worker: caches the app shell so FishApp launches with zero internet */
 'use strict';
 
-const CACHE = 'fishapp-v33';
+const CACHE = 'fishapp-v34';
 const SHELL = [
   './',
   './index.html',

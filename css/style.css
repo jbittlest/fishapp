@@ -260,6 +260,21 @@ button.primary {
 .catch-cond { font-size: 12px; opacity: 0.8; margin-top: 3px; }
 #catch-photo-preview img { max-width: 160px; border-radius: 8px; margin-top: 6px; }
 
+/* ---- Anchor drag alarm overlay ---- */
+#anchor-alarm {
+  position: fixed; inset: 0; z-index: 5000;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(180, 10, 10, 0.55); animation: aaflash 0.8s steps(1) infinite;
+}
+@keyframes aaflash { 50% { background: rgba(180, 10, 10, 0.9); } }
+.aa-inner { text-align: center; padding: 24px; }
+.aa-title { font-size: 30px; font-weight: 800; letter-spacing: 1px; margin-bottom: 10px; }
+#aa-dist { font-size: 18px; margin-bottom: 20px; }
+#aa-dismiss {
+  padding: 14px 34px; font-size: 17px; font-weight: 700; border: none; border-radius: 12px;
+  background: #fff; color: #b40a0a; cursor: pointer;
+}
+
 /* ---- Toast ---- */
 #toast {
   position: fixed; bottom: calc(env(safe-area-inset-bottom, 0px) + 90px);
