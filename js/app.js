@@ -131,6 +131,7 @@
     prefs.sst = e.target.checked;
     savePrefs();
   });
+  document.getElementById('sst-play').addEventListener('click', sstTogglePlay);
 
   /* ---- Panels ---- */
   const panels = ['panel-layers', 'panel-spots', 'panel-download', 'panel-weather'];

@@ -173,7 +173,12 @@ button.primary {
   background: linear-gradient(to right, #3b1c8c, #2b6fe0, #23c3d8, #37d46a, #e8e23d, #f2803d, #d81f1f);
 }
 .sst-ends { display: flex; justify-content: space-between; font-size: 9px; opacity: 0.6; margin-top: 2px; }
-.sst-note { font-size: 9px; opacity: 0.5; margin-top: 3px; text-align: center; }
+.sst-play {
+  width: 100%; margin-top: 7px; padding: 7px; border: none; border-radius: 7px;
+  background: #1a6fb5; color: #fff; font-size: 12px; font-weight: 600; cursor: pointer;
+  touch-action: manipulation;
+}
+.sst-note { font-size: 9px; opacity: 0.5; margin-top: 4px; text-align: center; }
 .sst-tiles { mix-blend-mode: normal; }
 
 /* ---- Reefs & MPAs ---- */
