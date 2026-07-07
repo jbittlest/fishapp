@@ -7,6 +7,9 @@ html, body {
   -webkit-user-select: none; user-select: none;
 }
 #map { position: fixed; inset: 0; background: #0e2a40; }
+/* Smoothly upscale tiles (relief/structure past their native zoom) so they read as soft
+   depth shading, never blocky pixels, when zoomed beyond the source data's resolution. */
+.leaflet-tile-pane img { image-rendering: auto; }
 .hidden { display: none !important; }
 
 /* ---- Top status bar ---- */

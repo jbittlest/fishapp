@@ -46,7 +46,11 @@ const LAYERS = {
        replaces the soft GEBCO base wherever it loads. Only fetched at z>=11 (zoomed in),
        and it loads progressively ON TOP of the instant GEBCO base — so zooming in shows
        relief immediately, then sharpens over a couple seconds, then caches sharp. */
-    id: 'reliefhi', name: 'Seafloor relief detail', kind: 'overlay', minZoom: 11, maxNativeZoom: 14, tilePx: 512,
+    /* maxNativeZoom capped at 12: GMRT's real data is only ~20-100 m resolution, so a z12
+       512px tile (~19 m/px) already captures all of it. Capping here means zooming past z12
+       REUSES the already-loaded tiles (upscaled) instead of re-fetching sharper ones that hold
+       no new detail — so zoom-in is instant instead of re-rendering every level. */
+    id: 'reliefhi', name: 'Seafloor relief detail', kind: 'overlay', minZoom: 11, maxNativeZoom: 12, tilePx: 512,
     attribution: 'GMRT',
     urlFor: (z, x, y, px) =>
       'https://www.gmrt.org/services/mapserver/wms_merc?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=GMRT&STYLES=&SRS=EPSG:3857' +
