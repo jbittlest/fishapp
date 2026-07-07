@@ -167,7 +167,9 @@ button.primary {
   flex-shrink: 0;
 }
 .anim-label { font-size: 12px; font-weight: 600; white-space: nowrap; }
-.anim-time { font-size: 12px; opacity: 0.75; font-variant-numeric: tabular-nums; min-width: 58px; }
+.anim-time { font-size: 12px; opacity: 0.85; font-variant-numeric: tabular-nums; min-width: 72px; text-align: right; white-space: nowrap; }
+.anim-bar { width: min(90vw, 400px); }
+.anim-scrub { flex: 1; min-width: 100px; height: 24px; accent-color: #4aa3e0; cursor: pointer; touch-action: manipulation; }
 
 /* ---- Fish sightings popup ---- */
 .fish-pop { text-align: center; }

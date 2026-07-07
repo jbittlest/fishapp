@@ -83,6 +83,19 @@ function windShowHour(offset) {
     el.textContent = new Date(WX.times[i]).toLocaleString([], { weekday: 'short', hour: 'numeric' }) +
       (WX.playing ? ' ▸' : '');
   }
+  const sc = document.getElementById('wind-scrub');
+  if (sc && +sc.value !== offset) sc.value = offset;
+}
+
+/* Drag the timeline: pause and show that forecast hour (loading the hourly data if needed) */
+async function windScrub(v) {
+  if (WX.playing) { WX.playing = false; clearInterval(WX.timer); WX.timer = null; updateWindBtn(); }
+  if (!WX.frames) {
+    if (!navigator.onLine) { toast('Wind forecast needs internet'); return; }
+    toast('Loading wind forecast…');
+    if (!(await windLoopBuild())) return;
+  }
+  windShowHour(parseInt(v, 10));
 }
 
 async function windLoopToggle() {

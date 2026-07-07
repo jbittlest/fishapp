@@ -144,9 +144,11 @@
     savePrefs();
   });
   document.getElementById('rain-play').addEventListener('click', rainTogglePlay);
+  document.getElementById('rain-scrub').addEventListener('input', (e) => rainScrub(e.target.value));
 
   /* Wind forecast loop (weather.js) */
   document.getElementById('wind-play').addEventListener('click', windLoopToggle);
+  document.getElementById('wind-scrub').addEventListener('input', (e) => windScrub(e.target.value));
 
   /* ---- Panels ---- */
   const panels = ['panel-layers', 'panel-spots', 'panel-download', 'panel-weather', 'panel-tides', 'panel-tools'];

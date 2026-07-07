@@ -46,6 +46,8 @@ async function buildRainFrames() {
       Rain.frames.push({ time: fr.time, layer, forecast: now.indexOf(fr) >= 0 });
     });
     if (!Rain.frames.length) toast('No radar frames available right now');
+    const sc = document.getElementById('rain-scrub');
+    if (sc) { sc.max = Math.max(0, Rain.frames.length - 1); sc.value = sc.max; }
   } catch (e) {
     toast('Could not load rain radar');
   }
@@ -60,8 +62,16 @@ function showRainFrame(i) {
   if (el) {
     const dt = new Date(f.time * 1000);
     const t = dt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-    el.textContent = (f.forecast ? 'forecast ' : '') + t + (Rain.playing ? ' ▸' : '');
+    el.textContent = (f.forecast ? 'fcst ' : '') + t + (Rain.playing ? ' ▸' : '');
   }
+  const sc = document.getElementById('rain-scrub');
+  if (sc && +sc.value !== Rain.idx) sc.value = Rain.idx;
+}
+
+/* Drag the timeline: pause and jump to that radar frame */
+function rainScrub(v) {
+  if (Rain.playing) rainStop();
+  showRainFrame(parseInt(v, 10));
 }
 
 function rainPlay() {

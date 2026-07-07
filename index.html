@@ -208,12 +208,12 @@
 <div id="anim-controls">
   <div id="rain-bar" class="anim-bar hidden">
     <button id="rain-play" class="anim-play">▶</button>
-    <span class="anim-label">🌧️ Rain radar</span>
+    <input type="range" id="rain-scrub" class="anim-scrub" min="0" max="0" value="0" step="1" aria-label="Rain time">
     <span id="rain-time" class="anim-time"></span>
   </div>
   <div id="wind-bar" class="anim-bar hidden">
     <button id="wind-play" class="anim-play">▶</button>
-    <span class="anim-label">💨 Wind forecast</span>
+    <input type="range" id="wind-scrub" class="anim-scrub" min="0" max="23" value="0" step="1" aria-label="Wind time">
     <span id="wind-time" class="anim-time"></span>
   </div>
 </div>
