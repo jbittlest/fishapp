@@ -113,6 +113,16 @@
     savePrefs();
   });
 
+  /* Recent fish sightings overlay (fish.js) */
+  fishInit(map);
+  document.getElementById('ovl-fish').checked = !!prefs.fish;
+  if (prefs.fish) fishEnable(true);
+  document.getElementById('ovl-fish').addEventListener('change', (e) => {
+    fishEnable(e.target.checked);
+    prefs.fish = e.target.checked;
+    savePrefs();
+  });
+
   /* Sea surface temp overlay (sst.js) */
   document.getElementById('ovl-sst').checked = !!prefs.sst;
   if (prefs.sst) sstEnable(true);

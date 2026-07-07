@@ -150,6 +150,15 @@ button.primary {
 .wx-row .wx-tp { margin-left: auto; opacity: 0.85; }
 @media (max-width: 400px) { .wx-cards { grid-template-columns: repeat(2, 1fr); } }
 
+/* ---- Fish sightings popup ---- */
+.fish-pop { text-align: center; }
+.fish-photo { width: 100%; max-width: 190px; border-radius: 8px; margin-bottom: 6px; display: block; }
+.fish-name { font-size: 15px; font-weight: 700; }
+.fish-sci { font-size: 11px; font-style: italic; opacity: 0.65; }
+.fish-when { font-size: 12px; opacity: 0.85; margin-top: 3px; }
+.fish-dist { font-size: 11px; opacity: 0.6; margin-top: 1px; }
+.fish-src { font-size: 10px; opacity: 0.5; margin-top: 5px; }
+
 /* ---- SST legend ---- */
 #sst-legend {
   position: fixed; left: calc(env(safe-area-inset-left, 0px) + 10px);
