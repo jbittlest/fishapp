@@ -55,14 +55,35 @@ async function sstEnable(on) {
   }
 }
 
-/* Centre the colour scale on the local water temp for maximum sensitivity */
+/* Stretch the colour scale to the ACTUAL min/max water temp in view, so the full rainbow
+   (blue→red) maps to exactly the temps present — maximum colour difference per degree.
+   Samples a grid of points via Open-Meteo (CORS-ok; ERDDAP's own data fetch is CORS-blocked). */
 async function sstDetermineRange() {
-  const c = window._map.getCenter();
+  const b = window._map.getBounds();
+  const nLat = 5, nLon = 6;
+  const lats = [], lons = [];
+  for (let i = 0; i < nLat; i++) {
+    for (let j = 0; j < nLon; j++) {
+      const lat = b.getSouth() + (b.getNorth() - b.getSouth()) * (i + 0.5) / nLat;
+      const lon = b.getWest() + (b.getEast() - b.getWest()) * (j + 0.5) / nLon;
+      lats.push(lat.toFixed(3));
+      lons.push((((lon + 540) % 360) - 180).toFixed(3));
+    }
+  }
   try {
-    const d = await fetch('https://marine-api.open-meteo.com/v1/marine?latitude=' +
-      c.lat.toFixed(3) + '&longitude=' + c.lng.toFixed(3) + '&current=sea_surface_temperature').then((r) => r.json());
-    const t = d.current && d.current.sea_surface_temperature;
-    if (t != null && !isNaN(t)) { SST.range = [Math.round(t) - 4, Math.round(t) + 4]; return; }
+    let d = await fetch('https://marine-api.open-meteo.com/v1/marine?latitude=' + lats.join(',') +
+      '&longitude=' + lons.join(',') + '&current=sea_surface_temperature').then((r) => r.json());
+    if (!Array.isArray(d)) d = [d];
+    const vals = d.map((x) => x.current && x.current.sea_surface_temperature)
+      .filter((v) => v != null && !isNaN(v)).sort((a, x) => a - x);
+    if (vals.length >= 3) {
+      // 10th–90th percentile: clip the coldest/warmest outlier corners so the MAIN water
+      // body spans the full blue→red rainbow (max colour contrast where you're fishing)
+      const lo = vals[Math.floor(vals.length * 0.10)];
+      const hi = vals[Math.ceil(vals.length * 0.90) - 1];
+      if (hi - lo >= 0.4) { SST.range = [Math.round(lo * 10) / 10, Math.round(hi * 10) / 10]; return; }
+      const mid = (lo + hi) / 2; SST.range = [Math.round((mid - 0.5) * 10) / 10, Math.round((mid + 0.5) * 10) / 10]; return;
+    }
   } catch (e) { /* fall through */ }
   SST.range = [13, 23];   // fallback °C
 }
