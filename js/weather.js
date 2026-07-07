@@ -13,7 +13,7 @@ const MS_TO_FT = 3.28084;
 function wxInit(map) {
   WX.layer = L.layerGroup();
   map.on('moveend zoomend', () => {
-    if (!WX.overlayOn) return;
+    if (!WX.overlayOn || WX.playing) return;   // don't clobber an active forecast loop
     clearTimeout(WX._moveTimer);
     WX._moveTimer = setTimeout(refreshWindOverlay, 900);
   });
@@ -21,12 +21,100 @@ function wxInit(map) {
 
 function windOverlayEnable(on) {
   WX.overlayOn = on;
+  const bar = document.getElementById('wind-bar');
   if (on) {
     WX.layer.addTo(window._map);
     refreshWindOverlay();
+    if (bar) bar.classList.remove('hidden');
   } else {
+    windLoopStop(true);   // silent (don't redraw current)
     window._map.removeLayer(WX.layer);
+    if (bar) bar.classList.add('hidden');
   }
+}
+
+/* ---- Wind forecast loop: animate the arrows through the next 24 h ---- */
+const WIND_LOOP_HOURS = 24;
+const WIND_FRAME_MS = 650;
+
+async function windLoopBuild() {
+  const map = window._map, size = map.getSize(), step = 95;
+  const lats = [], lons = [], pts = [];
+  for (let px = step / 2; px < size.x; px += step) {
+    for (let py = step / 2 + 40; py < size.y; py += step) {
+      const ll = map.containerPointToLatLng([px, py]);
+      if (Math.abs(ll.lat) > 80) continue;
+      lats.push(ll.lat.toFixed(3));
+      lons.push(((ll.lng + 540) % 360 - 180).toFixed(3));
+      pts.push(ll);
+    }
+  }
+  if (!pts.length) return false;
+  const url = 'https://api.open-meteo.com/v1/forecast?latitude=' + lats.join(',') +
+    '&longitude=' + lons.join(',') +
+    '&hourly=wind_speed_10m,wind_direction_10m&wind_speed_unit=kn&forecast_days=2&timezone=auto';
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('http ' + r.status);
+  let data = await r.json();
+  if (!Array.isArray(data)) data = [data];
+  WX.pts = pts;
+  WX.frames = data;
+  WX.times = (data[0] && data[0].hourly) ? data[0].hourly.time : [];
+  const now = Date.now();
+  WX.startIdx = Math.max(0, WX.times.findIndex((t) => new Date(t).getTime() >= now - 3600000));
+  return true;
+}
+
+function windShowHour(offset) {
+  if (!WX.frames) return;
+  WX.idx = offset;
+  const i = WX.startIdx + offset;
+  WX.layer.clearLayers();
+  WX.frames.forEach((d, p) => {
+    const h = d.hourly;
+    if (!h || h.wind_speed_10m[i] == null) return;
+    L.marker(WX.pts[p], {
+      icon: windArrowIcon(h.wind_speed_10m[i], h.wind_direction_10m[i]),
+      interactive: false, keyboard: false,
+    }).addTo(WX.layer);
+  });
+  const el = document.getElementById('wind-time');
+  if (el && WX.times[i]) {
+    el.textContent = new Date(WX.times[i]).toLocaleString([], { weekday: 'short', hour: 'numeric' }) +
+      (WX.playing ? ' ▸' : '');
+  }
+}
+
+async function windLoopToggle() {
+  if (WX.playing) { windLoopStop(); return; }
+  if (!navigator.onLine) { toast('Wind loop needs internet'); return; }
+  if (!WX.overlayOn) {
+    document.getElementById('ovl-wind').checked = true;
+    document.getElementById('ovl-wind').dispatchEvent(new Event('change'));
+  }
+  try {
+    toast('Loading wind forecast…');
+    if (!(await windLoopBuild())) return;
+    WX.playing = true;
+    updateWindBtn();
+    windShowHour(0);
+    WX.timer = setInterval(() => windShowHour((WX.idx + 1) % WIND_LOOP_HOURS), WIND_FRAME_MS);
+  } catch (e) {
+    toast('Could not load wind forecast');
+  }
+}
+
+function windLoopStop(silent) {
+  WX.playing = false;
+  clearInterval(WX.timer);
+  WX.timer = null;
+  updateWindBtn();
+  if (!silent && WX.overlayOn) refreshWindOverlay(); // back to current wind
+}
+
+function updateWindBtn() {
+  const b = document.getElementById('wind-play');
+  if (b) b.textContent = WX.playing ? '⏸' : '▶';
 }
 
 /* ---- Wind arrow overlay ---- */

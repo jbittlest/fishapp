@@ -133,6 +133,19 @@
   });
   document.getElementById('sst-play').addEventListener('click', sstTogglePlay);
 
+  /* Rain radar overlay (rain.js) */
+  document.getElementById('ovl-rain').checked = !!prefs.rain;
+  if (prefs.rain) rainEnable(true);
+  document.getElementById('ovl-rain').addEventListener('change', (e) => {
+    rainEnable(e.target.checked);
+    prefs.rain = e.target.checked;
+    savePrefs();
+  });
+  document.getElementById('rain-play').addEventListener('click', rainTogglePlay);
+
+  /* Wind forecast loop (weather.js) */
+  document.getElementById('wind-play').addEventListener('click', windLoopToggle);
+
   /* ---- Panels ---- */
   const panels = ['panel-layers', 'panel-spots', 'panel-download', 'panel-weather'];
   window.closePanels = () => panels.forEach((p) => document.getElementById(p).classList.add('hidden'));

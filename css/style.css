@@ -150,6 +150,25 @@ button.primary {
 .wx-row .wx-tp { margin-left: auto; opacity: 0.85; }
 @media (max-width: 400px) { .wx-cards { grid-template-columns: repeat(2, 1fr); } }
 
+/* ---- Animation control bars (rain / wind loops) ---- */
+#anim-controls {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); z-index: 1000;
+  display: flex; flex-direction: column; gap: 6px; align-items: center;
+}
+.anim-bar {
+  display: flex; align-items: center; gap: 9px;
+  background: rgba(8, 22, 36, 0.9); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  border: 1px solid rgba(255,255,255,0.15); border-radius: 22px; padding: 6px 12px 6px 6px;
+}
+.anim-play {
+  width: 32px; height: 32px; border-radius: 50%; border: none;
+  background: #1a6fb5; color: #fff; font-size: 14px; cursor: pointer; touch-action: manipulation;
+  flex-shrink: 0;
+}
+.anim-label { font-size: 12px; font-weight: 600; white-space: nowrap; }
+.anim-time { font-size: 12px; opacity: 0.75; font-variant-numeric: tabular-nums; min-width: 58px; }
+
 /* ---- Fish sightings popup ---- */
 .fish-pop { text-align: center; }
 .fish-photo { width: 100%; max-width: 190px; border-radius: 8px; margin-bottom: 6px; display: block; }

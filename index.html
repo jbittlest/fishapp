@@ -58,6 +58,7 @@
   <label class="row"><input type="checkbox" id="ovl-seamark" checked> Seamarks — buoys &amp; beacons (worldwide)</label>
   <label class="row"><input type="checkbox" id="ovl-wind"> Wind arrows (needs internet)</label>
   <label class="row"><input type="checkbox" id="ovl-sst"> 🌡️ Sea surface temp — find the breaks (needs internet)</label>
+  <label class="row"><input type="checkbox" id="ovl-rain"> 🌧️ Rain radar — animated loop (needs internet)</label>
   <h3>California fishing</h3>
   <label class="row"><input type="checkbox" id="ovl-reefs" checked> 🪸 Artificial reefs (offline)</label>
   <label class="row"><input type="checkbox" id="ovl-mpa" checked> 🚫 Marine Protected Areas — no/limited fishing</label>
@@ -142,6 +143,19 @@
   <div class="sst-note">tap anywhere for exact °F</div>
 </div>
 
+<div id="anim-controls">
+  <div id="rain-bar" class="anim-bar hidden">
+    <button id="rain-play" class="anim-play">▶</button>
+    <span class="anim-label">🌧️ Rain radar</span>
+    <span id="rain-time" class="anim-time"></span>
+  </div>
+  <div id="wind-bar" class="anim-bar hidden">
+    <button id="wind-play" class="anim-play">▶</button>
+    <span class="anim-label">💨 Wind forecast</span>
+    <span id="wind-time" class="anim-time"></span>
+  </div>
+</div>
+
 <div id="toast" class="hidden"></div>
 
 <script src="./libs/leaflet/leaflet.js"></script>
@@ -155,6 +169,7 @@
 <script src="./js/reefs.js"></script>
 <script src="./js/sst.js"></script>
 <script src="./js/fish.js"></script>
+<script src="./js/rain.js"></script>
 <script src="./js/download.js"></script>
 <script src="./js/app.js"></script>
 </body>
