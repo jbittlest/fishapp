@@ -28,7 +28,7 @@
   });
 
   /* ---- Layers ---- */
-  const live = { base: null, enc: null, seamark: null, labels: null, reliefhi: null };
+  const live = { base: null, enc: null, seamark: null, labels: null };
   const prefs = JSON.parse(localStorage.getItem('fishapp.layers') || '{"base":"ocean","enc":true,"seamark":true,"wind":false}');
 
   function setBase(id, isUserAction) {
@@ -39,27 +39,31 @@
     const needsLabels = id === 'gmrt' || id === 'sat';
     if (needsLabels && !live.labels) { live.labels = makeLayer('labels').addTo(map); live.labels.setZIndex(3); }
     if (!needsLabels && live.labels) { map.removeLayer(live.labels); live.labels = null; }
-    /* relief base is fast-but-soft GEBCO (instant); sharpen it when zoomed in (z11+) with
-       GMRT multibeam hillshade layered on top. GMRT is global + opaque, so it fully replaces
-       the soft base wherever it loads — the map shows relief instantly, then sharpens.
-       (NCEI coastal DEM is deliberately NOT stacked here: it's opaque and coarse in deep
-       water, where it would blockily cover the sharper GMRT.) */
-    if (id === 'gmrt' && !live.reliefhi) { live.reliefhi = makeLayer('reliefhi').addTo(map); live.reliefhi.setZIndex(1); }
-    if (id !== 'gmrt' && live.reliefhi) { map.removeLayer(live.reliefhi); live.reliefhi = null; }
-    /* picking relief auto-turns-on the NOAA chart so you get crisp vector contours on
-       top of the bottom shape. Only on a real tap — a manual toggle-off afterward sticks. */
-    if (isUserAction && id === 'gmrt' && !prefs.enc) {
-      document.getElementById('ovl-enc').checked = true;
-      setOverlay('enc', true);
-    }
     prefs.base = id;
     savePrefs();
+    /* NAVIONICS-STYLE relief: the base is GEBCO blue depth-shading, and the NOAA vector
+       chart is drawn on top with 'multiply' blend — that turns the chart's white deep-water
+       transparent (so the blue depth colour shows through) while keeping contours & soundings
+       fully dark and razor-sharp at any zoom. So the relief base always wants the chart on. */
+    if (id === 'gmrt') {
+      document.getElementById('ovl-enc').checked = true;
+      if (!live.enc) setOverlay('enc', true);
+      else { prefs.enc = true; savePrefs(); }
+    }
+    updateEncBlend();
   }
   function setOverlay(id, on) {
     if (on && !live[id]) { live[id] = makeLayer(id).addTo(map); live[id].setZIndex(id === 'enc' ? 5 : 6); }
     if (!on && live[id]) { map.removeLayer(live[id]); live[id] = null; }
     prefs[id] = on;
     savePrefs();
+    if (id === 'enc') updateEncBlend();
+  }
+  /* Multiply-blend the chart onto the blue relief base; normal blend over other bases. */
+  function updateEncBlend() {
+    if (live.enc && live.enc._container) {
+      live.enc._container.style.mixBlendMode = (prefs.base === 'gmrt') ? 'multiply' : 'normal';
+    }
   }
   function savePrefs() { localStorage.setItem('fishapp.layers', JSON.stringify(prefs)); }
 
