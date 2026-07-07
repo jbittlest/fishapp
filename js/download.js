@@ -20,6 +20,7 @@ function activeLayerIds() {
   const base = document.querySelector('input[name="base"]:checked').value;
   const ids = [base];
   if (base === 'gmrt' || base === 'sat') ids.push('labels'); // labels ride along with these bases
+  if (base === 'gmrt') ids.push('reliefhi'); // GMRT structure hillshade downloads too (instant offline)
   if (document.getElementById('ovl-enc').checked) ids.push('enc');
   if (document.getElementById('ovl-seamark').checked) ids.push('seamark');
   return ids;

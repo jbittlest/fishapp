@@ -28,7 +28,7 @@
   });
 
   /* ---- Layers ---- */
-  const live = { base: null, enc: null, seamark: null, labels: null };
+  const live = { base: null, enc: null, seamark: null, labels: null, reliefhi: null };
   const prefs = JSON.parse(localStorage.getItem('fishapp.layers') || '{"base":"ocean","enc":true,"seamark":true,"wind":false}');
 
   function setBase(id, isUserAction) {
@@ -39,6 +39,16 @@
     const needsLabels = id === 'gmrt' || id === 'sat';
     if (needsLabels && !live.labels) { live.labels = makeLayer('labels').addTo(map); live.labels.setZIndex(3); }
     if (!needsLabels && live.labels) { map.removeLayer(live.labels); live.labels = null; }
+    /* Bottom STRUCTURE: GMRT high-res multibeam hillshade (z11+), multiply-blended so its
+       3D shading darkens the blue base with real relief — canyon walls, banks, ledges — while
+       keeping the depth colour. GEBCO shows major structure instantly; GMRT sharpens the fine
+       detail over a couple seconds, then caches (instant on revisit / offline downloads). */
+    if (id === 'gmrt' && !live.reliefhi) {
+      live.reliefhi = makeLayer('reliefhi').addTo(map);
+      live.reliefhi.setZIndex(1);
+      live.reliefhi._container.style.mixBlendMode = 'multiply';
+    }
+    if (id !== 'gmrt' && live.reliefhi) { map.removeLayer(live.reliefhi); live.reliefhi = null; }
     prefs.base = id;
     savePrefs();
     /* NAVIONICS-STYLE relief: the base is GEBCO blue depth-shading, and the NOAA vector
