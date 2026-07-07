@@ -32,13 +32,15 @@ const LAYERS = {
     urlFor: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`,
   },
   gmrt: {
-    /* On-demand renderer — render fresh at every zoom (no stretch) and at 2x px for retina */
-    id: 'gmrt', name: 'Seafloor relief', kind: 'base', maxNativeZoom: 17, tilePx: 512,
-    attribution: 'GMRT, GEBCO',
-    urlFor: (z, x, y, px) =>
-      'https://www.gmrt.org/services/mapserver/wms_merc?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=GMRT&STYLES=&SRS=EPSG:3857' +
-      '&BBOX=' + tileBBox3857(z, x, y) +
-      '&WIDTH=' + px + '&HEIGHT=' + px + '&FORMAT=image/png',
+    /* Seafloor relief base. Uses GEBCO/NCEI PRE-CACHED tiles (~0.4s each) instead of
+       GMRT's on-demand WMS (~1.6s each) — the big shaded-relief speedup. GEBCO's cache
+       tops out ~z10; beyond that Leaflet upscales it, and the NCEI overlay (below) adds
+       the sharp nearshore detail where it matters. */
+    id: 'gmrt', name: 'Seafloor relief', kind: 'base', maxNativeZoom: 10,
+    attribution: 'GEBCO, NOAA NCEI',
+    urlFor: (z, x, y) =>
+      'https://tiles.arcgis.com/tiles/C8EMgrsFcRFL6LrL/arcgis/rest/services/GEBCO_basemap_NCEI/MapServer/tile/' +
+      z + '/' + y + '/' + x,
   },
   ncei: {
     /* NOAA coastal DEM hillshade — up to ~1-3 m resolution near US coasts.

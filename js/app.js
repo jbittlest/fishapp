@@ -4,6 +4,15 @@
 (async function init() {
   await openDB();
 
+  /* One-time migrations: flush cached relief tiles when the source changes.
+     'gmrt' switched from slow GMRT WMS to fast pre-cached GEBCO tiles (v13→v14).
+     Guarded so a partial/stale asset load can never brick startup. */
+  if (typeof deleteTilesByPrefix === 'function' &&
+      localStorage.getItem('fishapp.reliefSource') !== 'gebco') {
+    try { await deleteTilesByPrefix('gmrt/'); } catch (e) { /* non-fatal */ }
+    localStorage.setItem('fishapp.reliefSource', 'gebco');
+  }
+
   /* ---- Map ---- */
   const saved = JSON.parse(localStorage.getItem('fishapp.view') || 'null');
   const map = L.map('map', {

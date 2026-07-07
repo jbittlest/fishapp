@@ -45,6 +45,21 @@ function tileKey(layerId, z, x, y) { return layerId + '/' + z + '/' + x + '/' + 
 function getTileBlob(key) { return idb.get('tiles', key).catch(() => null); }
 function putTileBlob(key, blob) { return idb.put('tiles', blob, key).catch(() => {}); }
 
+/* Delete every cached tile whose key starts with a layer prefix, e.g. "gmrt/".
+   Used to flush a layer's tiles when its data source changes. */
+function deleteTilesByPrefix(prefix) {
+  return new Promise((resolve) => {
+    const store = _store('tiles', 'readwrite');
+    const range = IDBKeyRange.bound(prefix, prefix + '￿');
+    const req = store.openKeyCursor(range);
+    req.onsuccess = () => {
+      const cur = req.result;
+      if (cur) { store.delete(cur.key); cur.continue(); } else { resolve(); }
+    };
+    req.onerror = () => resolve();
+  });
+}
+
 /* Bulk-delete tiles by exact key list (used when removing a downloaded area) */
 function deleteTiles(keys, onProgress) {
   return new Promise((resolve) => {
