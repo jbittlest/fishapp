@@ -2,7 +2,7 @@
 'use strict';
 
 const DB_NAME = 'fishapp';
-const DB_VER = 1;
+const DB_VER = 2;
 let _db = null;
 
 function openDB() {
@@ -14,6 +14,7 @@ function openDB() {
       if (!db.objectStoreNames.contains('spots')) db.createObjectStore('spots', { keyPath: 'id', autoIncrement: true });
       if (!db.objectStoreNames.contains('tracks')) db.createObjectStore('tracks', { keyPath: 'id', autoIncrement: true });
       if (!db.objectStoreNames.contains('areas')) db.createObjectStore('areas', { keyPath: 'id', autoIncrement: true });
+      if (!db.objectStoreNames.contains('catches')) db.createObjectStore('catches', { keyPath: 'id', autoIncrement: true });
     };
     req.onsuccess = () => { _db = req.result; resolve(_db); };
     req.onerror = () => reject(req.error);

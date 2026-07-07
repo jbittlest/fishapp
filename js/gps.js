@@ -80,6 +80,7 @@ function gpsOnFix(map, pos) {
   GPS.lastLatLng = ll;
 
   trackOnFix(ll, pos.timestamp); // feed track recorder
+  if (typeof navOnFix === 'function') navOnFix(ll, kn); // feed trip stats + anchor alarm
   refreshSpotDistances();
 }
 

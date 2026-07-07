@@ -149,7 +149,7 @@
   document.getElementById('wind-play').addEventListener('click', windLoopToggle);
 
   /* ---- Panels ---- */
-  const panels = ['panel-layers', 'panel-spots', 'panel-download', 'panel-weather'];
+  const panels = ['panel-layers', 'panel-spots', 'panel-download', 'panel-weather', 'panel-tides', 'panel-tools'];
   window.closePanels = () => panels.forEach((p) => document.getElementById(p).classList.add('hidden'));
   function togglePanel(id) {
     const el = document.getElementById(id);
@@ -159,6 +159,8 @@
     if (id === 'panel-download' && wasHidden) { updateEstimate(); renderAreasList(); updateStorageInfo(); }
     if (id === 'panel-spots' && wasHidden) { renderSpotsList(); renderTracksList(); renderReefsList(); }
     if (id === 'panel-weather' && wasHidden) loadWeatherPanel();
+    if (id === 'panel-tides' && wasHidden) loadTidesTimes();
+    if (id === 'panel-tools' && wasHidden) { renderCatchList(); updateAnchorUi(); updateTripUi(); routeStats(); }
   }
   document.querySelectorAll('.close').forEach((b) =>
     b.addEventListener('click', () => document.getElementById(b.dataset.close).classList.add('hidden')));
@@ -175,11 +177,13 @@
     openSpotModal({ lat: e.latlng.lat, lng: e.latlng.lng });
   });
 
-  /* Single tap → inspect depth / wind / swell at that point (inspect.js wires its own button) */
-  map.on('click', (e) => inspectAt(e.latlng));
+  /* Single tap → route/measure tool if active, else inspect depth/wind/swell */
+  map.on('click', (e) => { if (!navHandleClick(e.latlng)) inspectAt(e.latlng); });
 
   document.getElementById('btn-spots').onclick = () => togglePanel('panel-spots');
   document.getElementById('btn-weather').onclick = () => togglePanel('panel-weather');
+  document.getElementById('btn-tides').onclick = () => togglePanel('panel-tides');
+  document.getElementById('btn-tools').onclick = () => togglePanel('panel-tools');
   document.getElementById('btn-layers').onclick = () => togglePanel('panel-layers');
   document.getElementById('btn-download').onclick = () => togglePanel('panel-download');
   document.getElementById('btn-track').onclick = () => trackToggle();
@@ -211,6 +215,25 @@
   window.addEventListener('online', updateOnline);
   window.addEventListener('offline', updateOnline);
   updateOnline();
+
+  /* ---- Tides / catch log / nav tools ---- */
+  tidesInit();
+  await catchInit(map);
+  navInit(map);
+  document.getElementById('btn-log-catch').onclick = openCatchModal;
+  document.getElementById('catch-save').onclick = saveCatch;
+  document.getElementById('catch-cancel').onclick = closeCatchModal;
+  document.getElementById('modal-catch').addEventListener('click', (e) => { if (e.target.id === 'modal-catch') closeCatchModal(); });
+  document.getElementById('catch-photo').addEventListener('change', (e) => onCatchPhoto(e.target.files[0]));
+  document.getElementById('btn-route-add').onclick = () => navSetMode('route');
+  document.getElementById('btn-route-undo').onclick = routeUndo;
+  document.getElementById('btn-route-clear').onclick = routeClear;
+  document.getElementById('route-speed').addEventListener('input', routeStats);
+  document.getElementById('route-gph').addEventListener('input', routeStats);
+  document.getElementById('btn-measure').onclick = () => navSetMode('measure');
+  document.getElementById('btn-anchor').onclick = anchorToggle;
+  document.getElementById('btn-trip').onclick = tripToggle;
+  document.getElementById('btn-trip-reset').onclick = tripReset;
 
   /* ---- Modules ---- */
   await spotsInit(map);
