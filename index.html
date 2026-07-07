@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>FishApp</title>
+<meta name="description" content="Offline marine charts, GPS navigation and fishing spots">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FishApp">
+<meta name="theme-color" content="#0b1d2e">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/icon-180.png">
+<link rel="icon" type="image/png" href="./icons/icon-192.png">
+<link rel="stylesheet" href="./libs/leaflet/leaflet.css">
+<link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+
+<div id="map"></div>
+
+<!-- Top status bar -->
+<div id="topbar">
+  <div class="stat" id="stat-gps"><span class="dot" id="gps-dot"></span><span id="gps-acc">NO GPS</span></div>
+  <div class="stat big"><span id="stat-speed">—</span><small>kn</small></div>
+  <div class="stat big"><span id="stat-heading">—</span><small>°</small></div>
+  <div class="stat coords" id="stat-coords">—</div>
+  <div class="badge offline hidden" id="offline-badge">OFFLINE</div>
+</div>
+
+<!-- Right button stack -->
+<div id="controls">
+  <button id="btn-follow" class="ctl active" title="Follow GPS">◉</button>
+  <button id="btn-mark" class="ctl" title="Mark spot">📌</button>
+  <button id="btn-spots" class="ctl" title="Spots &amp; tracks">☰</button>
+  <button id="btn-weather" class="ctl" title="Weather &amp; waves">🌤</button>
+  <button id="btn-layers" class="ctl" title="Layers">🗺</button>
+  <button id="btn-download" class="ctl" title="Download charts">⇩</button>
+  <button id="btn-track" class="ctl" title="Record track">⏺</button>
+</div>
+
+<div id="zoomctl">
+  <button id="btn-zoomin" class="ctl">+</button>
+  <button id="btn-zoomout" class="ctl">−</button>
+</div>
+
+<!-- Layers panel -->
+<div class="panel hidden" id="panel-layers">
+  <div class="panel-head"><h2>Map layers</h2><button class="close" data-close="panel-layers">✕</button></div>
+  <h3>Base map</h3>
+  <label class="row"><input type="radio" name="base" value="ocean" checked> Ocean / bathymetry (global)</label>
+  <label class="row"><input type="radio" name="base" value="sat"> Satellite</label>
+  <label class="row"><input type="radio" name="base" value="street"> Street map</label>
+  <label class="row"><input type="radio" name="base" value="gmrt"> Seafloor relief — see the bottom 🏔</label>
+  <h3>Chart overlays</h3>
+  <label class="row"><input type="checkbox" id="ovl-enc" checked> NOAA nautical charts (US waters)</label>
+  <label class="row"><input type="checkbox" id="ovl-seamark" checked> Seamarks — buoys &amp; beacons (worldwide)</label>
+  <label class="row"><input type="checkbox" id="ovl-wind"> Wind arrows (needs internet)</label>
+  <label class="row"><input type="checkbox" id="ovl-sst"> 🌡️ Sea surface temp — find the breaks (needs internet)</label>
+  <h3>California fishing</h3>
+  <label class="row"><input type="checkbox" id="ovl-reefs" checked> 🪸 Artificial reefs (offline)</label>
+  <label class="row"><input type="checkbox" id="ovl-mpa" checked> 🚫 Marine Protected Areas — no/limited fishing</label>
+</div>
+
+<!-- Spots & tracks panel -->
+<div class="panel hidden" id="panel-spots">
+  <div class="panel-head"><h2>Spots &amp; Tracks</h2><button class="close" data-close="panel-spots">✕</button></div>
+  <div class="panel-actions">
+    <button id="btn-export">Export backup</button>
+    <button id="btn-import">Import</button>
+    <input type="file" id="import-file" accept=".json" class="hidden">
+  </div>
+  <h3>Spots</h3>
+  <div id="spots-list" class="list"><p class="empty">No spots yet. Tap 📌 or long-press the map.</p></div>
+  <h3>Nearest reefs 🪸</h3>
+  <div id="reefs-list" class="list"><p class="empty">Loading reefs…</p></div>
+  <h3>Tracks</h3>
+  <div id="tracks-list" class="list"><p class="empty">No tracks recorded yet.</p></div>
+</div>
+
+<!-- Weather panel -->
+<div class="panel hidden" id="panel-weather">
+  <div class="panel-head"><h2>Weather &amp; waves</h2><button class="close" data-close="panel-weather">✕</button></div>
+  <p class="hint" id="wx-loc"></p>
+  <div id="wx-current"></div>
+  <h3>Next 24 hours</h3>
+  <div id="wx-hourly"></div>
+  <p class="hint" id="wx-stale"></p>
+</div>
+
+<!-- Download panel -->
+<div class="panel hidden" id="panel-download">
+  <div class="panel-head"><h2>Offline charts</h2><button class="close" data-close="panel-download">✕</button></div>
+  <p class="hint">Downloads the chart area <b>currently visible on screen</b>. Position the map over your fishing area first.</p>
+  <label class="fld">Area name <input type="text" id="dl-name" placeholder="e.g. Home bay"></label>
+  <h3>Detail level</h3>
+  <label class="row"><input type="radio" name="dlzoom" value="12"> Overview (small download)</label>
+  <label class="row"><input type="radio" name="dlzoom" value="14" checked> Standard detail</label>
+  <label class="row"><input type="radio" name="dlzoom" value="16"> Maximum detail (large download)</label>
+  <p id="dl-estimate" class="hint"></p>
+  <button id="btn-dl-start" class="primary">Download this area</button>
+  <div id="dl-progress" class="hidden">
+    <div class="bar"><div id="dl-bar-fill"></div></div>
+    <p id="dl-status"></p>
+    <button id="btn-dl-cancel">Cancel</button>
+  </div>
+  <h3>Saved areas</h3>
+  <div id="areas-list" class="list"><p class="empty">Nothing downloaded yet.</p></div>
+  <p class="hint" id="storage-info"></p>
+</div>
+
+<!-- Spot edit modal -->
+<div class="modal-wrap hidden" id="modal-spot">
+  <div class="modal">
+    <h2 id="spot-modal-title">New spot</h2>
+    <label class="fld">Name <input type="text" id="spot-name" placeholder="Spot name"></label>
+    <label class="fld">Type
+      <select id="spot-type">
+        <option value="fish">🐟 Fishing spot</option>
+        <option value="anchor">⚓ Anchorage</option>
+        <option value="hazard">⚠️ Hazard</option>
+        <option value="ramp">🛟 Ramp / dock</option>
+        <option value="wreck">🚢 Wreck / structure</option>
+        <option value="other">📍 Other</option>
+      </select>
+    </label>
+    <label class="fld">Notes <textarea id="spot-notes" rows="2" placeholder="Depth, bait, what was biting…"></textarea></label>
+    <div class="modal-btns">
+      <button id="spot-cancel">Cancel</button>
+      <button id="spot-save" class="primary">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="sst-legend" class="hidden">
+  <div class="sst-title">Water temp <span id="sst-date"></span></div>
+  <div class="sst-bar"></div>
+  <div class="sst-ends"><span>cooler</span><span>warmer</span></div>
+  <div class="sst-note">tap anywhere for exact °F</div>
+</div>
+
+<div id="toast" class="hidden"></div>
+
+<script src="./libs/leaflet/leaflet.js"></script>
+<script src="./js/db.js"></script>
+<script src="./js/tiles.js"></script>
+<script src="./js/gps.js"></script>
+<script src="./js/spots.js"></script>
+<script src="./js/tracks.js"></script>
+<script src="./js/weather.js"></script>
+<script src="./js/inspect.js"></script>
+<script src="./js/reefs.js"></script>
+<script src="./js/sst.js"></script>
+<script src="./js/download.js"></script>
+<script src="./js/app.js"></script>
+</body>
+</html>

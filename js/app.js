@@ -1,0 +1,181 @@
+/* App bootstrap: map, layer switching, UI wiring, service worker */
+'use strict';
+
+(async function init() {
+  await openDB();
+
+  /* ---- Map ---- */
+  const saved = JSON.parse(localStorage.getItem('fishapp.view') || 'null');
+  const map = L.map('map', {
+    zoomControl: false,
+    center: saved ? saved.c : [27.9, -82.8],  // Gulf coast default until GPS kicks in
+    zoom: saved ? saved.z : 7,
+    worldCopyJump: true,
+  });
+  window._map = map;
+  map.on('moveend', () => {
+    localStorage.setItem('fishapp.view', JSON.stringify({ c: [map.getCenter().lat, map.getCenter().lng], z: map.getZoom() }));
+    if (!document.getElementById('panel-download').classList.contains('hidden')) updateEstimate();
+  });
+
+  /* ---- Layers ---- */
+  const live = { base: null, enc: null, seamark: null, labels: null, ncei: null };
+  const prefs = JSON.parse(localStorage.getItem('fishapp.layers') || '{"base":"ocean","enc":true,"seamark":true,"wind":false}');
+
+  function setBase(id, isUserAction) {
+    if (live.base) map.removeLayer(live.base);
+    live.base = makeLayer(id).addTo(map);
+    live.base.setZIndex(0);
+    /* relief & satellite have no place names — add a labels overlay so you can find things */
+    const needsLabels = id === 'gmrt' || id === 'sat';
+    if (needsLabels && !live.labels) { live.labels = makeLayer('labels').addTo(map); live.labels.setZIndex(2); }
+    if (!needsLabels && live.labels) { map.removeLayer(live.labels); live.labels = null; }
+    /* relief gets NOAA hi-res coastal detail layered on top (transparent where unsurveyed) */
+    if (id === 'gmrt' && !live.ncei) { live.ncei = makeLayer('ncei').addTo(map); live.ncei.setZIndex(1); }
+    if (id !== 'gmrt' && live.ncei) { map.removeLayer(live.ncei); live.ncei = null; }
+    /* picking relief auto-turns-on the NOAA chart so you get crisp vector contours on
+       top of the bottom shape. Only on a real tap — a manual toggle-off afterward sticks. */
+    if (isUserAction && id === 'gmrt' && !prefs.enc) {
+      document.getElementById('ovl-enc').checked = true;
+      setOverlay('enc', true);
+    }
+    prefs.base = id;
+    savePrefs();
+  }
+  function setOverlay(id, on) {
+    if (on && !live[id]) { live[id] = makeLayer(id).addTo(map); live[id].setZIndex(id === 'enc' ? 5 : 6); }
+    if (!on && live[id]) { map.removeLayer(live[id]); live[id] = null; }
+    prefs[id] = on;
+    savePrefs();
+  }
+  function savePrefs() { localStorage.setItem('fishapp.layers', JSON.stringify(prefs)); }
+
+  document.querySelector(`input[name="base"][value="${prefs.base}"]`).checked = true;
+  document.getElementById('ovl-enc').checked = !!prefs.enc;
+  document.getElementById('ovl-seamark').checked = !!prefs.seamark;
+  setBase(prefs.base);
+  setOverlay('enc', !!prefs.enc);
+  setOverlay('seamark', !!prefs.seamark);
+
+  document.querySelectorAll('input[name="base"]').forEach((r) =>
+    r.addEventListener('change', () => setBase(r.value, true)));
+  document.getElementById('ovl-enc').addEventListener('change', (e) => setOverlay('enc', e.target.checked));
+  document.getElementById('ovl-seamark').addEventListener('change', (e) => setOverlay('seamark', e.target.checked));
+
+  /* California reefs + MPAs (reefs.js) — bundled, offline */
+  await reefsInit(map);
+  const reefPrefs = { reefs: prefs.reefs !== false, mpa: prefs.mpa !== false };
+  document.getElementById('ovl-reefs').checked = reefPrefs.reefs;
+  document.getElementById('ovl-mpa').checked = reefPrefs.mpa;
+  reefsSetVisible('reefs', reefPrefs.reefs);
+  reefsSetVisible('mpa', reefPrefs.mpa);
+  document.getElementById('ovl-reefs').addEventListener('change', (e) => {
+    reefsSetVisible('reefs', e.target.checked); prefs.reefs = e.target.checked; savePrefs();
+  });
+  document.getElementById('ovl-mpa').addEventListener('change', (e) => {
+    reefsSetVisible('mpa', e.target.checked); prefs.mpa = e.target.checked; savePrefs();
+  });
+
+  /* Wind overlay (weather.js) */
+  wxInit(map);
+  document.getElementById('ovl-wind').checked = !!prefs.wind;
+  if (prefs.wind) windOverlayEnable(true);
+  document.getElementById('ovl-wind').addEventListener('change', (e) => {
+    windOverlayEnable(e.target.checked);
+    prefs.wind = e.target.checked;
+    savePrefs();
+  });
+
+  /* Sea surface temp overlay (sst.js) */
+  document.getElementById('ovl-sst').checked = !!prefs.sst;
+  if (prefs.sst) sstEnable(true);
+  document.getElementById('ovl-sst').addEventListener('change', (e) => {
+    sstEnable(e.target.checked);
+    prefs.sst = e.target.checked;
+    savePrefs();
+  });
+
+  /* ---- Panels ---- */
+  const panels = ['panel-layers', 'panel-spots', 'panel-download', 'panel-weather'];
+  window.closePanels = () => panels.forEach((p) => document.getElementById(p).classList.add('hidden'));
+  function togglePanel(id) {
+    const el = document.getElementById(id);
+    const wasHidden = el.classList.contains('hidden');
+    closePanels();
+    if (wasHidden) el.classList.remove('hidden');
+    if (id === 'panel-download' && wasHidden) { updateEstimate(); renderAreasList(); updateStorageInfo(); }
+    if (id === 'panel-spots' && wasHidden) { renderSpotsList(); renderTracksList(); renderReefsList(); }
+    if (id === 'panel-weather' && wasHidden) loadWeatherPanel();
+  }
+  document.querySelectorAll('.close').forEach((b) =>
+    b.addEventListener('click', () => document.getElementById(b.dataset.close).classList.add('hidden')));
+
+  /* ---- Buttons ---- */
+  document.getElementById('btn-follow').onclick = () => setFollow(!GPS.follow);
+  map.on('dragstart', () => setFollow(false));
+
+  document.getElementById('btn-mark').onclick = () => {
+    const ll = GPS.lastLatLng || map.getCenter();
+    openSpotModal({ lat: ll.lat, lng: ll.lng });
+  };
+  map.on('contextmenu', (e) => {           // long-press on touch devices
+    openSpotModal({ lat: e.latlng.lat, lng: e.latlng.lng });
+  });
+
+  /* Single tap → inspect depth / wind / swell at that point (inspect.js wires its own button) */
+  map.on('click', (e) => inspectAt(e.latlng));
+
+  document.getElementById('btn-spots').onclick = () => togglePanel('panel-spots');
+  document.getElementById('btn-weather').onclick = () => togglePanel('panel-weather');
+  document.getElementById('btn-layers').onclick = () => togglePanel('panel-layers');
+  document.getElementById('btn-download').onclick = () => togglePanel('panel-download');
+  document.getElementById('btn-track').onclick = () => trackToggle();
+  document.getElementById('btn-zoomin').onclick = () => map.zoomIn();
+  document.getElementById('btn-zoomout').onclick = () => map.zoomOut();
+
+  document.getElementById('spot-save').onclick = saveSpotFromModal;
+  document.getElementById('spot-cancel').onclick = closeSpotModal;
+  document.getElementById('modal-spot').addEventListener('click', (e) => {
+    if (e.target.id === 'modal-spot') closeSpotModal();
+  });
+
+  document.getElementById('btn-dl-start').onclick = startDownload;
+  document.getElementById('btn-dl-cancel').onclick = () => { DL.cancelled = true; };
+  document.querySelectorAll('input[name="dlzoom"]').forEach((r) =>
+    r.addEventListener('change', updateEstimate));
+
+  document.getElementById('btn-export').onclick = exportData;
+  document.getElementById('btn-import').onclick = () => document.getElementById('import-file').click();
+  document.getElementById('import-file').addEventListener('change', (e) => {
+    if (e.target.files[0]) importData(e.target.files[0]);
+    e.target.value = '';
+  });
+
+  /* ---- Online / offline badge ---- */
+  function updateOnline() {
+    document.getElementById('offline-badge').classList.toggle('hidden', navigator.onLine);
+  }
+  window.addEventListener('online', updateOnline);
+  window.addEventListener('offline', updateOnline);
+  updateOnline();
+
+  /* ---- Modules ---- */
+  await spotsInit(map);
+  renderTracksList();
+  gpsStart(map);
+
+  /* ---- Service worker (makes the app itself work offline) ---- */
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  }
+})();
+
+/* ---- Toast ---- */
+let _toastTimer = null;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.add('hidden'), 3000);
+}
