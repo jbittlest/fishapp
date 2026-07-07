@@ -104,18 +104,28 @@ const OfflineTileLayer = L.TileLayer.extend({
         return;
       }
       if (!navigator.onLine) { img.src = EMPTY_TILE; return; }
-      fetch(def.urlFor(coords.z, coords.x, coords.y, def.tilePx || 256))
-        .then((r) => (r.ok ? r.blob() : null))
-        .then((b) => {
-          if (b && b.type.indexOf('image') === 0 && b.size > 0) {
-            putTileBlob(key, b);
-            img._objUrl = URL.createObjectURL(b);
-            img.src = img._objUrl;
-          } else {
-            img.src = EMPTY_TILE;
-          }
-        })
-        .catch(() => { img.src = EMPTY_TILE; });
+      const url = def.urlFor(coords.z, coords.x, coords.y, def.tilePx || 256);
+      // Retry the slow on-demand render servers once before giving up to a blank tile,
+      // so a transient timeout/500 doesn't leave a permanent hole in the map.
+      const tryFetch = (attempt) =>
+        fetch(url)
+          .then((r) => (r.ok ? r.blob() : null))
+          .then((b) => {
+            if (b && b.type.indexOf('image') === 0 && b.size > 0) {
+              putTileBlob(key, b);
+              img._objUrl = URL.createObjectURL(b);
+              img.src = img._objUrl;
+            } else if (attempt < 1) {
+              setTimeout(() => tryFetch(attempt + 1), 700);
+            } else {
+              img.src = EMPTY_TILE;
+            }
+          })
+          .catch(() => {
+            if (attempt < 1) setTimeout(() => tryFetch(attempt + 1), 700);
+            else img.src = EMPTY_TILE;
+          });
+      tryFetch(0);
     });
     return img;
   },
@@ -129,7 +139,8 @@ function makeLayer(layerId) {
     maxZoom: 20,
     minZoom: def.minZoom || 0,
     attribution: def.attribution,
-    updateWhenIdle: true,
-    keepBuffer: 3,
+    updateWhenIdle: false,      // start loading tiles DURING pan, not only after it stops
+    updateWhenZooming: false,   // don't churn tiles mid zoom-animation
+    keepBuffer: 5,              // keep a wide ring of tiles around the view so panning shows content, not blanks
   });
 }
