@@ -19,6 +19,8 @@
     zoomControl: false,
     center: saved ? saved.c : [27.9, -82.8],  // Gulf coast default until GPS kicks in
     zoom: saved ? saved.z : 7,
+    minZoom: 4,                 // stop zoom-out at a regional scale — the whole-world view
+    maxZoom: 20,                // makes bounds wrap past ±180° and breaks the data overlays
     worldCopyJump: true,
   });
   window._map = map;

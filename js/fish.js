@@ -37,11 +37,11 @@ async function refreshFish() {
   if (!navigator.onLine) { toast('Fish sightings need internet'); return; }
   const map = window._map;
   if (map.getZoom() < 8) { Fish.layer.clearLayers(); toast('Zoom in to load fish sightings'); return; }
-  const b = map.getBounds();
+  const c = mapBoundsClamped();
   const id = ++Fish._reqId;
   const url = 'https://api.inaturalist.org/v1/observations?taxon_id=' + FISH_TAXA +
-    '&nelat=' + b.getNorth().toFixed(4) + '&nelng=' + b.getEast().toFixed(4) +
-    '&swlat=' + b.getSouth().toFixed(4) + '&swlng=' + b.getWest().toFixed(4) +
+    '&nelat=' + c.n.toFixed(4) + '&nelng=' + c.e.toFixed(4) +
+    '&swlat=' + c.s.toFixed(4) + '&swlng=' + c.w.toFixed(4) +
     '&per_page=100&order_by=observed_on&order=desc&geo=true&photos=true' +
     '&quality_grade=research&geoprivacy=open'; // open = not location-obscured
   try {

@@ -68,15 +68,13 @@ async function sstEnable(on) {
    (blue→red) maps to exactly the temps present — maximum colour difference per degree.
    Samples a grid of points via Open-Meteo (CORS-ok; ERDDAP's own data fetch is CORS-blocked). */
 async function sstDetermineRange() {
-  const b = window._map.getBounds();
+  const c = mapBoundsClamped();
   const nLat = 5, nLon = 6;
   const lats = [], lons = [];
   for (let i = 0; i < nLat; i++) {
     for (let j = 0; j < nLon; j++) {
-      const lat = b.getSouth() + (b.getNorth() - b.getSouth()) * (i + 0.5) / nLat;
-      const lon = b.getWest() + (b.getEast() - b.getWest()) * (j + 0.5) / nLon;
-      lats.push(lat.toFixed(3));
-      lons.push((((lon + 540) % 360) - 180).toFixed(3));
+      lats.push((c.s + (c.n - c.s) * (i + 0.5) / nLat).toFixed(3));
+      lons.push((c.w + (c.e - c.w) * (j + 0.5) / nLon).toFixed(3));
     }
   }
   try {
@@ -98,13 +96,13 @@ async function sstDetermineRange() {
 }
 
 function sstImgUrl(date) {
-  const b = window._map.getBounds();
+  const c = mapBoundsClamped();
   const w = Math.min(1100, Math.max(500, window._map.getSize().x));
-  const h = Math.max(1, Math.round(w * (b.getNorth() - b.getSouth()) / (b.getEast() - b.getWest())));
+  const h = Math.max(1, Math.min(1100, Math.round(w * (c.n - c.s) / (c.e - c.w))));
   // griddap .transparentPng honours .colorBar (palette + range); WMS ignores the palette.
   const q = 'analysed_sst%5B(' + date + 'T09:00:00Z)%5D' +
-    '%5B(' + b.getSouth().toFixed(4) + '):(' + b.getNorth().toFixed(4) + ')%5D' +
-    '%5B(' + b.getWest().toFixed(4) + '):(' + b.getEast().toFixed(4) + ')%5D';
+    '%5B(' + c.s.toFixed(4) + '):(' + c.n.toFixed(4) + ')%5D' +
+    '%5B(' + c.w.toFixed(4) + '):(' + c.e.toFixed(4) + ')%5D';
   const cb = encodeURIComponent(SST.palette + '|C|Linear|' + SST.range[0] + '|' + SST.range[1] + '|');
   return 'https://coastwatch.pfeg.noaa.gov/erddap/griddap/jplMURSST41.transparentPng?' + q +
     '&.size=' + w + '|' + h + '&.colorBar=' + cb;
@@ -117,8 +115,8 @@ function buildSstFrames(n) {
   n = n || (SST.playing ? SST_LOOP_DAYS : 1);
   const token = SST._buildToken = (SST._buildToken || 0) + 1;
   clearInterval(SST.timer); SST.timer = null;   // stop any running loop while we (re)load
-  const b = window._map.getBounds();
-  const bounds = [[b.getSouth(), b.getWest()], [b.getNorth(), b.getEast()]];
+  const c = mapBoundsClamped();
+  const bounds = [[c.s, c.w], [c.n, c.e]];       // must match the clamped bbox in sstImgUrl
   const frames = [];
   for (let d = SST_LAG_DAYS + n - 1; d >= SST_LAG_DAYS; d--) {
     const ov = L.imageOverlay(sstImgUrl(sstDate(d)), bounds, { opacity: 0, interactive: false }).addTo(window._map);

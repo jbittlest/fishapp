@@ -147,6 +147,19 @@ function bearingBetween(a, b) {
   return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
 }
 
+/* Current map bounds clamped to VALID lat/lon so data requests never get a wrapped
+   (< -180 or > 180) or whole-world box that errors or blows up memory. */
+function mapBoundsClamped() {
+  const b = window._map.getBounds();
+  let w = b.getWest(), e = b.getEast(), s = b.getSouth(), n = b.getNorth();
+  if (e - w >= 359) { w = -179.9; e = 179.9; }        // spans the world → cap to valid full range
+  w = Math.max(-180, Math.min(179, w));
+  e = Math.min(180, Math.max(w + 0.05, e));
+  s = Math.max(-85, Math.min(84, s));
+  n = Math.min(85, Math.max(s + 0.05, n));
+  return { s: s, n: n, w: w, e: e };
+}
+
 function formatCoord(v, axis) {
   const hemi = axis === 'lat' ? (v >= 0 ? 'N' : 'S') : (v >= 0 ? 'E' : 'W');
   const abs = Math.abs(v);
