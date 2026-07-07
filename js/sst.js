@@ -116,6 +116,7 @@ function sstImgUrl(date) {
 function buildSstFrames(n) {
   n = n || (SST.playing ? SST_LOOP_DAYS : 1);
   const token = SST._buildToken = (SST._buildToken || 0) + 1;
+  clearInterval(SST.timer); SST.timer = null;   // stop any running loop while we (re)load
   const b = window._map.getBounds();
   const bounds = [[b.getSouth(), b.getWest()], [b.getNorth(), b.getEast()]];
   const frames = [];
@@ -125,22 +126,41 @@ function buildSstFrames(n) {
   }
   SST.frames = frames;
   SST._live = (SST._live || []).concat(frames.map((f) => f.ov));
-  const newest = frames[frames.length - 1];
+  const isLoaded = (ov) => ov._image && ov._image.complete && ov._image.naturalWidth;
+  const waitAll = SST.playing && frames.length > 1;   // loop: preload ALL days before animating
   let done = false;
-  const reveal = () => {
+
+  const finish = () => {
     if (done || token !== SST._buildToken) return;   // superseded by a newer build
     done = true;
     const keep = frames.map((f) => f.ov);
     (SST._live || []).forEach((ov) => { if (keep.indexOf(ov) < 0) window._map.removeLayer(ov); });
     SST._live = keep;
-    SST.idx = frames.length - 1;
-    if (!SST.playing) newest.ov.setOpacity(0.75);
-    const el = document.getElementById('sst-date');
-    if (el) el.textContent = newest.date + (SST.playing ? ' ▸' : '');
+    if (SST.playing && frames.length > 1) {
+      updateSstPlayBtn();                      // "Loading…" → "Pause"
+      showFrame(0);
+      clearInterval(SST.timer);
+      SST.timer = setInterval(() => showFrame(SST.idx + 1), SST_FRAME_MS);
+    } else {
+      SST.idx = frames.length - 1;
+      frames[frames.length - 1].ov.setOpacity(0.75);
+      const el = document.getElementById('sst-date');
+      if (el) el.textContent = frames[frames.length - 1].date;
+    }
   };
-  const img = newest.ov._image;
-  if (img && img.complete && img.naturalWidth) reveal();
-  else { newest.ov.once('load', reveal); newest.ov.once('error', reveal); setTimeout(reveal, 8000); }
+
+  if (waitAll) {
+    let remaining = frames.length;
+    frames.forEach((f) => {
+      if (isLoaded(f.ov)) { if (--remaining <= 0) finish(); }
+      else { const h = () => { if (--remaining <= 0) finish(); }; f.ov.once('load', h); f.ov.once('error', h); }
+    });
+    setTimeout(finish, 15000);   // don't hang forever if a day is slow
+  } else {
+    const newest = frames[frames.length - 1].ov;
+    if (isLoaded(newest)) finish();
+    else { newest.once('load', finish); newest.once('error', finish); setTimeout(finish, 8000); }
+  }
 }
 
 function showFrame(i) {
@@ -174,9 +194,10 @@ function sstSetPalette(name) {
 function sstPlay() {
   if (!navigator.onLine) return;
   SST.playing = true;
-  updateSstPlayBtn();
-  if (SST.frames.length < SST_LOOP_DAYS) buildSstFrames(SST_LOOP_DAYS);   // load all days to animate
-  SST.timer = setInterval(() => { if (SST.frames.length) showFrame(SST.idx + 1); }, SST_FRAME_MS);
+  const btn = document.getElementById('sst-play');
+  if (btn) btn.textContent = '⏳ Loading loop…';
+  // build + PRELOAD all 5 days; buildSstFrames starts the animation only once they're loaded
+  buildSstFrames(SST_LOOP_DAYS);
 }
 
 function sstStop() {
