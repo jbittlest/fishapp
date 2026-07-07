@@ -236,6 +236,13 @@
   document.getElementById('btn-trip').onclick = tripToggle;
   document.getElementById('btn-trip-reset').onclick = tripReset;
 
+  /* ---- Keep-screen-awake toggle ---- */
+  const wakeBox = document.getElementById('ovl-wake');
+  wakeBox.checked = WakeLock.enabled;
+  WakeLock.setEnabled(WakeLock.enabled);   // sets status text + acquires if on
+  WakeLock.acquire();
+  wakeBox.addEventListener('change', (e) => WakeLock.setEnabled(e.target.checked));
+
   /* ---- Modules ---- */
   await spotsInit(map);
   renderTracksList();

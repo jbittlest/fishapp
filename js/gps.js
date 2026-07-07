@@ -103,17 +103,40 @@ function setFollow(on) {
   if (on && GPS.lastLatLng) window._map.panTo(GPS.lastLatLng);
 }
 
-/* Keep the screen awake while navigating (iOS 16.4+, Android) */
-async function requestWakeLock() {
-  try {
-    if ('wakeLock' in navigator) {
-      GPS.wakeLock = await navigator.wakeLock.request('screen');
-    }
-  } catch (e) { /* not critical */ }
-}
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') requestWakeLock();
-});
+/* Keep the screen awake the whole time the app is open (iOS 16.4+, Android).
+   The OS drops the lock whenever the app is hidden, so we re-acquire on every
+   return-to-visible and after any interaction. Toggleable; on by default. */
+const WakeLock = {
+  lock: null,
+  enabled: localStorage.getItem('fishapp.wake') !== 'off',
+  supported: 'wakeLock' in navigator,
+  async acquire() {
+    if (!this.enabled || !this.supported) return;
+    if (document.visibilityState !== 'visible' || this.lock) return;
+    try {
+      this.lock = await navigator.wakeLock.request('screen');
+      this.lock.addEventListener('release', () => { this.lock = null; });
+    } catch (e) { this.lock = null; }
+  },
+  async release() {
+    if (this.lock) { try { await this.lock.release(); } catch (e) {} this.lock = null; }
+  },
+  setEnabled(on) {
+    this.enabled = on;
+    localStorage.setItem('fishapp.wake', on ? 'on' : 'off');
+    if (on) this.acquire(); else this.release();
+    const s = document.getElementById('wake-status');
+    if (s) s.textContent = !this.supported ? 'Not supported on this device/browser'
+      : (on ? 'Screen stays on while the app is open' : 'Off — phone may sleep normally');
+  },
+};
+/* Re-acquire whenever the app comes back to the foreground or the user interacts
+   (some browsers only grant the lock right after a gesture). */
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') WakeLock.acquire(); });
+['pointerdown', 'touchstart', 'click'].forEach((ev) => document.addEventListener(ev, () => WakeLock.acquire(), { passive: true }));
+
+/* back-compat alias used elsewhere (gpsStart, anchor drop) */
+function requestWakeLock() { WakeLock.acquire(); }
 
 /* ---- Geo math ---- */
 function bearingBetween(a, b) {
