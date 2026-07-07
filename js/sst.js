@@ -12,8 +12,17 @@ const SST = {
   playing: false,
   timer: null,
   range: null,      // [minC, maxC] colour scale
+  palette: localStorage.getItem('fishapp.sstpal') || 'BlueWhiteRed',
   _moveTimer: null,
   _moveBound: false,
+};
+
+/* Legend bar CSS gradient per palette (cold -> warm) */
+const SST_PALETTE_BAR = {
+  BlueWhiteRed: 'linear-gradient(to right,#1f6fe0,#8fc9e8,#f4f4f4,#f2a03d,#d81f1f)',
+  Rainbow: 'linear-gradient(to right,#3b1c8c,#2b6fe0,#23c3d8,#37d46a,#e8e23d,#f2803d,#d81f1f)',
+  Ocean: 'linear-gradient(to right,#123a59,#2e6f9e,#4a90c2,#89c0de,#d3ebf7)',
+  BlackRedWhite: 'linear-gradient(to right,#4a0000,#a80f0f,#e81f1f,#f4a0a0,#ffe6e6)',
 };
 
 const SST_LOOP_DAYS = 5;
@@ -92,12 +101,13 @@ function sstImgUrl(date) {
   const b = window._map.getBounds();
   const w = Math.min(1100, Math.max(500, window._map.getSize().x));
   const h = Math.max(1, Math.round(w * (b.getNorth() - b.getSouth()) / (b.getEast() - b.getWest())));
-  return 'https://coastwatch.pfeg.noaa.gov/erddap/wms/jplMURSST41/request?service=WMS&version=1.3.0&request=GetMap' +
-    '&layers=jplMURSST41:analysed_sst&styles=&crs=CRS:84' +
-    '&bbox=' + b.getWest() + ',' + b.getSouth() + ',' + b.getEast() + ',' + b.getNorth() +
-    '&width=' + w + '&height=' + h + '&format=image/png&transparent=true' +
-    '&colorBarMinimum=' + SST.range[0] + '&colorBarMaximum=' + SST.range[1] + '&colorBarPalette=Rainbow' +
-    '&time=' + date;
+  // griddap .transparentPng honours .colorBar (palette + range); WMS ignores the palette.
+  const q = 'analysed_sst%5B(' + date + 'T09:00:00Z)%5D' +
+    '%5B(' + b.getSouth().toFixed(4) + '):(' + b.getNorth().toFixed(4) + ')%5D' +
+    '%5B(' + b.getWest().toFixed(4) + '):(' + b.getEast().toFixed(4) + ')%5D';
+  const cb = encodeURIComponent(SST.palette + '|C|Linear|' + SST.range[0] + '|' + SST.range[1] + '|');
+  return 'https://coastwatch.pfeg.noaa.gov/erddap/griddap/jplMURSST41.transparentPng?' + q +
+    '&.size=' + w + '|' + h + '&.colorBar=' + cb;
 }
 
 function buildSstFrames() {
@@ -128,6 +138,20 @@ function sstUpdateLegend() {
     ends.innerHTML = '<span>' + Math.round(C_TO_F(SST.range[0])) + '°F</span>' +
       '<span>' + Math.round(C_TO_F(SST.range[1])) + '°F</span>';
   }
+  const bar = document.querySelector('#sst-legend .sst-bar');
+  if (bar) bar.style.background = SST_PALETTE_BAR[SST.palette] || SST_PALETTE_BAR.Rainbow;
+  const sel = document.getElementById('sst-palette');
+  if (sel && sel.value !== SST.palette) sel.value = SST.palette;
+}
+
+function sstSetPalette(name) {
+  SST.palette = name;
+  localStorage.setItem('fishapp.sstpal', name);
+  if (!SST.on) return;
+  buildSstFrames();           // re-render frames with the new palette
+  sstUpdateLegend();
+  showFrame(SST.frames.length - 1);
+  sstStop();
 }
 
 function sstPlay() {

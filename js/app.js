@@ -132,6 +132,8 @@
     savePrefs();
   });
   document.getElementById('sst-play').addEventListener('click', sstTogglePlay);
+  document.getElementById('sst-palette').value = SST.palette;
+  document.getElementById('sst-palette').addEventListener('change', (e) => sstSetPalette(e.target.value));
 
   /* Rain radar overlay (rain.js) */
   document.getElementById('ovl-rain').checked = !!prefs.rain;

@@ -192,6 +192,12 @@ button.primary {
   background: linear-gradient(to right, #3b1c8c, #2b6fe0, #23c3d8, #37d46a, #e8e23d, #f2803d, #d81f1f);
 }
 .sst-ends { display: flex; justify-content: space-between; font-size: 9px; opacity: 0.6; margin-top: 2px; }
+.sst-palette {
+  width: 100%; margin-top: 6px; padding: 5px 6px; border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08);
+  color: #fff; font-size: 12px;
+}
+.sst-palette option { background: #12293e; color: #fff; }
 .sst-play {
   width: 100%; margin-top: 7px; padding: 7px; border: none; border-radius: 7px;
   background: #1a6fb5; color: #fff; font-size: 12px; font-weight: 600; cursor: pointer;
