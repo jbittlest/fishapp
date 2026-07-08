@@ -292,6 +292,9 @@ button.primary {
 .emg-call { font-size: 15px; padding: 7px 2px; border-bottom: 1px solid rgba(255,255,255,0.08); }
 .emg-script { font-size: 15px; line-height: 1.7; background: rgba(255,255,255,0.06); border-radius: 10px; padding: 12px 14px; }
 .emg-script i { color: #e8b23d; font-style: normal; }
+.emg-sat { font-size: 14px; line-height: 1.55; background: rgba(74,163,224,0.1); border: 1px solid rgba(74,163,224,0.3); border-radius: 10px; padding: 10px 12px; }
+.emg-sat ol { margin: 6px 0; padding-left: 20px; }
+.emg-sat li { margin-bottom: 4px; }
 .reg-warn { font-size: 13px; line-height: 1.45; background: rgba(232,178,61,0.15); border: 1px solid rgba(232,178,61,0.35); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
 .reg-warn a { color: #ffd97a; font-weight: 700; }
 .fi-id { font-size: 14px; line-height: 1.5; margin-bottom: 8px; }

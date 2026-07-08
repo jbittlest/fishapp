@@ -215,6 +215,33 @@
     if (navigator.clipboard) navigator.clipboard.writeText(txt).then(() => toast('Coordinates copied')).catch(() => toast(txt));
     else toast(txt);
   };
+
+  /* Emergency contact + "Text my position" */
+  function getEmgContact() { try { return JSON.parse(localStorage.getItem('fishapp.emgcontact') || 'null'); } catch (e) { return null; } }
+  function showEmgContact() {
+    const c = getEmgContact();
+    document.getElementById('emg-contact').textContent = c ? ('To: ' + c.name + ' (' + c.number + ')') : 'No contact saved — the text opens with no recipient so you can pick one.';
+  }
+  showEmgContact();
+  document.getElementById('emg-setcontact').onclick = () => {
+    const name = prompt('Emergency contact name:', (getEmgContact() || {}).name || '');
+    if (name === null) return;
+    const number = prompt('Their phone number:', (getEmgContact() || {}).number || '');
+    if (number === null) return;
+    localStorage.setItem('fishapp.emgcontact', JSON.stringify({ name: name.trim(), number: number.replace(/[^\d+]/g, '') }));
+    showEmgContact();
+    toast('Emergency contact saved');
+  };
+  document.getElementById('emg-text').onclick = () => {
+    const ll = GPS.lastLatLng;
+    if (!ll) { toast('No GPS fix yet — wait for the green dot'); return; }
+    const lat = ll.lat.toFixed(5), lng = ll.lng.toFixed(5);
+    const dm = formatCoord(ll.lat, 'lat') + ' ' + formatCoord(ll.lng, 'lon');
+    const body = '⚠️ HELP - I need assistance. My position: ' + dm + ' (' + lat + ', ' + lng +
+      ') https://maps.google.com/?q=' + lat + ',' + lng + ' - sent from FishApp';
+    const c = getEmgContact();
+    window.location.href = 'sms:' + (c ? c.number : '') + '?body=' + encodeURIComponent(body);
+  };
   document.getElementById('btn-layers').onclick = () => togglePanel('panel-layers');
   document.getElementById('btn-download').onclick = () => togglePanel('panel-download');
   document.getElementById('btn-track').onclick = () => trackToggle();
