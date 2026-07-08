@@ -37,7 +37,8 @@
   <button id="btn-weather" class="ctl" title="Weather &amp; waves">🌤</button>
   <button id="btn-tides" class="ctl" title="Tides &amp; bite times">🌙</button>
   <button id="btn-tools" class="ctl" title="Nav tools &amp; catch log">🧭</button>
-  <button id="btn-knots" class="ctl" title="Fishing knots">🪢</button>
+  <button id="btn-knots" class="ctl" title="Guides — knots &amp; fish">📖</button>
+  <button id="btn-emergency" class="ctl emg" title="Emergency">🆘</button>
   <button id="btn-layers" class="ctl" title="Layers">🗺</button>
   <button id="btn-download" class="ctl" title="Download charts">⇩</button>
   <button id="btn-track" class="ctl" title="Record track">⏺</button>
@@ -87,11 +88,44 @@
   <div id="tracks-list" class="list"><p class="empty">No tracks recorded yet.</p></div>
 </div>
 
-<!-- Fishing knots panel -->
+<!-- Guides panel: knots + fish ID -->
 <div class="panel hidden" id="panel-knots">
-  <div class="panel-head"><h2>Fishing Knots</h2><button class="close" data-close="panel-knots">✕</button></div>
-  <p class="hint">Tap a knot for step-by-step instructions. Works offline.</p>
-  <div id="knots-list"></div>
+  <div class="panel-head"><h2>Guides</h2><button class="close" data-close="panel-knots">✕</button></div>
+  <div class="tabs">
+    <button class="tab active" data-tab="tab-knots">🪢 Knots</button>
+    <button class="tab" data-tab="tab-fishid">🐟 Fish &amp; Limits</button>
+  </div>
+  <div id="tab-knots">
+    <p class="hint">Tap a knot for illustrated steps. Works offline.</p>
+    <div id="knots-list"></div>
+  </div>
+  <div id="tab-fishid" class="hidden">
+    <div id="fishid-list"></div>
+  </div>
+</div>
+
+<!-- Emergency panel -->
+<div class="panel hidden" id="panel-emergency">
+  <div class="panel-head"><h2>🆘 Emergency</h2><button class="close" data-close="panel-emergency">✕</button></div>
+  <div class="emg-pos-box">
+    <div class="emg-label">YOUR POSITION — read this to the Coast Guard</div>
+    <div id="emg-coords" class="emg-coords">Waiting for GPS…</div>
+    <button id="emg-copy" class="tool-btn">📋 Copy coordinates</button>
+  </div>
+  <h3>Call for help</h3>
+  <div class="emg-call"><b>VHF Channel 16</b> — hailing &amp; distress (primary at sea)</div>
+  <div class="emg-call"><b>Coast Guard / 911</b> — <a href="tel:911">tap to call 911</a> (needs cell signal)</div>
+  <h3>MAYDAY script (life-threatening)</h3>
+  <div class="emg-script">
+    “<b>MAYDAY, MAYDAY, MAYDAY.</b><br>
+    This is <i>[boat name]</i>, <i>[boat name]</i>, <i>[boat name]</i>.<br>
+    <b>MAYDAY</b>, <i>[boat name]</i>.<br>
+    My position is <span id="emg-script-pos">[coordinates above]</span>.<br>
+    Nature of emergency: <i>[sinking / fire / medical / man overboard]</i>.<br>
+    Number of people on board: <i>[#]</i>.<br>
+    We require immediate assistance. <b>Over.</b>”
+  </div>
+  <p class="hint">For urgent-but-not-life-threatening issues use <b>PAN-PAN</b> (say it 3×) instead of MAYDAY.</p>
 </div>
 
 <!-- Tides & Times panel -->
@@ -275,6 +309,7 @@
 <script src="./js/nav.js"></script>
 <script src="./js/knot-diagrams.js"></script>
 <script src="./js/knots.js"></script>
+<script src="./js/fish-id.js"></script>
 <script src="./js/download.js"></script>
 <script src="./js/app.js"></script>
 </body>

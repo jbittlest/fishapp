@@ -153,7 +153,7 @@
   document.getElementById('wind-scrub').addEventListener('input', (e) => windScrub(e.target.value));
 
   /* ---- Panels ---- */
-  const panels = ['panel-layers', 'panel-spots', 'panel-download', 'panel-weather', 'panel-tides', 'panel-tools', 'panel-knots'];
+  const panels = ['panel-layers', 'panel-spots', 'panel-download', 'panel-weather', 'panel-tides', 'panel-tools', 'panel-knots', 'panel-emergency'];
   window.closePanels = () => panels.forEach((p) => document.getElementById(p).classList.add('hidden'));
   function togglePanel(id) {
     const el = document.getElementById(id);
@@ -165,7 +165,8 @@
     if (id === 'panel-weather' && wasHidden) loadWeatherPanel();
     if (id === 'panel-tides' && wasHidden) loadTidesTimes();
     if (id === 'panel-tools' && wasHidden) { renderCatchList(); updateAnchorUi(); updateTripUi(); routeStats(); }
-    if (id === 'panel-knots' && wasHidden) renderKnots();
+    if (id === 'panel-knots' && wasHidden) { renderKnots(); renderFishId(); }
+    if (id === 'panel-emergency' && wasHidden) updateEmergency();
   }
   document.querySelectorAll('.close').forEach((b) =>
     b.addEventListener('click', () => document.getElementById(b.dataset.close).classList.add('hidden')));
@@ -190,6 +191,30 @@
   document.getElementById('btn-tides').onclick = () => togglePanel('panel-tides');
   document.getElementById('btn-tools').onclick = () => togglePanel('panel-tools');
   document.getElementById('btn-knots').onclick = () => togglePanel('panel-knots');
+  document.getElementById('btn-emergency').onclick = () => togglePanel('panel-emergency');
+
+  /* Guides tabs (knots / fish) */
+  document.querySelectorAll('#panel-knots .tab').forEach((t) => t.onclick = () => {
+    document.querySelectorAll('#panel-knots .tab').forEach((x) => x.classList.toggle('active', x === t));
+    document.getElementById('tab-knots').classList.toggle('hidden', t.dataset.tab !== 'tab-knots');
+    document.getElementById('tab-fishid').classList.toggle('hidden', t.dataset.tab !== 'tab-fishid');
+  });
+
+  /* Emergency: live coordinates + copy */
+  window.updateEmergency = function () {
+    const ll = GPS.lastLatLng;
+    const el = document.getElementById('emg-coords');
+    if (!ll) { el.textContent = 'Waiting for GPS…'; return; }
+    const dec = ll.lat.toFixed(5) + ', ' + ll.lng.toFixed(5);
+    el.innerHTML = formatCoord(ll.lat, 'lat') + '  ' + formatCoord(ll.lng, 'lon') + '<br><span class="emg-dec">' + dec + '</span>';
+    document.getElementById('emg-script-pos').textContent = formatCoord(ll.lat, 'lat') + ' ' + formatCoord(ll.lng, 'lon');
+  };
+  document.getElementById('emg-copy').onclick = () => {
+    const ll = GPS.lastLatLng; if (!ll) { toast('No GPS fix yet'); return; }
+    const txt = ll.lat.toFixed(5) + ', ' + ll.lng.toFixed(5);
+    if (navigator.clipboard) navigator.clipboard.writeText(txt).then(() => toast('Coordinates copied')).catch(() => toast(txt));
+    else toast(txt);
+  };
   document.getElementById('btn-layers').onclick = () => togglePanel('panel-layers');
   document.getElementById('btn-download').onclick = () => togglePanel('panel-download');
   document.getElementById('btn-track').onclick = () => trackToggle();

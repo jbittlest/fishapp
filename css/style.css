@@ -277,6 +277,26 @@ button.primary {
   background: #fff; color: #b40a0a; cursor: pointer;
 }
 
+/* ---- Tabs (Guides panel) ---- */
+.tabs { display: flex; gap: 8px; margin: 4px 0 10px; }
+.tab { flex: 1; padding: 9px; border-radius: 9px; border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.06); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; }
+.tab.active { background: #1a6fb5; border-color: #4aa3e0; }
+
+/* ---- Emergency ---- */
+.ctl.emg { background: #a01818; border-color: #e05050; }
+.emg-pos-box { background: rgba(200,40,40,0.15); border: 1px solid rgba(232,80,80,0.4); border-radius: 12px; padding: 12px; margin-bottom: 8px; }
+.emg-label { font-size: 11px; letter-spacing: 0.5px; opacity: 0.8; margin-bottom: 6px; }
+.emg-coords { font-size: 26px; font-weight: 800; line-height: 1.25; font-variant-numeric: tabular-nums; margin-bottom: 10px; }
+.emg-dec { font-size: 17px; font-weight: 600; opacity: 0.85; }
+.emg-call { font-size: 15px; padding: 7px 2px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+.emg-script { font-size: 15px; line-height: 1.7; background: rgba(255,255,255,0.06); border-radius: 10px; padding: 12px 14px; }
+.emg-script i { color: #e8b23d; font-style: normal; }
+.reg-warn { font-size: 13px; line-height: 1.45; background: rgba(232,178,61,0.15); border: 1px solid rgba(232,178,61,0.35); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+.reg-warn a { color: #ffd97a; font-weight: 700; }
+.fi-id { font-size: 14px; line-height: 1.5; margin-bottom: 8px; }
+.fi-reg { display: flex; gap: 14px; font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+
 /* ---- Fishing knots ---- */
 .knot { border-bottom: 1px solid rgba(255,255,255,0.09); }
 .knot-head {

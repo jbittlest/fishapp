@@ -24,6 +24,7 @@ function addCatchMarker(c) {
   m.on('popupopen', () => {
     const el = m.getPopup().getElement();
     el.querySelector('.c-del').onclick = async () => { if (confirm('Delete this catch?')) { await deleteCatch(c.id); m.closePopup(); } };
+    el.querySelector('.c-card').onclick = () => makeCatchCard(c);
   });
   m.addTo(Catch.layer);
   Catch.markers[c.id] = m;
@@ -42,7 +43,7 @@ function catchPopupHtml(c) {
       (cond.tide ? '🌊 ' + cond.tide + '  ' : '') +
       (cond.moon ? cond.moon.split(' ')[0] : '') + '</div>' +
     (c.notes ? '<div class="catch-cond">' + escapeHtml(c.notes) + '</div>' : '') +
-    '<div class="popup-btns"><button class="c-del">Delete</button></div></div>';
+    '<div class="popup-btns"><button class="c-card">📇 Card</button><button class="c-del">Delete</button></div></div>';
 }
 
 /* ---- Modal ---- */
@@ -143,6 +144,52 @@ async function deleteCatch(id) {
   renderCatchList();
 }
 
+/* Build a shareable catch card (photo + details) and share/download it */
+async function makeCatchCard(c) {
+  const S = 1080, F = ' -apple-system,"Segoe UI",Roboto,sans-serif';
+  const cv = document.createElement('canvas'); cv.width = S; cv.height = S;
+  const ctx = cv.getContext('2d');
+  // background: the photo (cover) or a gradient
+  if (c.photo) {
+    const img = new Image();
+    await new Promise((res) => { img.onload = res; img.onerror = res; img.src = c.photo; });
+    if (img.naturalWidth) {
+      const r = Math.max(S / img.width, S / img.height);
+      ctx.drawImage(img, (S - img.width * r) / 2, (S - img.height * r) / 2, img.width * r, img.height * r);
+    }
+  }
+  if (!c.photo) {
+    const bg = ctx.createLinearGradient(0, 0, S, S); bg.addColorStop(0, '#0e2a40'); bg.addColorStop(1, '#123a59');
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, S, S);
+    ctx.textAlign = 'center'; ctx.font = '300px sans-serif'; ctx.fillText('🎣', S / 2, S / 2 + 60); ctx.textAlign = 'left';
+  }
+  // bottom scrim + text
+  const g = ctx.createLinearGradient(0, S * 0.4, 0, S);
+  g.addColorStop(0, 'rgba(8,22,36,0)'); g.addColorStop(1, 'rgba(8,22,36,0.92)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, S, S);
+  ctx.fillStyle = '#fff';
+  ctx.font = '700 82px' + F; ctx.fillText(c.species || 'Catch', 56, S - 268);
+  const size = [c.length ? c.length + '"' : '', c.weight ? c.weight + ' lb' : ''].filter(Boolean).join('   ·   ');
+  ctx.font = '400 46px' + F; if (size) ctx.fillText(size, 56, S - 206);
+  const cond = c.cond || {};
+  const l2 = [cond.sst != null ? '🌡️ ' + cond.sst + '°F' : '', cond.tide ? '🌊 ' + cond.tide : '', cond.moon ? cond.moon : ''].filter(Boolean).join('    ');
+  ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.font = '400 38px' + F; if (l2) ctx.fillText(l2, 56, S - 150);
+  ctx.fillStyle = 'rgba(255,255,255,0.72)'; ctx.font = '400 34px' + F;
+  ctx.fillText(new Date(c.ts).toLocaleDateString() + '    ' + formatCoord(c.lat, 'lat') + '  ' + formatCoord(c.lng, 'lon'), 56, S - 100);
+  ctx.fillStyle = '#4aa3e0'; ctx.font = '700 42px' + F; ctx.fillText('🎣 FishApp', 56, S - 44);
+
+  cv.toBlob(async (blob) => {
+    if (!blob) { toast('Could not make card'); return; }
+    const file = new File([blob], (c.species || 'catch').replace(/\s+/g, '_') + '.png', { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: 'My catch', text: c.species || 'Catch' }); return; } catch (e) { /* cancelled → fall to download */ }
+    }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = file.name; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    toast('📇 Catch card saved');
+  }, 'image/png');
+}
+
 function renderCatchList() {
   const box = document.getElementById('catch-list');
   if (!box) return;
@@ -161,8 +208,9 @@ function renderCatchList() {
     const sub = new Date(c.ts).toLocaleDateString() + (c.cond && c.cond.sst != null ? ' · ' + c.cond.sst + '°F' : '') + (c.cond && c.cond.tide ? ' · ' + c.cond.tide : '');
     item.innerHTML = '<span class="ico">🎣</span><div class="info"><div class="name">' + escapeHtml(c.species) +
       (c.length ? ' ' + c.length + '"' : '') + '</div><div class="sub">' + sub + '</div></div>' +
-      '<button class="go">➜</button><button class="del">🗑</button>';
+      '<button class="go">➜</button><button class="card">📇</button><button class="del">🗑</button>';
     item.querySelector('.go').onclick = () => { closePanels(); setFollow(false); window._map.setView([c.lat, c.lng], Math.max(window._map.getZoom(), 14)); Catch.markers[c.id] && Catch.markers[c.id].openPopup(); };
+    item.querySelector('.card').onclick = () => makeCatchCard(c);
     item.querySelector('.del').onclick = async () => { if (confirm('Delete this catch?')) await deleteCatch(c.id); };
     box.appendChild(item);
   });

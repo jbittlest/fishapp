@@ -81,6 +81,7 @@ function gpsOnFix(map, pos) {
 
   trackOnFix(ll, pos.timestamp); // feed track recorder
   if (typeof navOnFix === 'function') navOnFix(ll, kn); // feed trip stats + anchor alarm
+  if (typeof updateEmergency === 'function' && !document.getElementById('panel-emergency').classList.contains('hidden')) updateEmergency();
   refreshSpotDistances();
 }
 
