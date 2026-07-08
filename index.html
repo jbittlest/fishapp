@@ -37,6 +37,7 @@
   <button id="btn-weather" class="ctl" title="Weather &amp; waves">🌤</button>
   <button id="btn-tides" class="ctl" title="Tides &amp; bite times">🌙</button>
   <button id="btn-tools" class="ctl" title="Nav tools &amp; catch log">🧭</button>
+  <button id="btn-knots" class="ctl" title="Fishing knots">🪢</button>
   <button id="btn-layers" class="ctl" title="Layers">🗺</button>
   <button id="btn-download" class="ctl" title="Download charts">⇩</button>
   <button id="btn-track" class="ctl" title="Record track">⏺</button>
@@ -84,6 +85,13 @@
   <div id="reefs-list" class="list"><p class="empty">Loading reefs…</p></div>
   <h3>Tracks</h3>
   <div id="tracks-list" class="list"><p class="empty">No tracks recorded yet.</p></div>
+</div>
+
+<!-- Fishing knots panel -->
+<div class="panel hidden" id="panel-knots">
+  <div class="panel-head"><h2>Fishing Knots</h2><button class="close" data-close="panel-knots">✕</button></div>
+  <p class="hint">Tap a knot for step-by-step instructions. Works offline.</p>
+  <div id="knots-list"></div>
 </div>
 
 <!-- Tides & Times panel -->
@@ -265,6 +273,7 @@
 <script src="./js/tides.js"></script>
 <script src="./js/catch.js"></script>
 <script src="./js/nav.js"></script>
+<script src="./js/knots.js"></script>
 <script src="./js/download.js"></script>
 <script src="./js/app.js"></script>
 </body>

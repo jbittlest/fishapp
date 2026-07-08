@@ -153,7 +153,7 @@
   document.getElementById('wind-scrub').addEventListener('input', (e) => windScrub(e.target.value));
 
   /* ---- Panels ---- */
-  const panels = ['panel-layers', 'panel-spots', 'panel-download', 'panel-weather', 'panel-tides', 'panel-tools'];
+  const panels = ['panel-layers', 'panel-spots', 'panel-download', 'panel-weather', 'panel-tides', 'panel-tools', 'panel-knots'];
   window.closePanels = () => panels.forEach((p) => document.getElementById(p).classList.add('hidden'));
   function togglePanel(id) {
     const el = document.getElementById(id);
@@ -165,6 +165,7 @@
     if (id === 'panel-weather' && wasHidden) loadWeatherPanel();
     if (id === 'panel-tides' && wasHidden) loadTidesTimes();
     if (id === 'panel-tools' && wasHidden) { renderCatchList(); updateAnchorUi(); updateTripUi(); routeStats(); }
+    if (id === 'panel-knots' && wasHidden) renderKnots();
   }
   document.querySelectorAll('.close').forEach((b) =>
     b.addEventListener('click', () => document.getElementById(b.dataset.close).classList.add('hidden')));
@@ -188,6 +189,7 @@
   document.getElementById('btn-weather').onclick = () => togglePanel('panel-weather');
   document.getElementById('btn-tides').onclick = () => togglePanel('panel-tides');
   document.getElementById('btn-tools').onclick = () => togglePanel('panel-tools');
+  document.getElementById('btn-knots').onclick = () => togglePanel('panel-knots');
   document.getElementById('btn-layers').onclick = () => togglePanel('panel-layers');
   document.getElementById('btn-download').onclick = () => togglePanel('panel-download');
   document.getElementById('btn-track').onclick = () => trackToggle();
