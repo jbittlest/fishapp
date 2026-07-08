@@ -291,6 +291,11 @@ button.primary {
 .knot-body ol { margin: 0; padding-left: 20px; }
 .knot-body li { font-size: 14px; line-height: 1.5; margin-bottom: 6px; }
 .knot-tip { font-size: 13px; opacity: 0.85; margin-top: 6px; background: rgba(74,163,224,0.12); border-radius: 8px; padding: 8px 10px; }
+.knot-frames { display: flex; flex-direction: column; gap: 12px; }
+.knot-frame { display: flex; align-items: center; gap: 10px; }
+.knot-svg { width: 130px; flex-shrink: 0; height: 65px; }
+.knot-cap { font-size: 14px; line-height: 1.4; }
+@media (max-width: 400px) { .knot-frame { flex-direction: column; align-items: stretch; } .knot-svg { width: 100%; height: 90px; } }
 
 /* ---- Toast ---- */
 #toast {

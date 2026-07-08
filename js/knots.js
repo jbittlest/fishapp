@@ -140,6 +140,17 @@ const KNOTS = [
   },
 ];
 
+/* Illustrated stages if we have diagrams for this knot; otherwise the numbered text steps. */
+function knotFramesHtml(k) {
+  const frames = (typeof KnotArt !== 'undefined') && KnotArt[k.name];
+  if (frames && frames.length) {
+    return '<div class="knot-frames">' + frames.map((f, n) =>
+      '<div class="knot-frame">' + f.svg +
+      '<div class="knot-cap"><b>' + (n + 1) + '.</b> ' + f.cap + '</div></div>').join('') + '</div>';
+  }
+  return '<ol>' + k.steps.map((s) => '<li>' + s + '</li>').join('') + '</ol>';
+}
+
 function renderKnots() {
   const box = document.getElementById('knots-list');
   if (!box || box.dataset.built) return;
@@ -152,7 +163,7 @@ function renderKnots() {
       '</button>' +
       '<div class="knot-body hidden" id="knot-body-' + i + '">' +
         '<div class="knot-level">' + k.level + '</div>' +
-        '<ol>' + k.steps.map((s) => '<li>' + s + '</li>').join('') + '</ol>' +
+        knotFramesHtml(k) +
         (k.tip ? '<div class="knot-tip">💡 ' + k.tip + '</div>' : '') +
       '</div>' +
     '</div>').join('');
