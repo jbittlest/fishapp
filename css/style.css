@@ -320,6 +320,48 @@ button.primary {
 .knot-cap { font-size: 14px; line-height: 1.4; }
 @media (max-width: 400px) { .knot-frame { flex-direction: column; align-items: stretch; } .knot-svg { width: 100%; height: 90px; } }
 
+/* ---- First Mate assistant ---- */
+.ctl.asst { background: #12604a; border-color: #37b98a; }
+.ctl.asst.active { background: #1a6fb5; border-color: #4aa3e0; }
+#panel-assistant {
+  display: flex; flex-direction: column;
+  height: 84vh; max-height: 84vh; overflow: hidden;
+}
+.asst-status { font-size: 11.5px; opacity: 0.75; margin: 2px 0 6px; display: flex; align-items: center; gap: 6px; }
+.asst-status .dot { width: 8px; height: 8px; }
+.asst-messages {
+  flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  display: flex; flex-direction: column; gap: 8px; padding: 4px 2px;
+}
+.asst-msg {
+  max-width: 88%; padding: 9px 12px; border-radius: 15px; font-size: 14.5px;
+  line-height: 1.45; white-space: pre-wrap; word-wrap: break-word; overflow-wrap: anywhere;
+}
+.asst-msg.user { align-self: flex-end; background: #1a6fb5; color: #fff; border-bottom-right-radius: 5px; }
+.asst-msg.bot { align-self: flex-start; background: #12293e; border: 1px solid rgba(255,255,255,0.08); border-bottom-left-radius: 5px; }
+.asst-msg.bot.err { border-color: rgba(224,80,80,0.6); background: rgba(160,40,40,0.18); }
+.asst-msg.bot b, .asst-msg.bot strong { color: #7fd4ff; }
+.asst-msg .cursor { opacity: 0.5; }
+.asst-suggest { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 0 2px; }
+.asst-chip {
+  background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 15px; padding: 6px 11px; font-size: 12.5px; color: #dbe8f2; cursor: pointer;
+}
+.asst-inputbar { display: flex; gap: 8px; align-items: flex-end; padding-top: 6px; }
+.asst-inputbar textarea {
+  flex: 1; resize: none; background: #0b1d2e; border: 1px solid rgba(255,255,255,0.18);
+  color: #e8f1f8; border-radius: 12px; padding: 10px 12px; font-size: 15px; font-family: inherit;
+  max-height: 120px; line-height: 1.35;
+}
+.asst-send {
+  width: 44px; height: 44px; flex: none; border-radius: 12px; border: none;
+  background: #1a6fb5; color: #fff; font-size: 18px; cursor: pointer;
+}
+.asst-send:disabled { opacity: 0.4; }
+#asst-settings { margin-top: 8px; }
+#asst-settings summary { cursor: pointer; opacity: 0.7; font-size: 12.5px; padding: 4px 0; }
+#asst-settings .tool-btn { width: auto; display: inline-block; margin-right: 8px; }
+
 /* ---- Toast ---- */
 #toast {
   position: fixed; bottom: calc(env(safe-area-inset-bottom, 0px) + 90px);

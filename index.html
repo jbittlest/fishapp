@@ -32,6 +32,7 @@
 <!-- Right button stack -->
 <div id="controls">
   <button id="btn-follow" class="ctl active" title="Follow GPS">◉</button>
+  <button id="btn-assistant" class="ctl asst" title="First Mate — fishing &amp; boating assistant">💬</button>
   <button id="btn-mark" class="ctl" title="Mark spot">📌</button>
   <button id="btn-spots" class="ctl" title="Spots &amp; tracks">☰</button>
   <button id="btn-weather" class="ctl" title="Weather &amp; waves">🌤</button>
@@ -145,6 +146,34 @@
     We require immediate assistance. <b>Over.</b>”
   </div>
   <p class="hint">For urgent-but-not-life-threatening issues use <b>PAN-PAN</b> (say it 3×) instead of MAYDAY.</p>
+</div>
+
+<!-- First Mate assistant panel -->
+<div class="panel hidden" id="panel-assistant">
+  <div class="panel-head"><h2>🎣 First Mate</h2><button class="close" data-close="panel-assistant">✕</button></div>
+  <div id="asst-status" class="asst-status"></div>
+  <div id="asst-messages" class="asst-messages"></div>
+  <div id="asst-suggest" class="asst-suggest"></div>
+  <div class="asst-inputbar">
+    <textarea id="asst-input" rows="1" placeholder="Ask about tides, wind, fish, regs, knots…" autocomplete="off" autocapitalize="sentences"></textarea>
+    <button id="asst-send" class="asst-send" title="Send">➤</button>
+  </div>
+  <details id="asst-settings">
+    <summary>⚙️ Assistant settings &amp; API key</summary>
+    <label class="fld">Anthropic API key <span class="hint">— stored only on this device</span>
+      <input type="password" id="asst-key" placeholder="sk-ant-…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+    </label>
+    <label class="fld">Online brain
+      <select id="asst-model">
+        <option value="claude-opus-4-8">Claude Opus 4.8 — smartest</option>
+        <option value="claude-sonnet-5">Claude Sonnet 5 — faster</option>
+        <option value="claude-haiku-4-5">Claude Haiku 4.5 — fastest / cheapest</option>
+      </select>
+    </label>
+    <button id="asst-save" class="tool-btn">Save</button>
+    <button id="asst-clear" class="tool-btn">Clear chat</button>
+    <p class="hint">No key needed to start: offline, First Mate answers from your live boat data — position, tides/solunar, cached weather, catches, reefs, regs &amp; knots. Add a key (from console.anthropic.com) and it becomes a full conversational AI whenever you have signal.</p>
+  </details>
 </div>
 
 <!-- Tides & Times panel -->
@@ -329,6 +358,7 @@
 <script src="./js/knot-diagrams.js"></script>
 <script src="./js/knots.js"></script>
 <script src="./js/fish-id.js"></script>
+<script src="./js/assistant.js"></script>
 <script src="./js/download.js"></script>
 <script src="./js/app.js"></script>
 </body>
