@@ -154,6 +154,12 @@ function asstOffline(q) {
   const { ll, live } = asstPos();
   const has = (...w) => w.some((x) => t.includes(x));
 
+  // Place a waypoint — a LOCAL action, so it works offline too
+  if (has('waypoint', 'drop a pin', 'pin it', 'mark this', 'mark here', 'mark spot', 'marker here',
+    'save this spot', 'save this location', 'save my spot', 'drop a mark') ||
+    (has('name it', 'call it', 'named', 'called') && has('here', 'spot', 'pin', 'waypoint', 'mark')))
+    return asstOfflinePlaceWaypoint(q);
+
   // Position
   if (has('where am i', 'my position', 'coordinate', 'my location', 'lat/long', 'lat long', 'gps'))
     return asstAnsPosition(ll, live);
@@ -391,6 +397,39 @@ function asstAnsHelp() {
     "Add an Anthropic API key in ⚙️ settings and, with signal, I'll chat about anything boating or fishing.";
 }
 
+/* ---- Local waypoint action (used offline AND by the online place_waypoint tool) ---- */
+async function asstCreateSpot(o) {
+  const spot = { lat: o.lat, lng: o.lng, name: o.name, type: o.type || 'fish', notes: o.notes || '', ts: Date.now() };
+  const id = await idb.put('spots', spot);
+  spot.id = spot.id || id;
+  Spots.all.push(spot);
+  addSpotMarker(spot);
+  renderSpotsList();
+  return spot;
+}
+function asstParseWaypointName(q) {
+  let m = q.match(/["“']([^"”']{1,40})["”']/);
+  if (m) return m[1].trim();
+  m = q.match(/(?:name(?:d| it)?|call(?:ed)?(?: it)?|label(?:ed)?(?: it)?)\s+([\w '&.\-]{1,40})/i);
+  if (m) return m[1].trim().replace(/[.,!?]+$/, '');
+  return null;
+}
+function asstOfflinePlaceWaypoint(q) {
+  const { ll, live } = asstPos();
+  if (!ll) return "I can't drop a waypoint without a position — I need a GPS fix (or pan the map there first).";
+  const t = q.toLowerCase();
+  const name = asstParseWaypointName(q) || ('Waypoint ' + ((typeof Spots !== 'undefined' ? Spots.all.length : 0) + 1));
+  let type = 'fish';
+  if (t.includes('anchor')) type = 'anchor';
+  else if (t.includes('hazard') || t.includes('danger') || t.includes('rock')) type = 'hazard';
+  else if (t.includes('wreck') || t.includes('structure')) type = 'wreck';
+  else if (t.includes('ramp') || t.includes('dock')) type = 'ramp';
+  asstCreateSpot({ lat: ll.lat, lng: ll.lng, name: name, type: type })
+    .then(() => { if (typeof toast === 'function') toast('📌 ' + name + ' saved'); });
+  return '📌 Dropped "' + name + '" (' + type + ') at ' + ll.lat.toFixed(5) + ', ' + ll.lng.toFixed(5) +
+    (live ? '' : ' (map center — no GPS fix yet)') + '.\nSaved and on the map. Open ☰ Spots to rename or remove it.';
+}
+
 /* ================= ONLINE brain (Claude) ================= */
 function asstSystemPrompt() {
   return [
@@ -399,7 +438,8 @@ function asstSystemPrompt() {
     "Be practical and brief — this is read on a phone on a boat. Lead with the answer. Use short lines. Only elaborate when asked.",
     "Safety first: for anything life-threatening, tell them to use VHF Ch 16 / call the Coast Guard and point to the app's 🆘 button. Never give false confidence about weather or conditions.",
     "Fishing regulations you cite are general reference — always tell them to confirm current limits with the state wildlife agency (CDFW in California) before keeping fish.",
-    "You cannot control the app or place waypoints; you advise. If they need a tool (tides, layers, catch log, knots), point them to the matching button.",
+    "You can take real actions in the app via tools: place / list / delete waypoints, toggle map layers, start or stop trip tracking, center the map, and pull LIVE weather & tides for a point. For current weather, seas, water temp or tides, CALL get_conditions / get_tides — don't answer those from the cached snapshot alone. Default every location to the boat's current position unless the user gives coordinates or names a saved spot. After acting, confirm briefly and naturally what you did.",
+    "Catch logging and knots aren't automated yet — for those, point them to the 🧭 and 📖 buttons.",
     "",
     asstSnapshot(),
     "",
@@ -407,10 +447,7 @@ function asstSystemPrompt() {
   ].join('\n');
 }
 
-async function asstAskOnline(userText, botEl) {
-  const messages = ASST.history.map((m) => ({ role: m.role, content: m.content }));
-  messages.push({ role: 'user', content: userText });
-
+async function asstApiCall(messages) {
   const resp = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -423,45 +460,220 @@ async function asstAskOnline(userText, botEl) {
       model: ASST.model(),
       max_tokens: 1024,
       system: asstSystemPrompt(),
+      tools: asstTools(),
       messages,
-      stream: true,
     }),
   });
-
-  if (!resp.ok || !resp.body) {
+  if (!resp.ok) {
     let msg = 'HTTP ' + resp.status;
     try { const j = await resp.json(); if (j && j.error && j.error.message) msg = j.error.message; } catch (e) { /* ignore */ }
     const err = new Error(msg); err.status = resp.status; throw err;
   }
+  return resp.json();
+}
 
-  const reader = resp.body.getReader();
-  const dec = new TextDecoder();
-  let buf = '', full = '';
-  botEl.classList.remove('thinking');
-  botEl.textContent = '';
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += dec.decode(value, { stream: true });
-    let nl;
-    while ((nl = buf.indexOf('\n')) >= 0) {
-      const line = buf.slice(0, nl).trim();
-      buf = buf.slice(nl + 1);
-      if (!line.startsWith('data:')) continue;
-      const data = line.slice(5).trim();
-      if (!data) continue;
-      let ev;
-      try { ev = JSON.parse(data); } catch (e) { continue; }
-      if (ev.type === 'content_block_delta' && ev.delta && ev.delta.type === 'text_delta') {
-        full += ev.delta.text;
-        botEl.textContent = full;
+/* Agentic loop: let Claude answer, or call tools (which act on the app / fetch
+   live data), feed results back, and repeat until it produces a final answer. */
+async function asstAskOnline(userText, botEl) {
+  const messages = ASST.history.map((m) => ({ role: m.role, content: m.content }));
+  messages.push({ role: 'user', content: userText });
+
+  let finalText = '';
+  for (let step = 0; step < 6; step++) {
+    const data = await asstApiCall(messages);
+    if (data.stop_reason === 'tool_use') {
+      messages.push({ role: 'assistant', content: data.content });
+      const results = [];
+      for (const b of data.content) {
+        if (b.type !== 'tool_use') continue;
+        botEl.textContent = '⚙️ ' + asstToolLabel(b.name) + '…';
         asstScroll();
-      } else if (ev.type === 'error') {
-        throw new Error((ev.error && ev.error.message) || 'stream error');
+        const out = await asstExecTool(b.name, b.input || {});
+        results.push({
+          type: 'tool_result',
+          tool_use_id: b.id,
+          content: typeof out === 'string' ? out : JSON.stringify(out),
+          is_error: !!(out && out.error),
+        });
       }
+      messages.push({ role: 'user', content: results });
+      continue;
     }
+    finalText = (data.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
+    break;
   }
-  return full.trim();
+  return finalText || '(no reply)';
+}
+
+function asstToolLabel(n) {
+  return {
+    get_conditions: 'checking conditions', get_tides: 'checking tides',
+    place_waypoint: 'placing waypoint', list_waypoints: 'reading waypoints',
+    delete_waypoint: 'removing waypoint', toggle_layer: 'toggling layer',
+    set_trip: 'updating trip', go_to: 'centering the map',
+  }[n] || 'working';
+}
+
+/* ---- Tool schemas handed to Claude ---- */
+function asstTools() {
+  return [
+    { name: 'get_conditions', description: 'Live marine weather at a point: wind, gusts, air temp, wave height/period/direction, and sea-surface water temp. Defaults to the boat\'s current position.',
+      input_schema: { type: 'object', properties: { lat: { type: 'number' }, lng: { type: 'number' } } } },
+    { name: 'get_tides', description: 'Today\'s high/low tide predictions for the nearest tide station (or a given point).',
+      input_schema: { type: 'object', properties: { lat: { type: 'number' }, lng: { type: 'number' } } } },
+    { name: 'place_waypoint', description: 'Drop and save a named waypoint/spot on the map. Defaults to the boat\'s current position unless lat/lng are given.',
+      input_schema: { type: 'object', properties: {
+        name: { type: 'string', description: 'Waypoint name' },
+        type: { type: 'string', enum: ['fish', 'anchor', 'hazard', 'ramp', 'wreck', 'other'], description: 'Marker type (default fish)' },
+        notes: { type: 'string' }, lat: { type: 'number' }, lng: { type: 'number' } }, required: ['name'] } },
+    { name: 'list_waypoints', description: 'List the user\'s saved waypoints with distance & bearing from the boat.',
+      input_schema: { type: 'object', properties: {} } },
+    { name: 'delete_waypoint', description: 'Delete a saved waypoint by (partial) name.',
+      input_schema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] } },
+    { name: 'toggle_layer', description: 'Turn a map overlay on or off.',
+      input_schema: { type: 'object', properties: {
+        layer: { type: 'string', enum: ['sst', 'rain', 'wind', 'reefs', 'mpa', 'fish'], description: 'sst=water temp, rain=radar, wind=wind arrows, reefs=artificial reefs, mpa=protected areas, fish=recent catches' },
+        on: { type: 'boolean' } }, required: ['layer', 'on'] } },
+    { name: 'set_trip', description: 'Start or stop trip tracking (distance, average & max speed).',
+      input_schema: { type: 'object', properties: { active: { type: 'boolean' }, reset: { type: 'boolean' } }, required: ['active'] } },
+    { name: 'go_to', description: 'Center the map on the boat, a named saved spot, or coordinates.',
+      input_schema: { type: 'object', properties: { spot: { type: 'string' }, lat: { type: 'number' }, lng: { type: 'number' } } } },
+  ];
+}
+
+function asstPointFrom(input) {
+  if (input && input.lat != null && input.lng != null && typeof L !== 'undefined') return L.latLng(input.lat, input.lng);
+  return asstPos().ll;
+}
+
+async function asstExecTool(name, input) {
+  try {
+    switch (name) {
+      case 'get_conditions': return await asstToolConditions(input);
+      case 'get_tides': return await asstToolTides(input);
+      case 'place_waypoint': return await asstToolPlaceWaypoint(input);
+      case 'list_waypoints': return asstToolListWaypoints();
+      case 'delete_waypoint': return await asstToolDeleteWaypoint(input);
+      case 'toggle_layer': return asstToolToggleLayer(input);
+      case 'set_trip': return asstToolSetTrip(input);
+      case 'go_to': return asstToolGoTo(input);
+      default: return { error: 'unknown tool ' + name };
+    }
+  } catch (e) { return { error: String((e && e.message) || e) }; }
+}
+
+async function asstToolConditions(input) {
+  const ll = asstPointFrom(input);
+  if (!ll) return { error: 'no position — provide lat and lng' };
+  const lat = ll.lat, lng = ll.lng;
+  const out = { position: lat.toFixed(4) + ', ' + lng.toFixed(4) };
+  try {
+    const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lng +
+      '&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m&wind_speed_unit=kn&temperature_unit=fahrenheit');
+    const c = (await r.json()).current || {};
+    out.wind_kn = Math.round(c.wind_speed_10m);
+    out.gust_kn = Math.round(c.wind_gusts_10m);
+    out.wind_from = asstCompass(c.wind_direction_10m) + ' (' + Math.round(c.wind_direction_10m) + '°)';
+    out.air_temp_f = Math.round(c.temperature_2m);
+  } catch (e) { out.wind = 'unavailable (offline?)'; }
+  try {
+    const r = await fetch('https://marine-api.open-meteo.com/v1/marine?latitude=' + lat + '&longitude=' + lng +
+      '&current=wave_height,wave_period,wave_direction,sea_surface_temperature&temperature_unit=fahrenheit');
+    const c = (await r.json()).current || {};
+    if (c.wave_height != null) {
+      out.wave_ft = +(c.wave_height * 3.28084).toFixed(1);
+      out.wave_period_s = Math.round(c.wave_period);
+      out.wave_from = asstCompass(c.wave_direction);
+    }
+    if (c.sea_surface_temperature != null) out.water_temp_f = Math.round(c.sea_surface_temperature);
+  } catch (e) { /* marine may be unavailable inland */ }
+  return out;
+}
+
+async function asstToolTides(input) {
+  const ll = asstPointFrom(input);
+  if (!ll) return { error: 'no position' };
+  if (typeof nearestTideStation !== 'function') return { error: 'tides unavailable' };
+  const st = nearestTideStation(ll);
+  if (!st) return { error: 'no tide station found' };
+  const d = new Date();
+  const ymd = d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+  try {
+    const r = await fetch('https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=predictions&interval=hilo&datum=MLLW&units=english&time_zone=lst_ldt&format=json&station=' +
+      st.id + '&begin_date=' + ymd + '&end_date=' + ymd);
+    const preds = ((await r.json()).predictions || []).map((p) => ({
+      time: p.t.split(' ')[1], type: p.type === 'H' ? 'High' : 'Low', height_ft: +parseFloat(p.v).toFixed(1),
+    }));
+    const nm = nmBetween(ll, L.latLng(st.la, st.lo));
+    return { station: st.n, distance_nm: +nm.toFixed(0), today: preds };
+  } catch (e) { return { station: st.n, error: 'could not fetch tide predictions' }; }
+}
+
+async function asstToolPlaceWaypoint(input) {
+  const ll = asstPointFrom(input);
+  if (!ll) return { error: 'no position available — provide lat and lng' };
+  const name = (input.name || '').trim();
+  if (!name) return { error: 'name is required' };
+  const spot = await asstCreateSpot({ lat: ll.lat, lng: ll.lng, name: name, type: input.type || 'fish', notes: input.notes || '' });
+  if (typeof toast === 'function') toast('📌 ' + name + ' saved');
+  return { ok: true, name: name, type: spot.type, lat: +ll.lat.toFixed(5), lng: +ll.lng.toFixed(5) };
+}
+
+function asstToolListWaypoints() {
+  if (typeof Spots === 'undefined' || !Spots.all.length) return { waypoints: [] };
+  const p = asstPos().ll;
+  return { waypoints: Spots.all.map((s) => {
+    const o = { name: s.name, type: s.type, lat: +s.lat.toFixed(5), lng: +s.lng.toFixed(5) };
+    if (s.notes) o.notes = s.notes;
+    if (p) { o.nm = +nmBetween(p, L.latLng(s.lat, s.lng)).toFixed(2); o.bearing = Math.round(bearingBetween(p, L.latLng(s.lat, s.lng))); }
+    return o;
+  }) };
+}
+
+async function asstToolDeleteWaypoint(input) {
+  const q = (input.name || '').toLowerCase().trim();
+  if (!q) return { error: 'name required' };
+  if (typeof Spots === 'undefined') return { error: 'spots unavailable' };
+  const matches = Spots.all.filter((s) => s.name && s.name.toLowerCase().includes(q));
+  if (!matches.length) return { error: 'no waypoint matching "' + input.name + '"' };
+  const s = matches[0];
+  await deleteSpot(s.id);
+  if (typeof toast === 'function') toast('🗑 ' + s.name + ' deleted');
+  return { deleted: s.name, other_matches: matches.length - 1 };
+}
+
+function asstToolToggleLayer(input) {
+  const map = { sst: 'ovl-sst', rain: 'ovl-rain', wind: 'ovl-wind', reefs: 'ovl-reefs', mpa: 'ovl-mpa', fish: 'ovl-fish' };
+  const cb = document.getElementById(map[input.layer]);
+  if (!cb) return { error: 'unknown layer "' + input.layer + '"' };
+  const want = !!input.on;
+  if (cb.checked !== want) { cb.checked = want; cb.dispatchEvent(new Event('change')); }
+  return { layer: input.layer, on: want };
+}
+
+function asstToolSetTrip(input) {
+  if (typeof Nav === 'undefined' || !Nav.trip || typeof tripToggle !== 'function') return { error: 'trip tracking unavailable' };
+  const want = !!input.active;
+  if (want && !Nav.trip.active) tripToggle();
+  else if (!want && Nav.trip.active) tripToggle();
+  if (input.reset && typeof tripReset === 'function') tripReset();
+  const avg = Nav.trip.nKn ? (Nav.trip.sumKn / Nav.trip.nKn) : 0;
+  return { trip_active: Nav.trip.active, distance_nm: +Nav.trip.dist.toFixed(2), avg_kn: +avg.toFixed(1), max_kn: +Nav.trip.maxKn.toFixed(1) };
+}
+
+function asstToolGoTo(input) {
+  if (!window._map) return { error: 'map unavailable' };
+  let ll = null, label = '';
+  if (input.lat != null && input.lng != null) { ll = L.latLng(input.lat, input.lng); label = 'coordinates'; }
+  else if (input.spot && typeof Spots !== 'undefined') {
+    const s = Spots.all.find((x) => x.name && x.name.toLowerCase().includes(String(input.spot).toLowerCase()));
+    if (!s) return { error: 'no saved spot matching "' + input.spot + '"' };
+    ll = L.latLng(s.lat, s.lng); label = s.name;
+  } else { const p = asstPos(); if (p.ll) { ll = p.ll; label = 'your position'; } }
+  if (!ll) return { error: 'no target to center on' };
+  if (typeof setFollow === 'function') setFollow(false);
+  window._map.setView(ll, Math.max(window._map.getZoom(), 14));
+  return { centered_on: label };
 }
 
 /* ================= UI plumbing ================= */
@@ -513,6 +725,9 @@ async function asstSend(text) {
     botEl.classList.add('thinking');
     try {
       const reply = await asstAskOnline(text, botEl);
+      botEl.classList.remove('thinking');
+      botEl.textContent = reply;
+      asstScroll();
       ASST.history.push({ role: 'user', content: text });
       ASST.history.push({ role: 'assistant', content: reply });
       if (ASST.history.length > 24) ASST.history = ASST.history.slice(-24);
@@ -541,8 +756,8 @@ function asstSetSending(on) {
 }
 
 const ASST_CHIPS = [
-  'Best bite times today', 'Wind & waves now', 'Where am I?',
-  'Nearest reef', 'Sunrise & sunset', 'Is a calico bass legal?',
+  "What's the weather where I am?", 'Best bite times today', 'Drop a waypoint here',
+  'Tides today', 'Nearest reef', 'Is a calico bass legal?',
 ];
 function asstRenderChips() {
   const box = document.getElementById('asst-suggest');
@@ -561,7 +776,7 @@ function asstOnOpen() {
   asstSetStatus();
   const box = document.getElementById('asst-messages');
   if (box && !box.children.length) {
-    asstAddMsg('bot', "Ahoy! I'm First Mate 🎣\nAsk me about bite times, wind, water temp, reefs, your catches, fish limits or knots. Tap a suggestion below to start.");
+    asstAddMsg('bot', "Ahoy! I'm First Mate 🎣\nAsk about bite times, wind, water temp, reefs, fish limits or knots. With signal I can also do things — drop & name waypoints, toggle layers, start a trip, and pull live weather or tides. Tap a suggestion to start.");
     asstRenderChips();
   }
 }
