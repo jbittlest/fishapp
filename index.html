@@ -29,6 +29,19 @@
   <div class="badge offline hidden" id="offline-badge">OFFLINE</div>
 </div>
 
+<!-- Live "Go To" navigation banner -->
+<div id="goto-banner" class="hidden">
+  <div class="gb-main">
+    <div class="gb-dest">➤ <span id="gb-name">Destination</span></div>
+    <div class="gb-stats"><span id="gb-dist">—</span> · <span id="gb-brg">—</span></div>
+    <div class="gb-stats" id="gb-eta">ETA —</div>
+  </div>
+  <div class="gb-btns">
+    <button id="gb-arrive" title="Arrived — save voyage">✓</button>
+    <button id="gb-cancel" title="Stop navigating">✕</button>
+  </div>
+</div>
+
 <!-- Right button stack -->
 <div id="controls">
   <button id="btn-follow" class="ctl active" title="Follow GPS">◉</button>
@@ -85,6 +98,8 @@
   <div id="spots-list" class="list"><p class="empty">No spots yet. Tap 📌 or long-press the map.</p></div>
   <h3>Nearest reefs 🪸</h3>
   <div id="reefs-list" class="list"><p class="empty">Loading reefs…</p></div>
+  <h3>🧭 Voyages</h3>
+  <div id="trips-list" class="list"><p class="empty">No voyages yet. Tap the map → 🧭 Navigate here to start one.</p></div>
   <h3>Tracks</h3>
   <div id="tracks-list" class="list"><p class="empty">No tracks recorded yet.</p></div>
 </div>
@@ -356,6 +371,7 @@
 <script src="./js/tides.js"></script>
 <script src="./js/catch.js"></script>
 <script src="./js/nav.js"></script>
+<script src="./js/goto.js"></script>
 <script src="./js/knot-diagrams.js"></script>
 <script src="./js/knots.js"></script>
 <script src="./js/fish-id.js"></script>

@@ -29,6 +29,8 @@ function addSpotMarker(spot) {
   m.bindPopup(() => spotPopupHtml(spot));
   m.on('popupopen', () => {
     const el = m.getPopup().getElement();
+    const navBtn = el.querySelector('.sp-nav');
+    if (navBtn && typeof gotoStart === 'function') navBtn.onclick = () => { m.closePopup(); gotoStart({ lat: spot.lat, lng: spot.lng }, spot.name); };
     el.querySelector('.sp-edit').onclick = () => { m.closePopup(); openSpotModal(spot); };
     el.querySelector('.sp-del').onclick = async () => {
       if (!confirm('Delete "' + spot.name + '"?')) return;
@@ -51,7 +53,7 @@ function spotPopupHtml(spot) {
   return `<b>${SPOT_ICONS[spot.type] || '📍'} ${escapeHtml(spot.name)}</b>` +
     distLine +
     (spot.notes ? `<div style="margin-top:4px">${escapeHtml(spot.notes)}</div>` : '') +
-    `<div class="popup-btns"><button class="sp-edit">Edit</button><button class="sp-del">Delete</button></div>`;
+    `<div class="popup-btns"><button class="sp-nav">🧭 Go</button><button class="sp-edit">Edit</button><button class="sp-del">Delete</button></div>`;
 }
 
 /* ---- Modal ---- */

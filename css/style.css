@@ -362,6 +362,30 @@ button.primary {
 #asst-settings summary { cursor: pointer; opacity: 0.7; font-size: 12.5px; padding: 4px 0; }
 #asst-settings .tool-btn { width: auto; display: inline-block; margin-right: 8px; }
 
+/* ---- Go To navigation banner ---- */
+#goto-banner {
+  position: fixed; z-index: 1500;
+  top: calc(env(safe-area-inset-top, 0px) + 52px);
+  left: 8px; right: calc(env(safe-area-inset-right, 0px) + 64px);
+  background: rgba(10, 40, 30, 0.92); border: 1px solid #37d67a; border-radius: 12px;
+  padding: 8px 10px; display: flex; align-items: center; gap: 8px;
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  box-shadow: 0 3px 16px rgba(0, 0, 0, 0.4); font-variant-numeric: tabular-nums;
+}
+#goto-banner.arriving { animation: gbpulse 1s infinite; border-color: #ffd54a; }
+@keyframes gbpulse { 50% { background: rgba(70, 100, 25, 0.92); } }
+.gb-main { flex: 1; min-width: 0; }
+.gb-dest { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gb-dest #gb-name { color: #7df0b0; }
+.gb-stats { font-size: 12.5px; opacity: 0.92; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gb-btns { display: flex; gap: 6px; flex: none; }
+.gb-btns button { border: none; border-radius: 10px; width: 40px; height: 40px; font-size: 16px; cursor: pointer; color: #fff; }
+#gb-arrive { background: #1f9d57; }
+#gb-cancel { background: rgba(255, 255, 255, 0.16); }
+.goto-pin { font-size: 26px; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7); text-align: center; line-height: 1; }
+.ins-btns { display: flex; gap: 6px; margin-top: 8px; }
+.ins-btns button { flex: 1; }
+
 /* ---- Toast ---- */
 #toast {
   position: fixed; bottom: calc(env(safe-area-inset-bottom, 0px) + 90px);

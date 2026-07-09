@@ -190,6 +190,8 @@ function navOnFix(ll, kn) {
     if (kn != null) { Nav.trip.maxKn = Math.max(Nav.trip.maxKn, kn); Nav.trip.sumKn += kn; Nav.trip.nKn++; }
     if (!document.getElementById('panel-tools').classList.contains('hidden')) updateTripUi();
   }
+  // live "Go To" navigation guidance
+  if (typeof gotoOnFix === 'function') gotoOnFix(ll, kn);
   // anchor drift alarm
   if (Nav.anchor.watching && Nav.anchor.ll) {
     const distFt = Math.round(ll.distanceTo(Nav.anchor.ll) * FT_PER_M);

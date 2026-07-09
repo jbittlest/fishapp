@@ -161,7 +161,7 @@
     closePanels();
     if (wasHidden) el.classList.remove('hidden');
     if (id === 'panel-download' && wasHidden) { updateEstimate(); renderAreasList(); updateStorageInfo(); }
-    if (id === 'panel-spots' && wasHidden) { renderSpotsList(); renderTracksList(); renderReefsList(); }
+    if (id === 'panel-spots' && wasHidden) { renderSpotsList(); renderTracksList(); renderReefsList(); renderTripsList(); }
     if (id === 'panel-weather' && wasHidden) loadWeatherPanel();
     if (id === 'panel-tides' && wasHidden) loadTidesTimes();
     if (id === 'panel-tools' && wasHidden) { renderCatchList(); updateAnchorUi(); updateTripUi(); routeStats(); }
@@ -249,6 +249,8 @@
   document.getElementById('btn-layers').onclick = () => togglePanel('panel-layers');
   document.getElementById('btn-download').onclick = () => togglePanel('panel-download');
   document.getElementById('btn-track').onclick = () => trackToggle();
+  document.getElementById('gb-arrive').onclick = () => gotoArrive();
+  document.getElementById('gb-cancel').onclick = () => gotoCancel();
   document.getElementById('btn-zoomin').onclick = () => map.zoomIn();
   document.getElementById('btn-zoomout').onclick = () => map.zoomOut();
 

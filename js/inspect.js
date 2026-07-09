@@ -90,10 +90,16 @@ function sstText(v) {
 
 function bindMarkButton(ll) {
   const el = Inspect.popup && Inspect.popup.getElement();
-  const btn = el && el.querySelector('.ins-mark');
+  if (!el) return;
+  const btn = el.querySelector('.ins-mark');
   if (btn) btn.onclick = () => {
     window._map.closePopup(Inspect.popup);
     openSpotModal({ lat: ll.lat, lng: ll.lng });
+  };
+  const nav = el.querySelector('.ins-nav');
+  if (nav && typeof gotoStart === 'function') nav.onclick = () => {
+    window._map.closePopup(Inspect.popup);
+    gotoStart(ll, 'Pin ' + ll.lat.toFixed(3) + ', ' + ll.lng.toFixed(3));
   };
 }
 
@@ -143,6 +149,7 @@ function inspectHtml(r, ll, distLine) {
       '<span class="ins-val">' + swellText(r.swell) + '</span></div>' +
     '<div class="ins-row"><span class="ins-ic">🌡️</span><span class="ins-lbl">Water</span>' +
       '<span class="ins-val">' + sstText(r.sst) + '</span></div>' +
-    '<button class="ins-mark">📌 Save as spot</button>' +
+    '<div class="ins-btns"><button class="ins-mark">📌 Save spot</button>' +
+    '<button class="ins-nav">🧭 Navigate here</button></div>' +
     '</div>';
 }
