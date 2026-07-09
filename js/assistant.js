@@ -205,9 +205,31 @@ function asstOffline(q) {
   // Speed / heading
   if (has('how fast', 'my speed', 'speed over', ' sog', 'heading', 'which way', 'course'))
     return asstAnsSpeed();
-  // Bite / solunar
+  // Multi-day "best day to fish" planner (bite + weather)
+  if (has('best day', 'which day', 'when should i go', 'plan my trip', 'plan a trip', 'should i go fishing',
+    'best day to fish', 'best morning', 'coming days to fish', 'when to go fishing') ||
+    (has('best time', 'when') && has('week', 'tomorrow', 'days', 'weekend')))
+    return asstAnsPlan();
+  // Bite / solunar (today)
   if (has('bite', 'solunar', 'best time', 'when to fish', 'feeding', 'best window'))
     return asstAnsSolunar(ll);
+  // Multi-day weather outlook
+  if (has('this week', 'next few days', 'coming days', 'outlook', 'week ahead', 'multi-day',
+    'next 3 days', 'next three days', 'weekend forecast', '7 day', '7-day', 'forecast for the week'))
+    return asstAnsOutlook();
+  // Go / no-go conditions read
+  if (has('rough', 'safe to go', 'go out', 'sea state', 'small craft', 'too windy', 'calm enough',
+    'how bad', 'fishable', 'should i go out', 'okay to go', 'ok to go', 'nasty out'))
+    return asstAnsGoNoGo();
+  // Nearest saved spot by type (ramp / anchorage / hazard / wreck)
+  if (has('nearest ramp', 'closest ramp', 'nearest launch', 'boat ramp', 'launch ramp', 'nearest dock',
+    'nearest anchorage', 'closest anchorage', 'nearest hazard', 'nearest wreck', 'place to anchor')) {
+    const near = asstAnsNearest(t); if (near) return near;
+  }
+  // What bait/lure works for a species (from the catch log)
+  if (has('what bait', 'best bait', 'what should i use', 'what lure', 'which lure', 'what to throw', 'what do they hit')) {
+    const bait = asstAnsBait(t); if (bait) return bait;
+  }
   // Sun / daylight
   if (has('sunrise', 'sunset', 'daylight', 'dawn', 'dusk', 'first light', 'last light'))
     return asstAnsSun(ll);
@@ -229,7 +251,8 @@ function asstOffline(q) {
   if (has('wave', 'swell', 'seas', 'surf', 'chop'))
     return asstAnsWaves();
   // Weather / wind
-  if (has('weather', 'wind', 'gust', 'forecast', 'breeze', 'conditions'))
+  if (has('weather', 'wind', 'windy', 'gust', 'forecast', 'breeze', 'conditions', 'rain', 'raining',
+    'cloudy', 'sunny', 'hot out', 'cold out'))
     return asstAnsWeather(t);
   // Water temp
   if (has('water temp', 'sea temp', 'sst', 'surface temp', 'temperature of the water', 'how warm', 'how cold'))
@@ -259,6 +282,15 @@ function asstOffline(q) {
   // Emergency
   if (has('emergency', 'mayday', 'sos', 'sinking', 'help me', 'man overboard', 'distress', 'pan-pan', 'pan pan'))
     return asstAnsEmergency(ll);
+  // Bare saved-spot name → distance/bearing
+  if (typeof Spots !== 'undefined' && ll && Spots.all.length) {
+    const spot = Spots.all.find((s) => s.name && s.name.length > 2 && t.includes(s.name.toLowerCase()));
+    if (spot) {
+      const here = L.latLng(ll.lat, ll.lng), there = L.latLng(spot.lat, spot.lng);
+      const nm = nmBetween(here, there), brg = bearingBetween(here, there);
+      return '➡️ ' + spot.name + ': ' + nm.toFixed(1) + ' nm, bearing ' + Math.round(brg) + '° ' + asstCompass(brg);
+    }
+  }
   // Species reference fallback (e.g. "yellowtail")
   const sp = asstFindSpecies(t);
   if (sp) return asstFormatSpecies(sp);
@@ -397,6 +429,128 @@ function asstAnsClosures() {
   }
   return "No closure data captured offline here. The 🚫 MPA layer is bundled — turn it on in Layers, or download this area so I can summarize closures offline.";
 }
+function asstYmd(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+
+/* Synthesized offline planner: rank the next few days by bite (solunar overlapping
+   daylight) + weather (from the downloaded area pack, if any). */
+function asstAnsPlan() {
+  const { ll } = asstPos();
+  if (!ll || typeof Astro === 'undefined') return "I need a position to plan bite times.";
+  const a = asstAreaPack();
+  const daily = (a && a.data) ? areaDailyForecast(a.data) : null;
+  const nDays = daily ? Math.min(daily.length, 5) : 3;
+  const days = [];
+  for (let i = 0; i < nDays; i++) {
+    const date = new Date(); date.setDate(date.getDate() + i); date.setHours(12, 0, 0, 0);
+    const sun = Astro.sunTimes(date, ll.lat, ll.lng);
+    const sol = Astro.solunar(date, ll.lat, ll.lng) || [];
+    let best = null;
+    sol.forEach((p) => {
+      if (p.type !== 'major') return;
+      const inDay = p.end >= sun.sunrise && p.start <= sun.sunset;
+      const near = Math.min(Math.abs(p.center - sun.sunrise), Math.abs(p.center - sun.sunset)) < 90 * 60000;
+      const score = (inDay ? 2 : 0) + (near ? 1 : 0);
+      if (!best || score > best.score) best = { p, score, inDay, near };
+    });
+    const wx = daily ? daily.find((d) => d.date === asstYmd(date)) : null;
+    let s = 0;
+    if (best) s += best.inDay ? 3 : 1;
+    if (best && best.near) s += 1;
+    if (wx) {
+      if (wx.wind_kn[1] <= 12) s += 2; else if (wx.wind_kn[1] <= 18) s += 1; else s -= 1;
+      if (wx.wave_ft != null) { if (wx.wave_ft <= 2) s += 1; else if (wx.wave_ft >= 5) s -= 1; }
+      if (wx.precip_pct <= 20) s += 0.5;
+    }
+    days.push({ date, best, wx, s });
+  }
+  days.sort((x, y) => y.s - x.s);
+  const lines = days.slice(0, 3).map((d, idx) => {
+    const wd = d.date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+    let line = (idx === 0 ? '⭐ ' : '• ') + wd;
+    if (d.best) line += ' — bite ' + asstTime(d.best.p.start) + '–' + asstTime(d.best.p.end) +
+      (d.best.inDay ? (d.best.near ? ' (near sunrise/sunset 🔥)' : '') : ' (after dark)');
+    if (d.wx) line += '\n   wind ' + d.wx.wind_kn[0] + '–' + d.wx.wind_kn[1] + 'kn' +
+      (d.wx.wave_ft != null ? ', seas ' + d.wx.wave_ft + 'ft' : '') + ', ' + d.wx.precip_pct + '% rain';
+    return line;
+  });
+  return '🎣 Best days to fish' + (daily ? ' (bite + weather, downloaded ' + asstAgo(a.data.capturedTs) + ')' : ' (bite windows only)') + ':\n' +
+    lines.join('\n') + (daily ? '' : '\n\nDownload this area while online and I can factor in wind & seas too.');
+}
+
+/* Multi-day weather outlook from the downloaded pack. */
+function asstAnsOutlook() {
+  const a = asstAreaPack();
+  if (!a || !a.data || !a.data.forecast) return "I don't have a multi-day forecast offline here. Download this area while online to capture a 7-day outlook.";
+  const daily = areaDailyForecast(a.data);
+  const lines = daily.slice(0, 7).map((d) => {
+    const dt = new Date(d.date + 'T12:00');
+    const wd = dt.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+    return wd + ': wind ' + d.wind_kn[0] + '–' + d.wind_kn[1] + 'kn (g' + d.gust_kn + ')' +
+      (d.wave_ft != null ? ', seas ' + d.wave_ft + 'ft' : '') + ', ' + d.air_f[0] + '–' + d.air_f[1] + '°F, ' + d.precip_pct + '% rain';
+  });
+  return '📅 ' + a.name + ' — ' + lines.length + '-day outlook (downloaded ' + asstAgo(a.data.capturedTs) + '):\n' + lines.join('\n');
+}
+
+/* Plain go/no-go read on current wind + seas (with a safety caveat). */
+function asstAnsGoNoGo() {
+  let wind, gust, wave, src;
+  const a = asstAreaPack();
+  if (a && a.data && a.data.forecast) {
+    const i = areaFcstIndex(a.data.forecast, Date.now());
+    if (i >= 0) {
+      wind = a.data.forecast.wind[i]; gust = a.data.forecast.gust[i];
+      if (a.data.marine) { const mi = areaFcstIndex(a.data.marine, Date.now()); if (mi >= 0 && a.data.marine.wave_m[mi] != null) wave = a.data.marine.wave_m[mi] * 3.28084; }
+      src = 'downloaded ' + asstAgo(a.data.capturedTs);
+    }
+  }
+  if (wind == null) {
+    const wx = asstCachedWx();
+    if (wx && wx.wx && wx.wx.current) {
+      wind = wx.wx.current.wind_speed_10m; gust = wx.wx.current.wind_gusts_10m;
+      if (wx.marine && wx.marine.current) wave = wx.marine.current.wave_height * 3.28084;
+      src = 'cached ' + asstAgo(wx.ts);
+    }
+  }
+  if (wind == null) return "I don't have wind/sea data offline right now. Download this area or open 🌤 Weather with signal.";
+  const g = Math.round(gust), w = wave != null ? wave : null;
+  let emoji, verdict;
+  if (g >= 25 || (w != null && w >= 6)) { emoji = '⛔'; verdict = 'Rough — think hard before going. Small boats should probably stay in.'; }
+  else if (g >= 18 || (w != null && w >= 4)) { emoji = '⚠️'; verdict = 'Marginal — doable in the right boat, but expect a bumpy, wet ride.'; }
+  else if (g >= 12 || (w != null && w >= 2.5)) { emoji = '🟡'; verdict = 'A little chop, but generally fishable.'; }
+  else { emoji = '✅'; verdict = 'Looks calm and fishable.'; }
+  return emoji + ' ' + verdict + '\nWind ~' + Math.round(wind) + ' kn (gust ' + g + ')' + (w != null ? ', seas ~' + w.toFixed(1) + ' ft' : '') + ' (' + src + ').' +
+    '\n\n⚠️ Rough read only — always get an official marine forecast (VHF WX / NOAA) before you head out.';
+}
+
+/* Nearest saved spot of a given type (ramp, anchorage, hazard, wreck). */
+function asstAnsNearest(t) {
+  let type = null, label = '';
+  if (/ramp|launch|boat ?ramp|put.?in/.test(t)) { type = 'ramp'; label = 'ramp/dock'; }
+  else if (/anchorage|anchor spot|place to anchor/.test(t)) { type = 'anchor'; label = 'anchorage'; }
+  else if (/hazard|danger/.test(t)) { type = 'hazard'; label = 'hazard'; }
+  else if (/wreck/.test(t)) { type = 'wreck'; label = 'wreck'; }
+  if (!type) return null;
+  const list = (typeof Spots !== 'undefined' ? Spots.all : []).filter((s) => s.type === type);
+  if (!list.length) return 'You have no saved ' + label + 's yet. Drop one by saying "mark this as a ' + type + ' named …".';
+  const { ll } = asstPos();
+  if (!ll) return 'You have ' + list.length + ' saved ' + label + '(s), but I need a GPS fix to sort by distance.';
+  const sorted = list.map((s) => ({ s, nm: nmBetween(ll, L.latLng(s.lat, s.lng)), brg: bearingBetween(ll, L.latLng(s.lat, s.lng)) }))
+    .sort((a, b) => a.nm - b.nm).slice(0, 3);
+  return 'Nearest ' + label + ':\n' + sorted.map((x, i) => (i + 1) + '. ' + x.s.name + ' — ' + x.nm.toFixed(1) + ' nm ' + asstCompass(x.brg)).join('\n');
+}
+
+/* What bait/lure has worked for a species, from your own catch log. */
+function asstAnsBait(t) {
+  const sp = asstFindSpecies(t);
+  if (!sp || typeof Catch === 'undefined' || !Catch.all.length) return null;
+  const matches = Catch.all.filter((c) => c.species && c.species.toLowerCase().includes(sp.name.toLowerCase().split(' ')[0]) && c.bait);
+  if (!matches.length) return null;
+  const tally = {};
+  matches.forEach((c) => { const b = c.bait.trim(); tally[b] = (tally[b] || 0) + 1; });
+  const top = Object.entries(tally).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([b, n]) => b + ' ×' + n);
+  return '🎣 From your catch log, ' + matches[0].species + ' have hit: ' + top.join(', ') + '.';
+}
+
 function asstAnsWaterTemp() {
   const a = asstAreaPack();
   if (a && a.data && typeof areaSstStats === 'function') {
@@ -502,15 +656,16 @@ function asstNoWx() {
     (navigator.onLine ? "You're online now, so add an API key in settings for a live answer." : "");
 }
 function asstAnsHelp() {
-  return "🎣 I'm First Mate. Offline I can tell you:\n" +
-    "• Best bite times (solunar), sunrise/sunset, moon phase\n" +
-    "• Your position, speed & heading\n" +
-    "• Cached wind, seas & water temp\n" +
-    "• Nearest reefs and your saved spots (with distance/bearing)\n" +
-    "• Your catch log & patterns\n" +
-    "• Fish size/bag limits and knot how-tos\n" +
-    "• Emergency / Mayday info\n\n" +
-    "Add an Anthropic API key in ⚙️ settings and, with signal, I'll chat about anything boating or fishing.";
+  return "🎣 I'm First Mate. Even with NO signal or key, I can tell you:\n" +
+    "• Best day/time to fish (bite + weather) & the week's outlook\n" +
+    "• Is it too rough to go out? (go/no-go read)\n" +
+    "• Tides, sunrise/sunset, moon phase, solunar bite windows\n" +
+    "• Weather for now or 'tomorrow afternoon', wind, seas, water temp & breaks\n" +
+    "• Your position, speed, heading; nearest reef / ramp / anchorage / spot\n" +
+    "• What's been caught here & what bait worked (from your log)\n" +
+    "• Fish size/bag limits, closures, knots, Mayday info\n" +
+    "• Drop & name a waypoint\n\n" +
+    "(Tides, multi-day weather & fish history need the area downloaded first.) Add an API key in ⚙️ and, with signal, I'll also chat freely and take actions.";
 }
 
 /* ---- Local waypoint action (used offline AND by the online place_waypoint tool) ---- */
@@ -825,9 +980,9 @@ function asstSetStatus() {
   const hasKey = !!ASST.key();
   const online = navigator.onLine;
   let dot = 'warn', txt;
-  if (online && hasKey) { dot = 'ok'; txt = 'Online AI · ' + asstModelLabel(); }
-  else if (!online) { dot = 'warn'; txt = 'Offline — answering from your boat data'; }
-  else { dot = 'warn'; txt = 'No API key — offline data mode (add a key in ⚙️)'; }
+  if (online && hasKey) { dot = 'ok'; txt = 'Full AI chat · ' + asstModelLabel(); }
+  else if (!online) { dot = 'ok'; txt = 'Offline — answering from your boat data 🧭'; }
+  else { dot = 'ok'; txt = 'Data mode — add a key in ⚙️ for free-form chat'; }
   el.innerHTML = '<span class="dot ' + dot + '"></span>' + txt;
 }
 function asstModelLabel() {
@@ -885,8 +1040,8 @@ function asstSetSending(on) {
 }
 
 const ASST_CHIPS = [
-  "What's the weather where I am?", 'Best bite times today', 'Drop a waypoint here',
-  'Tides today', 'Nearest reef', 'Is a calico bass legal?',
+  'Best day to fish this week?', 'Is it too rough today?', "What's the weather where I am?",
+  'Tides today', 'Drop a waypoint here', "What's been caught here?",
 ];
 function asstRenderChips() {
   const box = document.getElementById('asst-suggest');
@@ -905,7 +1060,7 @@ function asstOnOpen() {
   asstSetStatus();
   const box = document.getElementById('asst-messages');
   if (box && !box.children.length) {
-    asstAddMsg('bot', "Ahoy! I'm First Mate 🎣\nAsk about bite times, wind, water temp, reefs, fish limits or knots. With signal I can also do things — drop & name waypoints, toggle layers, start a trip, and pull live weather or tides. Tap a suggestion to start.");
+    asstAddMsg('bot', "Ahoy! I'm First Mate 🎣\nNo signal needed for most of what you'll ask — best days to fish, is it too rough, tides, weather outlook, water temp, reefs, fish limits, knots, or dropping a waypoint. With a key + signal I'll also chat freely and take actions. Tap a suggestion to start.");
     asstRenderChips();
   }
 }
