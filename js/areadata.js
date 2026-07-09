@@ -60,6 +60,9 @@ async function buildAreaPack(bounds, onProgress) {
   // Sea-surface-temp grid snapshot (to describe breaks / warmest water)
   try { step('sea-temperature grid'); pack.sstGrid = await fetchSstGrid(bounds); } catch (e) { /* ignore */ }
 
+  // Depth grid (NOAA NCEI DEM point identify) so "how deep is it" works offline
+  try { step('depth grid'); pack.depthGrid = await fetchDepthGrid(bounds); } catch (e) { /* ignore */ }
+
   // A week of tide highs/lows at the nearest station
   try {
     step('tide predictions');
@@ -138,6 +141,39 @@ async function fetchSstGrid(bounds) {
     if (v != null) pts.push({ lat: +lats[k], lng: +lngs[k], f: Math.round(v) });
   });
   return pts;
+}
+
+async function fetchDepthGrid(bounds) {
+  const N = 4, jobs = [];
+  for (let i = 0; i < N; i++) for (let jx = 0; jx < N; jx++) {
+    jobs.push({
+      lat: +(bounds.getSouth() + (bounds.getNorth() - bounds.getSouth()) * (i + 0.5) / N).toFixed(4),
+      lng: +(bounds.getWest() + (bounds.getEast() - bounds.getWest()) * (jx + 0.5) / N).toFixed(4),
+    });
+  }
+  const out = [];
+  await Promise.all(jobs.map(async (p) => {
+    try {
+      const r = await fetch('https://gis.ngdc.noaa.gov/arcgis/rest/services/DEM_mosaics/DEM_all/ImageServer/identify' +
+        '?geometry=' + encodeURIComponent(JSON.stringify({ x: p.lng, y: p.lat })) +
+        '&geometryType=esriGeometryPoint&sr=4326&returnGeometry=false&returnCatalogItems=false&f=json');
+      const d = await r.json();
+      const v = parseFloat(d.value);
+      if (d.value === 'NoData' || isNaN(v)) return;
+      if (v >= 0) out.push({ lat: p.lat, lng: p.lng, land: true });
+      else out.push({ lat: p.lat, lng: p.lng, ft: Math.round(Math.abs(v) * 3.28084) });
+    } catch (e) { /* skip point */ }
+  }));
+  return out;
+}
+
+/* Nearest captured depth-grid point to a location. */
+function areaDepthAt(d, ll) {
+  const g = d.depthGrid;
+  if (!g || !g.length) return null;
+  let best = null, bd = Infinity;
+  g.forEach((p) => { const dist = (p.lat - ll.lat) ** 2 + (p.lng - ll.lng) ** 2; if (dist < bd) { bd = dist; best = p; } });
+  return best;
 }
 
 function mpaBBox(m) {
@@ -221,6 +257,10 @@ function areaPackSummary(a) {
   if (tides.length) { s.tide_station = d.tides.station; s.tides_next = tides; }
   const sst = areaSstStats(d);
   if (sst) s.water_temp = sst;
+  if (d.depthGrid && d.depthGrid.length) {
+    const depths = d.depthGrid.filter((p) => p.ft != null).map((p) => p.ft);
+    if (depths.length) s.depth_ft = { min: Math.min.apply(null, depths), max: Math.max.apply(null, depths) };
+  }
   if (d.fish) {
     const top = Object.entries(d.fish.tally).sort((x, y) => y[1] - x[1]).slice(0, 10).map(([k, v]) => k + ' ×' + v);
     s.fish_history = { total: d.fish.total, top: top, recent: d.fish.recent };

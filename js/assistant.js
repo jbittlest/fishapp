@@ -57,6 +57,19 @@ function asstParseWhen(t) {
   else if (/this afternoon/.test(t)) { at(14); label = 'This afternoon'; }
   else if (/this morning/.test(t)) { at(8); label = 'This morning'; }
   else if (/this evening/.test(t)) { at(19); label = 'This evening'; }
+  if (label === 'Now') {
+    const wds = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    for (let i = 0; i < 7; i++) {
+      if (t.indexOf(wds[i]) < 0) continue;
+      let add = (i - d.getDay() + 7) % 7; if (add === 0) add = 7;   // next occurrence, not today
+      d.setDate(d.getDate() + add); at(12);
+      label = wds[i].charAt(0).toUpperCase() + wds[i].slice(1);
+      if (/morning/.test(t)) { at(8); label += ' morning'; }
+      else if (/afternoon/.test(t)) { at(14); label += ' afternoon'; }
+      else if (/evening|night/.test(t)) { at(19); label += ' evening'; }
+      break;
+    }
+  }
   return { ms: d.getTime(), label };
 }
 function asstAreaPack() {
@@ -143,6 +156,7 @@ function asstSnapshot() {
     if (d.forecast) parts.push('7-day wind/wave forecast');
     if (d.tides) parts.push('a week of tides');
     if (d.sstGrid) parts.push('water-temp grid');
+    if (d.depthGrid) parts.push('depth grid');
     if (d.fish) parts.push(d.fish.total + ' fish records');
     if (d.mpas) parts.push(d.mpas.length + ' closures');
     L1.push('Downloaded area pack "' + pk.name + '" covers this location (captured ' + asstAgo(d.capturedTs) +
@@ -243,9 +257,9 @@ function asstOffline(q) {
   if (has('what fish', 'been caught', 'caught here', 'biting', 'what bites', 'species here',
     'what lives here', 'what can i catch', 'fish been', 'whats around', "what's around"))
     return asstAnsFishHistory();
-  // Closures / protected areas
-  if (has('closure', 'closed to fishing', 'mpa', 'marine protected', 'protected area',
-    'can i fish here', 'legal to fish here', 'no-take', 'no take'))
+  // Closures / protected areas  (note: avoid bare 'mpa' — it's a substring of "compare")
+  if (has('closure', 'closed to fish', 'protected area', 'marine protected', ' mpa', 'mpas',
+    'can i fish here', 'legal to fish here', 'no-take', 'no take', 'reserve'))
     return asstAnsClosures();
   // Waves / seas
   if (has('wave', 'swell', 'seas', 'surf', 'chop'))
@@ -257,6 +271,19 @@ function asstOffline(q) {
   // Water temp
   if (has('water temp', 'sea temp', 'sst', 'surface temp', 'temperature of the water', 'how warm', 'how cold'))
     return asstAnsWaterTemp();
+  // Depth (from the downloaded depth grid)
+  if (has('how deep', 'depth here', 'depth at', 'bottom depth', 'water depth', 'fathom', 'how much water', 'deep is it'))
+    return asstAnsDepth(t);
+  // Compare two saved spots
+  if (has('compare', ' vs ', 'versus', 'which is closer', 'which spot', 'better spot')) {
+    const cmp = asstAnsCompareSpots(t); if (cmp) return cmp;
+  }
+  // Distance / bearing / trip time / fuel to a named spot (before knots — "25 knots" ≠ a knot!)
+  if (has('distance to', 'how far', 'bearing to', 'how do i get to', 'fuel to', 'how much fuel',
+    'how long to', 'time to get to', 'eta to', 'get to', 'and back', 'round trip')) {
+    const d = asstAnsDistanceTo(t, ll);
+    if (d) return d;
+  }
   // Reefs / structure
   if (has('reef', 'structure', 'artificial'))
     return asstAnsReefs(ll);
@@ -274,11 +301,6 @@ function asstOffline(q) {
   // Spots
   if (has('spot', 'marked', 'my spots', 'waypoint', 'nearest spot'))
     return asstAnsSpots(ll);
-  // Distance/bearing to a named spot
-  if (has('distance to', 'how far', 'bearing to', 'how do i get to')) {
-    const d = asstAnsDistanceTo(t, ll);
-    if (d) return d;
-  }
   // Emergency
   if (has('emergency', 'mayday', 'sos', 'sinking', 'help me', 'man overboard', 'distress', 'pan-pan', 'pan pan'))
     return asstAnsEmergency(ll);
@@ -330,8 +352,9 @@ function asstAnsSolunar(ll) {
 function asstAnsSun(ll) {
   const a = asstAstro(ll);
   if (!a) return "I need a position to compute sun times.";
+  const hrs = (a.sun.sunset - a.sun.sunrise) / 3600000;
   return "☀️ Today:\nSunrise " + asstTime(a.sun.sunrise) + "\nSunset  " + asstTime(a.sun.sunset) +
-    "\nSolar noon " + asstTime(a.sun.solarNoon);
+    "\nSolar noon " + asstTime(a.sun.solarNoon) + "\nDaylight: " + hrs.toFixed(1) + " hrs";
 }
 function asstAnsMoon(ll) {
   const a = asstAstro(ll);
@@ -591,10 +614,59 @@ function asstAnsDistanceTo(t, ll) {
   if (!spot) return null;
   const here = L.latLng(ll.lat, ll.lng), there = L.latLng(spot.lat, spot.lng);
   const nm = nmBetween(here, there), brg = bearingBetween(here, there);
-  const sp = asstSpeedKn();
-  let s = "➡️ " + spot.name + ": " + nm.toFixed(1) + " nm, bearing " + Math.round(brg) + "° " + asstCompass(brg);
-  if (sp && sp > 0.5) s += "\nAt " + sp.toFixed(0) + " kn: ~" + Math.round((nm / sp) * 60) + " min";
+  // Speed: "at 25 kn/mph" in the query → Nav route-speed input → live GPS → 20 kn default
+  let sp = null;
+  const m = t.match(/(\d+(?:\.\d+)?)\s*(kn|knots?|kt|mph)/);
+  if (m) { sp = parseFloat(m[1]); if (/mph/.test(m[2])) sp = sp / 1.15078; }
+  if (sp == null) { const rs = parseFloat((document.getElementById('route-speed') || {}).value); if (rs > 0) sp = rs; }
+  if (sp == null) { const g = asstSpeedKn(); if (g && g > 1) sp = g; }
+  if (sp == null) sp = 20;
+  const gph = parseFloat((document.getElementById('route-gph') || {}).value) || 8;
+  const roundTrip = /back|round|return/.test(t);
+  const legMin = nm / sp * 60, fuel = nm / sp * gph;
+  let s = '➡️ ' + spot.name + ': ' + nm.toFixed(1) + ' nm, bearing ' + Math.round(brg) + '° ' + asstCompass(brg) +
+    '\nAt ' + Math.round(sp) + ' kn: ~' + Math.round(legMin) + ' min one way, ~' + fuel.toFixed(1) + ' gal';
+  if (roundTrip) s += '\n↩️ Round trip: ' + (nm * 2).toFixed(1) + ' nm, ~' + Math.round(legMin * 2) + ' min, ~' + (fuel * 2).toFixed(1) + ' gal';
+  s += '\n(Assumes ' + gph + ' gal/hr — set speed & GPH in 🧭 Nav Tools.)';
   return s;
+}
+function asstAnsDepth(t) {
+  const a = asstAreaPack();
+  if (!a || !a.data || !a.data.depthGrid || !a.data.depthGrid.length)
+    return "I don't have depth data offline here. Tap the water with signal (depth shows in the popup), or download this area — it now captures a depth grid.";
+  let ll = asstPos().ll, where = 'here';
+  const spot = (typeof Spots !== 'undefined' ? Spots.all : []).find((s) => s.name && s.name.length > 2 && t.includes(s.name.toLowerCase()));
+  if (spot) { ll = L.latLng(spot.lat, spot.lng); where = spot.name; }
+  if (!ll) return "I need a position (or a saved spot name) to read depth.";
+  const p = areaDepthAt(a.data, ll);
+  if (!p) return "No depth was captured near " + where + ".";
+  if (p.land) return "That point (" + where + ") reads as land on the survey grid.";
+  return "⚓ Depth " + where + ": about " + p.ft + " ft (" + Math.round(p.ft / 6) + " fathoms) — nearest point in a coarse grid, downloaded " + asstAgo(a.data.capturedTs) + ".\nTap the chart with signal for an exact sounding.";
+}
+function asstAnsCompareSpots(t) {
+  if (typeof Spots === 'undefined' || Spots.all.length < 2) return null;
+  const found = Spots.all.filter((s) => s.name && s.name.length > 2 && t.includes(s.name.toLowerCase()));
+  if (found.length < 2) return null;
+  const { ll } = asstPos();
+  const sp = asstSpeedKn() || parseFloat((document.getElementById('route-speed') || {}).value) || 20;
+  const rows = found.slice(0, 3).map((s) => {
+    let line = '📍 ' + s.name + ' [' + s.type + ']';
+    if (ll) {
+      const there = L.latLng(s.lat, s.lng), here = L.latLng(ll.lat, ll.lng);
+      const nm = nmBetween(here, there);
+      line += ' — ' + nm.toFixed(1) + ' nm ' + asstCompass(bearingBetween(here, there)) +
+        (sp > 0 ? ', ~' + Math.round(nm / sp * 60) + ' min' : '');
+    }
+    if (s.notes) line += '\n   ' + s.notes;
+    return line;
+  });
+  let head = 'Comparing ' + found.slice(0, 3).map((s) => s.name).join(' vs ') + ':';
+  if (ll) {
+    const here = L.latLng(ll.lat, ll.lng);
+    const closest = found.slice().sort((a, b) => nmBetween(here, L.latLng(a.lat, a.lng)) - nmBetween(here, L.latLng(b.lat, b.lng)))[0];
+    head += '\nClosest to you: ' + closest.name + '.';
+  }
+  return head + '\n\n' + rows.join('\n');
 }
 function asstAnsCatches() {
   if (typeof Catch === 'undefined' || !Catch.all || !Catch.all.length)
