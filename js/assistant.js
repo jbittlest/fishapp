@@ -37,6 +37,32 @@ function asstCompass(deg) {
 function asstCachedWx() {
   try { return JSON.parse(localStorage.getItem('fishapp.lastwx') || 'null'); } catch (e) { return null; }
 }
+function asstAgo(ts) {
+  const m = (Date.now() - ts) / 60000;
+  if (m < 60) return Math.max(1, Math.round(m)) + ' min ago';
+  const h = m / 60;
+  if (h < 24) return Math.round(h) + ' h ago';
+  return Math.round(h / 24) + ' d ago';
+}
+/* Rough natural-time parser: "tomorrow afternoon", "tonight", "this morning". */
+function asstParseWhen(t) {
+  const d = new Date(); let label = 'Now';
+  const at = (h) => d.setHours(h, 0, 0, 0);
+  if (/tomorrow/.test(t)) {
+    d.setDate(d.getDate() + 1); at(12); label = 'Tomorrow';
+    if (/morning/.test(t)) { at(8); label = 'Tomorrow morning'; }
+    else if (/afternoon/.test(t)) { at(14); label = 'Tomorrow afternoon'; }
+    else if (/evening|night/.test(t)) { at(19); label = 'Tomorrow evening'; }
+  } else if (/tonight/.test(t)) { at(20); label = 'Tonight'; }
+  else if (/this afternoon/.test(t)) { at(14); label = 'This afternoon'; }
+  else if (/this morning/.test(t)) { at(8); label = 'This morning'; }
+  else if (/this evening/.test(t)) { at(19); label = 'This evening'; }
+  return { ms: d.getTime(), label };
+}
+function asstAreaPack() {
+  const ll = asstPos().ll;
+  return (ll && typeof areaPackFor === 'function') ? areaPackFor(ll) : null;
+}
 function asstNearestReefs(ll, n) {
   if (typeof Reefs === 'undefined' || !Reefs.reefs || !Reefs.reefs.length || typeof L === 'undefined') return [];
   const here = L.latLng(ll.lat, ll.lng);
@@ -110,6 +136,19 @@ function asstSnapshot() {
     L1.push('Weather: none cached (open the Weather panel while online to cache it).');
   }
 
+  const pk = (ll && typeof areaPackFor === 'function') ? areaPackFor(ll) : null;
+  if (pk && pk.data) {
+    const d = pk.data;
+    const parts = [];
+    if (d.forecast) parts.push('7-day wind/wave forecast');
+    if (d.tides) parts.push('a week of tides');
+    if (d.sstGrid) parts.push('water-temp grid');
+    if (d.fish) parts.push(d.fish.total + ' fish records');
+    if (d.mpas) parts.push(d.mpas.length + ' closures');
+    L1.push('Downloaded area pack "' + pk.name + '" covers this location (captured ' + asstAgo(d.capturedTs) +
+      '): ' + parts.join(', ') + '. Call get_area_intel to read it — especially useful offline.');
+  }
+
   if (ll) {
     const reefs = asstNearestReefs(ll, 3);
     if (reefs.length) L1.push('Nearest reefs: ' + reefs
@@ -175,12 +214,23 @@ function asstOffline(q) {
   // Moon
   if (has('moon', 'lunar', 'phase'))
     return asstAnsMoon(ll);
+  // Tides (now answerable offline from a downloaded area pack)
+  if (has('tide', 'high tide', 'low tide', 'slack', 'ebb', 'flood'))
+    return asstAnsTides(t);
+  // Fish history in this area (from the downloaded pack)
+  if (has('what fish', 'been caught', 'caught here', 'biting', 'what bites', 'species here',
+    'what lives here', 'what can i catch', 'fish been', 'whats around', "what's around"))
+    return asstAnsFishHistory();
+  // Closures / protected areas
+  if (has('closure', 'closed to fishing', 'mpa', 'marine protected', 'protected area',
+    'can i fish here', 'legal to fish here', 'no-take', 'no take'))
+    return asstAnsClosures();
   // Waves / seas
   if (has('wave', 'swell', 'seas', 'surf', 'chop'))
     return asstAnsWaves();
   // Weather / wind
   if (has('weather', 'wind', 'gust', 'forecast', 'breeze', 'conditions'))
-    return asstAnsWeather();
+    return asstAnsWeather(t);
   // Water temp
   if (has('water temp', 'sea temp', 'sst', 'surface temp', 'temperature of the water', 'how warm', 'how cold'))
     return asstAnsWaterTemp();
@@ -259,7 +309,28 @@ function asstAnsMoon(ll) {
     (a.moonT.set ? "\nMoonset  " + asstTime(a.moonT.set) : '') +
     "\n\nNew and full moons drive the biggest tides and strongest solunar bite.";
 }
-function asstAnsWeather() {
+function asstAnsWeather(q) {
+  // Prefer a downloaded area pack (multi-day forecast, works offline & supports "tomorrow")
+  const a = asstAreaPack();
+  if (a && a.data && a.data.forecast) {
+    const when = asstParseWhen((q || '').toLowerCase());
+    const d = a.data, i = areaFcstIndex(d.forecast, when.ms);
+    if (i >= 0) {
+      const f = d.forecast;
+      let s = '🌤 ' + when.label + ' — ' + a.name + ' (downloaded ' + asstAgo(d.capturedTs) + '):\n' +
+        'Wind ' + Math.round(f.wind[i]) + ' kn ' + asstCompass(f.dir[i]) + ', gust ' + Math.round(f.gust[i]) + ' kn\n' +
+        'Air ' + Math.round(f.temp[i]) + '°F' + (f.precip[i] != null ? ', ' + f.precip[i] + '% rain' : '');
+      if (d.marine) {
+        const mi = areaFcstIndex(d.marine, when.ms);
+        if (mi >= 0 && d.marine.wave_m[mi] != null) s += '\nSeas ' + (d.marine.wave_m[mi] * 3.28084).toFixed(1) + ' ft @ ' + Math.round(d.marine.period[mi]) + 's';
+        if (mi >= 0 && d.marine.sst[mi] != null) s += '\nWater ' + Math.round(d.marine.sst[mi]) + '°F';
+      }
+      const g = Math.round(f.gust[i]);
+      if (g >= 25) s += '\n\n⚠️ ' + g + ' kn gusts — rough.';
+      else if (g >= 18) s += '\n\nBreezy — expect a chop.';
+      return s;
+    }
+  }
   const wx = asstCachedWx();
   if (!wx || !wx.wx || !wx.wx.current) return asstNoWx();
   const c = wx.wx.current, age = Math.round((Date.now() - wx.ts) / 60000);
@@ -288,7 +359,52 @@ function asstAnsWaves() {
   else s += '\n\nCalm-ish. Good conditions.';
   return s;
 }
+function asstAnsTides(q) {
+  const a = asstAreaPack();
+  if (a && a.data && a.data.tides && a.data.tides.preds && a.data.tides.preds.length) {
+    const t = (q || '').toLowerCase();
+    const when = asstParseWhen(t);
+    const day = new Date(when.ms).toISOString().slice(0, 10);
+    let show;
+    if (/tomorrow|tonight|today|this /.test(t)) {
+      show = a.data.tides.preds.filter((p) => p.t.slice(0, 10) === day)
+        .map((p) => ({ time: p.t.slice(11, 16), type: p.type === 'H' ? 'High' : 'Low', ft: p.v }));
+    } else {
+      show = areaTidesNext(a.data, Date.now(), 4);
+    }
+    if (!show.length) show = areaTidesNext(a.data, when.ms, 4);
+    const lines = show.map((p) => (p.type === 'High' ? '🔼 High' : '🔽 Low') + '  ' + p.time + '   ' + p.ft + ' ft');
+    return '🌊 Tides — ' + a.data.tides.station + ' (' + when.label + ', downloaded ' + asstAgo(a.data.capturedTs) + '):\n' + lines.join('\n');
+  }
+  return "I don't have tide predictions offline for here. Download this area while online — it now captures a week of tides — or open the 🌙 Tides panel with signal.";
+}
+function asstAnsFishHistory() {
+  const a = asstAreaPack();
+  if (a && a.data && a.data.fish && a.data.fish.total) {
+    const top = Object.entries(a.data.fish.tally).sort((x, y) => y[1] - x[1]).slice(0, 8).map(([k, v]) => k + ' ×' + v).join(', ');
+    const recent = (a.data.fish.recent || []).slice(0, 6).map((r) => '• ' + r.species + ' (' + r.date + ')').join('\n');
+    return '🐟 Reported in this area (iNaturalist, downloaded ' + asstAgo(a.data.capturedTs) + ' · ' + a.data.fish.total + ' records):\nTop: ' + top +
+      (recent ? '\n\nRecent:\n' + recent : '') + '\n\n(Community sightings — divers & anglers, not all rod-and-reel.)';
+  }
+  return "No local fish-sighting data offline. Turn on the 🐟 layer with signal, or download this area — it captures recent sightings.";
+}
+function asstAnsClosures() {
+  const a = asstAreaPack();
+  if (a && a.data && a.data.mpas) {
+    if (!a.data.mpas.length) return "No marine protected areas were captured inside this downloaded area — but always confirm with CDFW before fishing near a closure.";
+    const lines = a.data.mpas.slice(0, 12).map((m) => '• ' + m.n + (m.t ? ' [' + m.t + ']' : '')).join('\n');
+    return '🚫 Protected areas in this download:\n' + lines + '\n\n⚠️ Boundaries are approximate — confirm exact lines & take rules with CDFW before fishing.';
+  }
+  return "No closure data captured offline here. The 🚫 MPA layer is bundled — turn it on in Layers, or download this area so I can summarize closures offline.";
+}
 function asstAnsWaterTemp() {
+  const a = asstAreaPack();
+  if (a && a.data && typeof areaSstStats === 'function') {
+    const st = areaSstStats(a.data);
+    if (st) return "🌡️ Water temp in " + a.name + " (downloaded " + asstAgo(a.data.capturedTs) + "):\n" +
+      "About " + st.avg + "°F, ranging " + st.min + "–" + st.max + "°F across the area" +
+      (st.span >= 2 ? ".\nWarmest water (a break to try) is near " + st.warmest.lat.toFixed(3) + ", " + st.warmest.lng.toFixed(3) + " (" + st.max + "°F)." : ".");
+  }
   const wx = asstCachedWx();
   if (wx && wx.marine && wx.marine.current && wx.marine.current.sea_surface_temperature != null)
     return "🌡️ Sea-surface temp (cached): " + Math.round(wx.marine.current.sea_surface_temperature) + "°F";
@@ -439,6 +555,7 @@ function asstSystemPrompt() {
     "Safety first: for anything life-threatening, tell them to use VHF Ch 16 / call the Coast Guard and point to the app's 🆘 button. Never give false confidence about weather or conditions.",
     "Fishing regulations you cite are general reference — always tell them to confirm current limits with the state wildlife agency (CDFW in California) before keeping fish.",
     "You can take real actions in the app via tools: place / list / delete waypoints, toggle map layers, start or stop trip tracking, center the map, and pull LIVE weather & tides for a point. For current weather, seas, water temp or tides, CALL get_conditions / get_tides — don't answer those from the cached snapshot alone. Default every location to the boat's current position unless the user gives coordinates or names a saved spot. After acting, confirm briefly and naturally what you did.",
+    "If the user is offline (get_conditions / get_tides can't reach the network) or asks about a downloaded area, call get_area_intel — it reads the offline data pack captured when the area was downloaded (multi-day forecast, a week of tides, water-temp grid, fish-sighting history, closures). Always mention when the data was captured so they know its age.",
     "Catch logging and knots aren't automated yet — for those, point them to the 🧭 and 📖 buttons.",
     "",
     asstSnapshot(),
@@ -511,7 +628,16 @@ function asstToolLabel(n) {
     place_waypoint: 'placing waypoint', list_waypoints: 'reading waypoints',
     delete_waypoint: 'removing waypoint', toggle_layer: 'toggling layer',
     set_trip: 'updating trip', go_to: 'centering the map',
+    get_area_intel: 'reading offline area data',
   }[n] || 'working';
+}
+
+function asstToolAreaIntel(input) {
+  const ll = asstPointFrom(input);
+  if (!ll) return { error: 'no position' };
+  const a = (typeof areaPackFor === 'function') ? areaPackFor(ll) : null;
+  if (!a || !a.data) return { error: 'no downloaded area pack covers this location — the user can download this area (📊) while online to capture its data.' };
+  return areaPackSummary(a);
 }
 
 /* ---- Tool schemas handed to Claude ---- */
@@ -538,6 +664,8 @@ function asstTools() {
       input_schema: { type: 'object', properties: { active: { type: 'boolean' }, reset: { type: 'boolean' } }, required: ['active'] } },
     { name: 'go_to', description: 'Center the map on the boat, a named saved spot, or coordinates.',
       input_schema: { type: 'object', properties: { spot: { type: 'string' }, lat: { type: 'number' }, lng: { type: 'number' } } } },
+    { name: 'get_area_intel', description: 'Read the OFFLINE data pack for a downloaded area covering a point (default current position): multi-day wind/wave/tide/water-temp forecast, a sea-temp grid (warmest/coolest water), recent fish-sighting history, and protected-area closures — all captured when the area was downloaded. Use this for area questions when offline, for a multi-day outlook, or for historical fish patterns and closures.',
+      input_schema: { type: 'object', properties: { lat: { type: 'number' }, lng: { type: 'number' } } } },
   ];
 }
 
@@ -557,6 +685,7 @@ async function asstExecTool(name, input) {
       case 'toggle_layer': return asstToolToggleLayer(input);
       case 'set_trip': return asstToolSetTrip(input);
       case 'go_to': return asstToolGoTo(input);
+      case 'get_area_intel': return asstToolAreaIntel(input);
       default: return { error: 'unknown tool ' + name };
     }
   } catch (e) { return { error: String((e && e.message) || e) }; }

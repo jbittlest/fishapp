@@ -120,14 +120,27 @@ async function startDownload() {
   if (!DL.cancelled) {
     const name = document.getElementById('dl-name').value.trim() ||
       'Area ' + new Date().toLocaleDateString();
+
+    // Capture the environmental data pack so First Mate can answer questions
+    // about this area offline (weather/tides/water-temp/fish/closures).
+    let data = null;
+    if (typeof buildAreaPack === 'function') {
+      fill.style.width = '100%';
+      status.textContent = '📊 Capturing area data…';
+      try { data = await buildAreaPack(bounds, (m) => { status.textContent = '📊 Capturing ' + m + '…'; }); }
+      catch (e) { data = null; }
+    }
+
     await idb.put('areas', {
       name,
       bounds: { w: bounds.getWest(), s: bounds.getSouth(), e: bounds.getEast(), n: bounds.getNorth() },
       minZ, maxZ, layerIds,
       tiles: jobs.length, bytes,
       ts: Date.now(),
+      data,
     });
-    toast('✅ "' + name + '" saved for offline use');
+    if (typeof areaDataRefresh === 'function') await areaDataRefresh();
+    toast('✅ "' + name + '" saved' + (data ? ' (charts + data)' : '') + ' for offline use');
     document.getElementById('dl-name').value = '';
   } else {
     toast('Download cancelled');
@@ -156,7 +169,7 @@ async function renderAreasList() {
     item.innerHTML =
       `<span class="ico">🗺</span>` +
       `<div class="info"><div class="name">${escapeHtml(a.name)}</div>` +
-      `<div class="sub">${a.tiles.toLocaleString()} tiles · ${mb} MB · ${new Date(a.ts).toLocaleDateString()}</div></div>` +
+      `<div class="sub">${a.tiles.toLocaleString()} tiles · ${mb} MB${a.data ? ' · 📊 data' : ''} · ${new Date(a.ts).toLocaleDateString()}</div></div>` +
       `<button class="go">➜</button><button class="del">🗑</button>`;
     item.querySelector('.go').onclick = () => {
       closePanels();
@@ -170,6 +183,7 @@ async function renderAreasList() {
       toast('Removing ' + jobs.length.toLocaleString() + ' tiles…');
       await deleteTiles(jobs.map((j) => tileKey(j.id, j.z, j.x, j.y)));
       await idb.del('areas', a.id);
+      if (typeof areaDataRefresh === 'function') await areaDataRefresh();
       renderAreasList();
       updateStorageInfo();
       toast('Offline area deleted');

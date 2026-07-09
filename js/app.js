@@ -195,6 +195,7 @@
   document.getElementById('btn-emergency').onclick = () => togglePanel('panel-emergency');
   document.getElementById('btn-assistant').onclick = () => togglePanel('panel-assistant');
   asstInit();
+  if (typeof areaDataInit === 'function') areaDataInit();
 
   /* Guides tabs (knots / fish) */
   document.querySelectorAll('#panel-knots .tab').forEach((t) => t.onclick = () => {
