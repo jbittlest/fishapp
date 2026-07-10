@@ -45,7 +45,20 @@ const idb = {
 /* Tiles: keyed "layerId/z/x/y" -> Blob */
 function tileKey(layerId, z, x, y) { return layerId + '/' + z + '/' + x + '/' + y; }
 function getTileBlob(key) { return idb.get('tiles', key).catch(() => null); }
-function putTileBlob(key, blob) { return idb.put('tiles', blob, key).catch(() => {}); }
+function putTileBlob(key, blob) { TileKeys.add(key); return idb.put('tiles', blob, key).catch(() => {}); }
+
+/* In-memory index of which tile keys are stored offline. Lets the tile layer skip a
+   per-tile IndexedDB read for the common case (browsing a not-downloaded area online):
+   if a key isn't in this set, go straight to the network instead of doing an IDB miss. */
+const TileKeys = new Set();
+let tileKeysReady = false;
+async function loadTileKeys() {
+  try {
+    const keys = await _req(_store('tiles').getAllKeys());
+    keys.forEach((k) => TileKeys.add(k));
+  } catch (e) { /* fall back to per-tile IDB reads */ }
+  tileKeysReady = true;
+}
 
 /* Delete every cached tile whose key starts with a layer prefix, e.g. "gmrt/".
    Used to flush a layer's tiles when its data source changes. */
@@ -56,7 +69,7 @@ function deleteTilesByPrefix(prefix) {
     const req = store.openKeyCursor(range);
     req.onsuccess = () => {
       const cur = req.result;
-      if (cur) { store.delete(cur.key); cur.continue(); } else { resolve(); }
+      if (cur) { TileKeys.delete(cur.key); store.delete(cur.key); cur.continue(); } else { resolve(); }
     };
     req.onerror = () => resolve();
   });
@@ -69,6 +82,7 @@ function deleteTiles(keys, onProgress) {
     let done = 0;
     if (!keys.length) return resolve();
     keys.forEach((k) => {
+      TileKeys.delete(k);
       const r = store.delete(k);
       r.onsuccess = r.onerror = () => {
         done++;

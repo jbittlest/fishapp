@@ -101,6 +101,7 @@ const OfflineTileLayer = L.TileLayer.extend({
   createTile: function (coords, done) {
     const img = document.createElement('img');
     img.alt = '';
+    img.decoding = 'async';   // decode off the main thread — smoother tile paint
     img.setAttribute('role', 'presentation');
     L.DomEvent.on(img, 'load', () => {
       if (img._objUrl) URL.revokeObjectURL(img._objUrl);
@@ -113,12 +114,7 @@ const OfflineTileLayer = L.TileLayer.extend({
     const def = this.options.layerDef;
     const key = tileKey(def.id, coords.z, coords.x, coords.y);
 
-    getTileBlob(key).then((blob) => {
-      if (blob instanceof Blob) {
-        img._objUrl = URL.createObjectURL(blob);
-        img.src = img._objUrl;
-        return;
-      }
+    const fromNetwork = () => {
       if (!navigator.onLine) { img.src = EMPTY_TILE; return; }
       const url = def.urlFor(coords.z, coords.x, coords.y, def.tilePx || 256);
       // Retry the slow on-demand render servers once before giving up to a blank tile,
@@ -142,6 +138,19 @@ const OfflineTileLayer = L.TileLayer.extend({
             else img.src = EMPTY_TILE;
           });
       tryFetch(0);
+    };
+
+    // Fast path: once the offline key index is loaded, a key that isn't in it is
+    // definitely not stored — skip the IndexedDB read and hit the network straight away.
+    if (tileKeysReady && !TileKeys.has(key)) { fromNetwork(); return img; }
+
+    getTileBlob(key).then((blob) => {
+      if (blob instanceof Blob) {
+        img._objUrl = URL.createObjectURL(blob);
+        img.src = img._objUrl;
+        return;
+      }
+      fromNetwork();
     });
     return img;
   },
@@ -157,6 +166,6 @@ function makeLayer(layerId) {
     attribution: def.attribution,
     updateWhenIdle: false,      // start loading tiles DURING pan, not only after it stops
     updateWhenZooming: false,   // don't churn tiles mid zoom-animation
-    keepBuffer: 5,              // keep a wide ring of tiles around the view so panning shows content, not blanks
+    keepBuffer: 2,              // small ring around the view — fewer tiles to load = the visible area fills faster
   });
 }

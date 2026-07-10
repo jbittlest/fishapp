@@ -3,6 +3,7 @@
 
 (async function init() {
   await openDB();
+  loadTileKeys();   // build the offline-tile key index in the background (non-blocking)
 
   /* One-time migrations: flush cached relief tiles when the source changes.
      'gmrt' switched from slow GMRT WMS to fast pre-cached GEBCO tiles (v13→v14).
