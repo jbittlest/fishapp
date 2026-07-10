@@ -101,6 +101,11 @@ function bindMarkButton(ll) {
     window._map.closePopup(Inspect.popup);
     gotoStart(ll, 'Pin ' + ll.lat.toFixed(3) + ', ' + ll.lng.toFixed(3));
   };
+  const fc = el.querySelector('.ins-fc');
+  if (fc && typeof showAreaForecast === 'function') fc.onclick = () => {
+    window._map.closePopup(Inspect.popup);
+    showAreaForecast(ll);
+  };
 }
 
 function depthText(v) {
@@ -151,5 +156,6 @@ function inspectHtml(r, ll, distLine) {
       '<span class="ins-val">' + sstText(r.sst) + '</span></div>' +
     '<div class="ins-btns"><button class="ins-mark">📌 Save spot</button>' +
     '<button class="ins-nav">🧭 Navigate here</button></div>' +
+    '<button class="ins-fc">📅 See 10-Day forecast for this area</button>' +
     '</div>';
 }

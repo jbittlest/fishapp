@@ -200,7 +200,24 @@ async function loadWeatherPanel() {
   document.getElementById('wx-now').classList.remove('hidden');
   document.getElementById('wx-10day').classList.add('hidden');
   WX._fc10loaded = false;
+  WX._fcLoc = null;
+  return loadNow24();
+}
 
+/* Open the panel straight to the 10-Day tab for a tapped location. */
+function showAreaForecast(ll) {
+  if (typeof closePanels === 'function') closePanels();
+  document.getElementById('panel-weather').classList.remove('hidden');
+  document.querySelectorAll('#panel-weather .tab').forEach((x) => x.classList.toggle('active', x.dataset.wxtab === 'wx-10day'));
+  document.getElementById('wx-now').classList.add('hidden');
+  document.getElementById('wx-10day').classList.remove('hidden');
+  WX._fcLoc = { lat: ll.lat, lng: ll.lng };
+  WX._fc10loaded = true;
+  loadNow24();                    // keep the Now tab usable if they switch to it
+  loadForecast10(WX._fcLoc);
+}
+
+async function loadNow24() {
   const ll = GPS.lastLatLng || window._map.getCenter();
   const locEl = document.getElementById('wx-loc');
   const curEl = document.getElementById('wx-current');
@@ -323,9 +340,10 @@ function wmoIcon(c) {
 }
 function fcHourIdx(times, target) { return times ? times.indexOf(target) : -1; }
 
-async function loadForecast10() {
-  const ll = GPS.lastLatLng || window._map.getCenter();
-  document.getElementById('fc-loc').textContent = (GPS.lastLatLng ? 'At your position — ' : 'At map center — ') +
+async function loadForecast10(override) {
+  const ll = override || WX._fcLoc || GPS.lastLatLng || window._map.getCenter();
+  const forArea = !!(override || WX._fcLoc);
+  document.getElementById('fc-loc').textContent = (forArea ? '📍 For this area — ' : (GPS.lastLatLng ? 'At your position — ' : 'At map center — ')) +
     formatCoord(ll.lat, 'lat') + ' ' + formatCoord(ll.lng, 'lon');
   const daysEl = document.getElementById('fc-days');
   const staleEl = document.getElementById('fc-stale');
