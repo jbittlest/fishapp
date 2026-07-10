@@ -362,6 +362,32 @@ button.primary {
 #asst-settings summary { cursor: pointer; opacity: 0.7; font-size: 12.5px; padding: 4px 0; }
 #asst-settings .tool-btn { width: auto; display: inline-block; margin-right: 8px; }
 
+/* ---- 10-Day marine forecast ---- */
+.fc-legend { margin: 2px 0 8px; }
+.fc-day { border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+.fc-day-head {
+  display: flex; align-items: center; gap: 7px; padding: 11px 2px; cursor: pointer;
+  font-size: 13px; font-variant-numeric: tabular-nums;
+}
+.fc-when { width: 78px; flex: none; display: flex; flex-direction: column; line-height: 1.15; }
+.fc-when b { font-size: 13.5px; }
+.fc-when span { font-size: 11px; opacity: 0.6; }
+.fc-ico { font-size: 20px; width: 26px; text-align: center; flex: none; }
+.fc-temp { width: 56px; flex: none; font-weight: 700; }
+.fc-temp small { opacity: 0.6; font-weight: 400; }
+.fc-wind { width: 74px; flex: none; font-weight: 700; }
+.fc-wind small { opacity: 0.75; font-weight: 400; font-size: 10.5px; }
+.fc-wave { width: 42px; flex: none; }
+.fc-wave small { opacity: 0.6; }
+.fc-rain { margin-left: auto; width: 34px; text-align: right; color: #6cb6e8; }
+.fc-caret { flex: none; opacity: 0.45; transition: transform 0.15s; font-size: 11px; }
+.fc-day.open .fc-caret { transform: rotate(180deg); }
+.fc-day.open .fc-day-head { background: rgba(255, 255, 255, 0.04); }
+.fc-detail { padding: 2px 6px 12px; font-size: 13px; }
+.fc-detrow { padding: 4px 0; opacity: 0.92; line-height: 1.5; }
+.fc-detrow b { color: #cfe6f5; }
+.fc-hourly { margin-top: 8px; border-top: 1px dashed rgba(255, 255, 255, 0.12); padding-top: 4px; }
+
 /* ---- Go To navigation banner ---- */
 #goto-banner {
   position: fixed; z-index: 1500;

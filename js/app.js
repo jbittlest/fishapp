@@ -197,6 +197,14 @@
   asstInit();
   if (typeof areaDataInit === 'function') areaDataInit();
 
+  /* Weather tabs (now / 10-day) */
+  document.querySelectorAll('#panel-weather .tab').forEach((t) => t.onclick = () => {
+    document.querySelectorAll('#panel-weather .tab').forEach((x) => x.classList.toggle('active', x === t));
+    document.getElementById('wx-now').classList.toggle('hidden', t.dataset.wxtab !== 'wx-now');
+    document.getElementById('wx-10day').classList.toggle('hidden', t.dataset.wxtab !== 'wx-10day');
+    if (t.dataset.wxtab === 'wx-10day' && !WX._fc10loaded) { WX._fc10loaded = true; loadForecast10(); }
+  });
+
   /* Guides tabs (knots / fish) */
   document.querySelectorAll('#panel-knots .tab').forEach((t) => t.onclick = () => {
     document.querySelectorAll('#panel-knots .tab').forEach((x) => x.classList.toggle('active', x === t));

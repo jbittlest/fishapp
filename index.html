@@ -245,11 +245,23 @@
 <!-- Weather panel -->
 <div class="panel hidden" id="panel-weather">
   <div class="panel-head"><h2>Weather &amp; waves</h2><button class="close" data-close="panel-weather">✕</button></div>
-  <p class="hint" id="wx-loc"></p>
-  <div id="wx-current"></div>
-  <h3>Next 24 hours</h3>
-  <div id="wx-hourly"></div>
-  <p class="hint" id="wx-stale"></p>
+  <div class="tabs">
+    <button class="tab active" data-wxtab="wx-now">Now &amp; 24h</button>
+    <button class="tab" data-wxtab="wx-10day">📅 10-Day</button>
+  </div>
+  <div id="wx-now">
+    <p class="hint" id="wx-loc"></p>
+    <div id="wx-current"></div>
+    <h3>Next 24 hours</h3>
+    <div id="wx-hourly"></div>
+    <p class="hint" id="wx-stale"></p>
+  </div>
+  <div id="wx-10day" class="hidden">
+    <p class="hint" id="fc-loc"></p>
+    <p class="hint fc-legend">Tap any day for a 3-hourly breakdown. Wind in kn, waves in ft.</p>
+    <div id="fc-days"></div>
+    <p class="hint" id="fc-stale"></p>
+  </div>
 </div>
 
 <!-- Download panel -->
