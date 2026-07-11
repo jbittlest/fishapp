@@ -800,7 +800,7 @@ function asstSystemPrompt() {
 /* ================= FREE proxy brain (Cloudflare Workers AI, no key) ================= */
 /* Owner: set this to your deployed Worker URL to give ALL users free no-key chat.
    (Users can also set it per-device in ⚙️ settings → "Free-AI endpoint".) */
-const ASST_PROXY = '';
+const ASST_PROXY = 'https://first-mate.jbittlest.workers.dev';
 function asstProxyUrl() { return (localStorage.getItem('fishapp.asst.proxy') || ASST_PROXY || '').trim(); }
 
 function asstProxySystem() {

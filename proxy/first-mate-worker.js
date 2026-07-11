@@ -22,7 +22,7 @@
    ============================================================================ */
 
 const ALLOWED_ORIGIN = 'https://jbittlest.github.io';   // lock the endpoint to the FishApp site
-const MODEL = '@cf/meta/llama-3.1-8b-instruct';
+const MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const MAX_TOKENS = 512;
 
 export default {
