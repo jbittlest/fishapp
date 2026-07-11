@@ -797,6 +797,42 @@ function asstSystemPrompt() {
   ].join('\n');
 }
 
+/* ================= FREE proxy brain (Cloudflare Workers AI, no key) ================= */
+/* Owner: set this to your deployed Worker URL to give ALL users free no-key chat.
+   (Users can also set it per-device in ⚙️ settings → "Free-AI endpoint".) */
+const ASST_PROXY = '';
+function asstProxyUrl() { return (localStorage.getItem('fishapp.asst.proxy') || ASST_PROXY || '').trim(); }
+
+function asstProxySystem() {
+  return [
+    "You are First Mate, a concise, friendly assistant inside an offline marine navigation app for a recreational boater and angler.",
+    "Use the LIVE boat data below — prefer it over guessing. Units: nautical miles, knots, °F, feet. Be brief; this is read on a phone on a boat. Lead with the answer.",
+    "You cannot control the app or fetch new data — you advise. For live weather/tides/water temp, tell them the app already has it (🌤 Weather, 🌙 Tides, or tap the map). To drop a waypoint, start a trip, or navigate, point them to the on-screen buttons.",
+    "Fishing regulations are general reference — tell them to confirm current limits with the state agency (CDFW in California) before keeping fish. For emergencies: VHF Channel 16 / Coast Guard and the app's 🆘 button.",
+    "",
+    asstSnapshot(),
+    "",
+    asstRegsTable(),
+  ].join('\n');
+}
+
+async function asstAskProxy(userText) {
+  const messages = ASST.history.map((m) => ({ role: m.role, content: m.content }));
+  messages.push({ role: 'user', content: userText });
+  const resp = await fetch(asstProxyUrl(), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ system: asstProxySystem(), messages }),
+  });
+  if (!resp.ok) {
+    let msg = 'HTTP ' + resp.status;
+    try { const j = await resp.json(); if (j && j.error) msg = j.error; } catch (e) { /* ignore */ }
+    const err = new Error(msg); err.status = resp.status; throw err;
+  }
+  const j = await resp.json();
+  return (j.reply || '').trim() || '(no reply)';
+}
+
 async function asstApiCall(messages) {
   const resp = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -1120,8 +1156,9 @@ function asstSetStatus() {
   const online = navigator.onLine;
   let dot = 'warn', txt;
   if (online && hasKey) { dot = 'ok'; txt = 'Full AI chat · ' + asstModelLabel(); }
+  else if (online && asstProxyUrl()) { dot = 'ok'; txt = 'Free AI chat — no key needed 🟢'; }
   else if (!online) { dot = 'ok'; txt = 'Offline — answering from your boat data 🧭'; }
-  else { dot = 'ok'; txt = 'Data mode — add a key in ⚙️ for free-form chat'; }
+  else { dot = 'ok'; txt = 'Data mode — answering from your boat data'; }
   el.innerHTML = '<span class="dot ' + dot + '"></span>' + txt;
 }
 function asstModelLabel() {
@@ -1139,15 +1176,17 @@ async function asstSend(text) {
   if (input) { input.value = ''; input.style.height = 'auto'; }
   asstAddMsg('user', text);
 
-  const useOnline = navigator.onLine && !!ASST.key();
+  const online = navigator.onLine;
+  const useClaude = online && !!ASST.key();          // personal key → full Claude + tools
+  const useProxy = online && !useClaude && !!asstProxyUrl();  // no key → free hosted proxy chat
   ASST.streaming = true;
   asstSetSending(true);
 
-  if (useOnline) {
+  if (useClaude || useProxy) {
     const botEl = asstAddMsg('bot', '…');
     botEl.classList.add('thinking');
     try {
-      const reply = await asstAskOnline(text, botEl);
+      const reply = useClaude ? await asstAskOnline(text, botEl) : await asstAskProxy(text);
       botEl.classList.remove('thinking');
       botEl.textContent = reply;
       asstScroll();
@@ -1160,8 +1199,8 @@ async function asstSend(text) {
       const off = asstOffline(text);
       botEl.classList.remove('thinking');
       botEl.classList.add('err');
-      let note = "⚠️ Couldn't reach the AI (" + (e.status === 401 ? 'bad API key' : (e.message || 'network')) + "). Offline answer:";
-      botEl.textContent = note + '\n\n' + off;
+      const why = useClaude ? (e.status === 401 ? 'bad API key' : (e.message || 'network')) : (e.message || 'network');
+      botEl.textContent = "⚠️ Couldn't reach the AI (" + why + "). Offline answer:\n\n" + off;
       asstSpeak(off);
     }
   } else {
@@ -1212,12 +1251,15 @@ function asstInit() {
   // settings
   const keyIn = document.getElementById('asst-key');
   const modelIn = document.getElementById('asst-model');
+  const proxyIn = document.getElementById('asst-proxy');
   if (keyIn) keyIn.value = ASST.key();
   if (modelIn) modelIn.value = ASST.model();
+  if (proxyIn) proxyIn.value = localStorage.getItem('fishapp.asst.proxy') || '';
 
   document.getElementById('asst-save').onclick = () => {
     if (keyIn) localStorage.setItem('fishapp.asst.key', keyIn.value.trim());
     if (modelIn) localStorage.setItem('fishapp.asst.model', modelIn.value);
+    if (proxyIn) localStorage.setItem('fishapp.asst.proxy', proxyIn.value.trim());
     asstSetStatus();
     if (typeof toast === 'function') toast('Assistant settings saved');
     const det = document.getElementById('asst-settings'); if (det) det.open = false;
