@@ -237,11 +237,12 @@ async function loadNow24() {
         fetch('https://api.open-meteo.com/v1/forecast?' + common +
           '&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m' +
           '&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m,precipitation_probability' +
-          '&wind_speed_unit=kn&temperature_unit=fahrenheit').then((r) => r.json()),
+          '&wind_speed_unit=kn&temperature_unit=fahrenheit').then((r) => r.ok ? r.json() : null),
         fetch('https://marine-api.open-meteo.com/v1/marine?' + common +
           '&current=wave_height,wave_direction,wave_period' +
           '&hourly=wave_height,wave_period').then((r) => r.ok ? r.json() : null).catch(() => null),
       ]);
+      if (!wx || wx.error || !wx.current) throw new Error('forecast unavailable');   // fall to cache instead of crashing render
       data = { wx, marine: marine && !marine.error ? marine : null, ts: Date.now(), lat: ll.lat, lng: ll.lng };
       localStorage.setItem('fishapp.lastwx', JSON.stringify(data));
     } catch (e) { /* fall through to cache */ }
@@ -357,11 +358,12 @@ async function loadForecast10(override) {
         fetch('https://api.open-meteo.com/v1/forecast?' + base + '&forecast_days=10' +
           '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant,sunrise,sunset,uv_index_max' +
           '&hourly=temperature_2m,precipitation_probability,wind_speed_10m,wind_direction_10m,wind_gusts_10m' +
-          '&wind_speed_unit=kn&temperature_unit=fahrenheit&precipitation_unit=inch').then((r) => r.json()),
+          '&wind_speed_unit=kn&temperature_unit=fahrenheit&precipitation_unit=inch').then((r) => r.ok ? r.json() : null),
         fetch('https://marine-api.open-meteo.com/v1/marine?' + base + '&forecast_days=8' +
           '&daily=wave_height_max,wave_direction_dominant,wave_period_max,swell_wave_height_max,swell_wave_period_max' +
           '&hourly=wave_height,sea_surface_temperature&temperature_unit=fahrenheit').then((r) => r.ok ? r.json() : null).catch(() => null),
       ]);
+      if (!wx || wx.error || !wx.daily) throw new Error('forecast unavailable');   // fall to cache instead of crashing render
       data = { wx, marine: marine && !marine.error ? marine : null, ts: Date.now(), lat: ll.lat, lng: ll.lng };
       localStorage.setItem('fishapp.fc10', JSON.stringify(data));
     } catch (e) { /* fall through to cache */ }

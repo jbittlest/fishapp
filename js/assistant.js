@@ -217,7 +217,7 @@ function asstOffline(q) {
   if (has('where am i', 'my position', 'coordinate', 'my location', 'lat/long', 'lat long', 'gps'))
     return asstAnsPosition(ll, live);
   // Speed / heading
-  if (has('how fast', 'my speed', 'speed over', ' sog', 'heading', 'which way', 'course'))
+  if (has('how fast', 'my speed', 'speed over', ' sog', 'heading', 'which way', 'my course', 'course over'))
     return asstAnsSpeed();
   // Multi-day "best day to fish" planner (bite + weather)
   if (has('best day', 'which day', 'when should i go', 'plan my trip', 'plan a trip', 'should i go fishing',
@@ -419,7 +419,7 @@ function asstAnsTides(q) {
   if (a && a.data && a.data.tides && a.data.tides.preds && a.data.tides.preds.length) {
     const t = (q || '').toLowerCase();
     const when = asstParseWhen(t);
-    const day = new Date(when.ms).toISOString().slice(0, 10);
+    const day = asstYmd(new Date(when.ms));   // local date — tide preds are station-local, not UTC
     let show;
     if (/tomorrow|tonight|today|this /.test(t)) {
       show = a.data.tides.preds.filter((p) => p.t.slice(0, 10) === day)
@@ -566,7 +566,10 @@ function asstAnsNearest(t) {
 function asstAnsBait(t) {
   const sp = asstFindSpecies(t);
   if (!sp || typeof Catch === 'undefined' || !Catch.all.length) return null;
-  const matches = Catch.all.filter((c) => c.species && c.species.toLowerCase().includes(sp.name.toLowerCase().split(' ')[0]) && c.bait);
+  // match logged catches on ANY significant word of the species name — its first word is
+  // often a generic qualifier ("California"/"Pacific"/"Kelp"), so split(' ')[0] missed the popular targets
+  const nameWords = sp.name.toLowerCase().split(/[^a-z]+/).filter((w) => w.length > 3);
+  const matches = Catch.all.filter((c) => c.species && c.bait && nameWords.some((w) => c.species.toLowerCase().includes(w)));
   if (!matches.length) return null;
   const tally = {};
   matches.forEach((c) => { const b = c.bait.trim(); tally[b] = (tally[b] || 0) + 1; });
@@ -700,9 +703,12 @@ function asstFormatSpecies(f) {
 }
 function asstFindKnot(t) {
   if (typeof KNOTS === 'undefined') return null;
-  const words = t.replace(/[^a-z ]/g, ' ').split(/\s+/).filter((w) => w.length > 2);
+  // drop generic terms — every knot NAME contains "Knot", so the bare token "knot" would
+  // match the first entry (Palomar) for any knot query. Keep only distinctive words.
+  const stop = ['knot', 'knots', 'tie', 'line', 'hook', 'lure', 'rig', 'best', 'good', 'the', 'for', 'how', 'what'];
+  const words = t.replace(/[^a-z ]/g, ' ').split(/\s+/).filter((w) => w.length > 2 && stop.indexOf(w) < 0);
   return KNOTS.find((k) => t.includes(k.name.toLowerCase())) ||
-    KNOTS.find((k) => words.filter((w) => k.name.toLowerCase().includes(w)).length >= 1) || null;
+    KNOTS.find((k) => words.some((w) => k.name.toLowerCase().includes(w))) || null;
 }
 function asstAnsKnot(t) {
   const k = asstFindKnot(t);

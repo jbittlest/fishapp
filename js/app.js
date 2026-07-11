@@ -80,6 +80,9 @@
   }
   function savePrefs() { localStorage.setItem('fishapp.layers', JSON.stringify(prefs)); }
 
+  // Guard against a stale/legacy saved base value that no longer exists as a radio,
+  // which would otherwise throw here (or in makeLayer) and brick startup.
+  if (!document.querySelector(`input[name="base"][value="${prefs.base}"]`)) prefs.base = 'ocean';
   document.querySelector(`input[name="base"][value="${prefs.base}"]`).checked = true;
   document.getElementById('ovl-enc').checked = !!prefs.enc;
   document.getElementById('ovl-seamark').checked = !!prefs.seamark;

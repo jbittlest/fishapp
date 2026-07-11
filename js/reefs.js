@@ -44,7 +44,7 @@ function buildReefMarkers(reefs) {
       iconSize: [26, 26], iconAnchor: [13, 13],
     });
     const m = L.marker([r.la, r.lo], { icon });
-    m.bindPopup(() => reefPopupHtml(r, { wind: 'loading', swell: 'loading', depth: 'loading' }));
+    m.bindPopup(() => reefPopupHtml(r, { wind: 'loading', swell: 'loading', depth: 'loading', sst: 'loading' }));
     m.on('popupopen', () => wireReefPopup(m, r));
     m.addTo(Reefs.reefLayer);
   });
@@ -71,6 +71,7 @@ function wireReefPopup(marker, r) {
   };
   rebind();
   if (navigator.onLine) queryPointData(L.latLng(r.la, r.lo), results, update);
+  else update();   // offline: render the "needs internet" states instead of a stuck spinner
 }
 
 function reefPopupHtml(r, live) {

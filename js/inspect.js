@@ -123,7 +123,7 @@ function depthText(v) {
 function windText(w) {
   if (w === 'loading') return '<span class="ins-load">…</span>';
   if (w === 'offline') return '<span class="ins-muted">needs internet</span>';
-  if (w === 'error' || !w || w.wind_speed_10m === null) return '<span class="ins-muted">unavailable</span>';
+  if (w === 'error' || !w || w.wind_speed_10m == null) return '<span class="ins-muted">unavailable</span>';
   const kn = Math.round(w.wind_speed_10m);
   return '<b style="color:' + windColor(w.wind_speed_10m) + '">' + kn + ' kn</b> ' +
     compass(w.wind_direction_10m) + ' ' + dirArrow(w.wind_direction_10m) +

@@ -163,18 +163,30 @@ function anchorBeep() {
 
 /* ---- Trip stats ---- */
 function tripToggle() {
-  if (Nav.trip.active) { Nav.trip.active = false; }
-  else { Nav.trip = { active: true, start: Date.now(), dist: 0, maxKn: 0, sumKn: 0, nKn: 0, lastLL: GPS.lastLatLng }; }
+  const t = Nav.trip;
+  if (t.active) {
+    // pause: bank the elapsed active time so far, and stop accumulating
+    t.accMs = (t.accMs || 0) + (Date.now() - (t.segStart || t.start));
+    t.active = false;
+  } else if (t.start) {
+    // resume: keep the accumulated distance/time, start a fresh active segment
+    t.active = true;
+    t.segStart = Date.now();
+    t.lastLL = GPS.lastLatLng;   // don't count distance travelled while paused
+  } else {
+    // start a brand-new trip
+    Nav.trip = { active: true, start: Date.now(), segStart: Date.now(), accMs: 0, dist: 0, maxKn: 0, sumKn: 0, nKn: 0, lastLL: GPS.lastLatLng };
+  }
   updateTripUi();
 }
-function tripReset() { Nav.trip = { active: false, start: 0, dist: 0, maxKn: 0, sumKn: 0, nKn: 0, lastLL: null }; updateTripUi(); }
+function tripReset() { Nav.trip = { active: false, start: 0, segStart: 0, accMs: 0, dist: 0, maxKn: 0, sumKn: 0, nKn: 0, lastLL: null }; updateTripUi(); }
 function updateTripUi() {
   const btn = document.getElementById('btn-trip');
   if (btn) btn.textContent = Nav.trip.active ? '⏸ Pause trip' : (Nav.trip.start ? '▶ Resume trip' : '▶ Start trip');
   const out = document.getElementById('trip-stats');
   if (!out) return;
   const t = Nav.trip;
-  const dur = t.start ? (t.active ? Date.now() - t.start : t._pausedAt || Date.now() - t.start) : 0;
+  const dur = (t.accMs || 0) + (t.active ? Date.now() - (t.segStart || t.start) : 0);
   out.innerHTML = '<div class="tt-row"><span>Distance</span><span><b>' + t.dist.toFixed(2) + ' nm</b></span></div>' +
     '<div class="tt-row"><span>Time</span><span>' + fmtDur(dur / 1000) + '</span></div>' +
     '<div class="tt-row"><span>Max speed</span><span>' + t.maxKn.toFixed(1) + ' kn</span></div>' +
