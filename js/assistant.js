@@ -1052,6 +1052,67 @@ function asstAddMsg(role, text) {
   asstScroll();
   return el;
 }
+/* ---- Voice: speak answers (TTS, works offline incl. iPhone) + voice input (STT) ---- */
+function asstStripForSpeech(text) {
+  return String(text)
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{2190}-\u{21FF}️⃣]/gu, ' ')
+    .replace(/[*_`#>|]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+function asstSpeak(text) {
+  if (!ASST.speak || !('speechSynthesis' in window)) return;
+  try {
+    window.speechSynthesis.cancel();
+    const clean = asstStripForSpeech(text).slice(0, 700);
+    if (!clean) return;
+    const u = new SpeechSynthesisUtterance(clean);
+    u.lang = 'en-US'; u.rate = 1; u.pitch = 1;
+    if (ASST._voice) u.voice = ASST._voice;
+    window.speechSynthesis.speak(u);
+  } catch (e) { /* ignore */ }
+}
+function asstPickVoice() {
+  if (!('speechSynthesis' in window)) return;
+  const pick = () => {
+    const vs = window.speechSynthesis.getVoices() || [];
+    ASST._voice =
+      vs.find((v) => /en[-_]US/i.test(v.lang) && /samantha|aaron|natural|enhanced|siri/i.test(v.name)) ||
+      vs.find((v) => /en[-_]US/i.test(v.lang)) ||
+      vs.find((v) => /^en/i.test(v.lang)) || null;
+  };
+  pick();
+  window.speechSynthesis.onvoiceschanged = pick;
+}
+function asstUpdateSpeakBtn() {
+  const b = document.getElementById('asst-speak');
+  if (!b) return;
+  b.textContent = ASST.speak ? '🔊' : '🔇';
+  b.classList.toggle('on', ASST.speak);
+  b.title = ASST.speak ? 'Voice on — tap to mute' : 'Read answers aloud';
+}
+function asstToggleSpeak() {
+  ASST.speak = !ASST.speak;
+  localStorage.setItem('fishapp.asst.speak', ASST.speak ? '1' : '0');
+  asstUpdateSpeakBtn();
+  if (!ASST.speak) { if ('speechSynthesis' in window) window.speechSynthesis.cancel(); }
+  else asstSpeak("Voice on. I'll read my answers aloud.");
+}
+function asstStartMic() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { if (typeof toast === 'function') toast("Voice input isn't supported here — tap the mic on your keyboard to talk"); return; }
+  try {
+    const r = new SR();
+    r.lang = 'en-US'; r.interimResults = false; r.maxAlternatives = 1;
+    const mic = document.getElementById('asst-mic');
+    if (mic) mic.classList.add('listening');
+    r.onresult = (e) => { const txt = e.results[0][0].transcript; if (txt) asstSend(txt); };
+    r.onerror = (e) => { if (typeof toast === 'function') toast('Voice: ' + (e.error || 'error')); };
+    r.onend = () => { if (mic) mic.classList.remove('listening'); };
+    r.start();
+  } catch (e) { if (typeof toast === 'function') toast('Voice input failed'); }
+}
+
 function asstSetStatus() {
   const el = document.getElementById('asst-status');
   if (!el) return;
@@ -1090,6 +1151,7 @@ async function asstSend(text) {
       botEl.classList.remove('thinking');
       botEl.textContent = reply;
       asstScroll();
+      asstSpeak(reply);
       ASST.history.push({ role: 'user', content: text });
       ASST.history.push({ role: 'assistant', content: reply });
       if (ASST.history.length > 24) ASST.history = ASST.history.slice(-24);
@@ -1100,11 +1162,14 @@ async function asstSend(text) {
       botEl.classList.add('err');
       let note = "⚠️ Couldn't reach the AI (" + (e.status === 401 ? 'bad API key' : (e.message || 'network')) + "). Offline answer:";
       botEl.textContent = note + '\n\n' + off;
+      asstSpeak(off);
     }
   } else {
     const botEl = asstAddMsg('bot', '');
-    botEl.textContent = asstOffline(text);
+    const ans = asstOffline(text);
+    botEl.textContent = ans;
     asstScroll();
+    asstSpeak(ans);
   }
 
   ASST.streaming = false;
@@ -1163,6 +1228,18 @@ function asstInit() {
     if (box) box.innerHTML = '';
     asstOnOpen();
   };
+
+  // voice: speak answers (TTS) + voice input (STT)
+  ASST.speak = localStorage.getItem('fishapp.asst.speak') === '1';
+  asstPickVoice();
+  asstUpdateSpeakBtn();
+  const speakBtn = document.getElementById('asst-speak');
+  if (speakBtn) speakBtn.onclick = asstToggleSpeak;
+  const micBtn = document.getElementById('asst-mic');
+  if (micBtn) {
+    if (window.SpeechRecognition || window.webkitSpeechRecognition) micBtn.onclick = asstStartMic;
+    else micBtn.style.display = 'none';   // e.g. iOS Safari has no web speech recognition — use keyboard dictation
+  }
 
   const send = document.getElementById('asst-send');
   const input = document.getElementById('asst-input');

@@ -165,11 +165,14 @@
 
 <!-- First Mate assistant panel -->
 <div class="panel hidden" id="panel-assistant">
-  <div class="panel-head"><h2>🎣 First Mate</h2><button class="close" data-close="panel-assistant">✕</button></div>
+  <div class="panel-head"><h2>🎣 First Mate</h2>
+    <button id="asst-speak" class="asst-speak" title="Read answers aloud">🔇</button>
+    <button class="close" data-close="panel-assistant">✕</button></div>
   <div id="asst-status" class="asst-status"></div>
   <div id="asst-messages" class="asst-messages"></div>
   <div id="asst-suggest" class="asst-suggest"></div>
   <div class="asst-inputbar">
+    <button id="asst-mic" class="asst-mic" title="Speak your question">🎤</button>
     <textarea id="asst-input" rows="1" placeholder="Ask about tides, wind, fish, regs, knots…" autocomplete="off" autocapitalize="sentences"></textarea>
     <button id="asst-send" class="asst-send" title="Send">➤</button>
   </div>
