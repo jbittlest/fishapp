@@ -31,13 +31,18 @@ function tileJobs(bounds, minZ, maxZ, layerIds) {
   const jobs = [];
   for (const id of layerIds) {
     const def = LAYERS[id];
+    // 512px-tile layers index on a grid one zoom coarser than their CSS zoom, so the keys
+    // match exactly what the live tile layer requests (coords.x = lon2tx(lon, z - shift)).
+    const shift = Math.log2((def.tileSize || 256) / 256);   // 0 for 256-tiles, 1 for 512-tiles
     const zTop = Math.min(maxZ, def.maxNativeZoom);
     const zBot = Math.max(minZ, def.minZoom || 0);
     for (let z = zBot; z <= zTop; z++) {
-      const x0 = Math.max(0, lon2tx(bounds.getWest(), z));
-      const x1 = Math.min(Math.pow(2, z) - 1, lon2tx(bounds.getEast(), z));
-      const y0 = Math.max(0, lat2ty(bounds.getNorth(), z));
-      const y1 = Math.min(Math.pow(2, z) - 1, lat2ty(bounds.getSouth(), z));
+      const gz = z - shift;
+      const n = Math.pow(2, gz);
+      const x0 = Math.max(0, lon2tx(bounds.getWest(), gz));
+      const x1 = Math.min(n - 1, lon2tx(bounds.getEast(), gz));
+      const y0 = Math.max(0, lat2ty(bounds.getNorth(), gz));
+      const y1 = Math.min(n - 1, lat2ty(bounds.getSouth(), gz));
       for (let x = x0; x <= x1; x++) {
         for (let y = y0; y <= y1; y++) {
           jobs.push({ id, z, x, y });
@@ -53,7 +58,10 @@ function updateEstimate() {
   const maxZ = parseInt(document.querySelector('input[name="dlzoom"]:checked').value, 10);
   const minZ = Math.min(Math.max(map.getZoom() - 1, 3), maxZ);
   const jobs = tileJobs(map.getBounds(), minZ, maxZ, activeLayerIds());
-  const mb = (jobs.length * AVG_TILE_BYTES) / 1048576;
+  // bytes scale with rendered pixels: 256px≈7KB, 512px≈28KB, 1024px≈112KB
+  let bytes = 0;
+  jobs.forEach((j) => { const px = LAYERS[j.id].tilePx || 256; bytes += AVG_TILE_BYTES * (px / 512) * (px / 512); });
+  const mb = bytes / 1048576;
   const el = document.getElementById('dl-estimate');
   if (jobs.length > MAX_TILES) {
     el.innerHTML = '⚠️ Area too large (' + jobs.length.toLocaleString() +

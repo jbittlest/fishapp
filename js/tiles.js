@@ -50,21 +50,24 @@ const LAYERS = {
        512px tile (~19 m/px) already captures all of it. Capping here means zooming past z12
        REUSES the already-loaded tiles (upscaled) instead of re-fetching sharper ones that hold
        no new detail — so zoom-in is instant instead of re-rendering every level. */
-    id: 'reliefhi', name: 'Seafloor relief detail', kind: 'overlay', minZoom: 11, maxNativeZoom: 12, tilePx: 512,
+    /* 512px map tiles (tileSize) rendered at 1024px (tilePx, 2x retina) = one request
+       covers 4× the ground → ~4× fewer of these slow tiles per view. A 512 tile at
+       (z,x,y) spans the same area as a standard 256 tile at (z-1,x,y), so bbox uses z-1. */
+    id: 'reliefhi', name: 'Seafloor relief detail', kind: 'overlay', minZoom: 11, maxNativeZoom: 12, tileSize: 512, tilePx: 1024,
     attribution: 'GMRT',
     urlFor: (z, x, y, px) =>
       'https://www.gmrt.org/services/mapserver/wms_merc?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=GMRT&STYLES=&SRS=EPSG:3857' +
-      '&BBOX=' + tileBBox3857(z, x, y) + '&WIDTH=' + px + '&HEIGHT=' + px + '&FORMAT=image/png',
+      '&BBOX=' + tileBBox3857(z - 1, x, y) + '&WIDTH=' + px + '&HEIGHT=' + px + '&FORMAT=image/png',
   },
   ncei: {
     /* NOAA coastal DEM hillshade — up to ~1-3 m resolution near US coasts.
        Transparent where there is no survey, so GMRT shows through underneath.
        On-demand renderer: render fresh to high zoom + 2x px for retina crispness. */
-    id: 'ncei', name: 'Hi-res coastal relief', kind: 'overlay', minZoom: 11, maxNativeZoom: 19, tilePx: 512,
+    id: 'ncei', name: 'Hi-res coastal relief', kind: 'overlay', minZoom: 11, maxNativeZoom: 19, tileSize: 512, tilePx: 1024,
     attribution: 'NOAA NCEI',
     urlFor: (z, x, y, px) =>
       'https://gis.ngdc.noaa.gov/arcgis/rest/services/DEM_mosaics/DEM_all/ImageServer/exportImage' +
-      '?bbox=' + tileBBox3857(z, x, y) +
+      '?bbox=' + tileBBox3857(z - 1, x, y) +
       '&bboxSR=3857&imageSR=3857&size=' + px + ',' + px + '&format=png' +
       '&renderingRule=%7B%22rasterFunction%22%3A%22ColorHillshade%22%7D&f=image',
   },
@@ -76,11 +79,11 @@ const LAYERS = {
   enc: {
     /* Vector nautical chart — depth contours + soundings stay crisp at any zoom.
        On-demand renderer: render fresh to high zoom + 2x px for retina. */
-    id: 'enc', name: 'NOAA charts', kind: 'overlay', maxNativeZoom: 18, minZoom: 6, tilePx: 512,
+    id: 'enc', name: 'NOAA charts', kind: 'overlay', maxNativeZoom: 18, minZoom: 6, tileSize: 512, tilePx: 1024,
     attribution: 'NOAA ENC',
     urlFor: (z, x, y, px) =>
       'https://gis.charttools.noaa.gov/arcgis/rest/services/MCS/ENCOnline/MapServer/exts/MaritimeChartService/MapServer/export' +
-      '?bbox=' + tileBBox3857(z, x, y) +
+      '?bbox=' + tileBBox3857(z - 1, x, y) +
       '&bboxSR=3857&imageSR=3857&size=' + px + ',' + px + '&format=png32&transparent=true&f=image',
   },
   seamark: {
@@ -160,6 +163,7 @@ function makeLayer(layerId) {
   const def = LAYERS[layerId];
   return new OfflineTileLayer('', {
     layerDef: def,
+    tileSize: def.tileSize || 256,   // 512 for the on-demand render layers (enc/relief) — 4× fewer, bigger tiles
     maxNativeZoom: def.maxNativeZoom,
     maxZoom: 20,
     minZoom: def.minZoom || 0,
