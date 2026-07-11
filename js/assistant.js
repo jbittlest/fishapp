@@ -821,31 +821,92 @@ function asstProxySystem() {
   ].join('\n');
 }
 
+/* Geocode a place name to coordinates via Open-Meteo's free geocoding API.
+   Returns { lat, lng, label } or null. */
+async function asstGeocode(name) {
+  try {
+    const r = await fetch('https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&format=json&name=' +
+      encodeURIComponent(name));
+    const j = await r.json();
+    if (j && j.results && j.results.length) {
+      const g = j.results[0];
+      return { lat: g.latitude, lng: g.longitude,
+        label: [g.name, g.admin1, g.country_code].filter(Boolean).join(', ') };
+    }
+  } catch (e) { /* offline / no match */ }
+  return null;
+}
+/* Geocoding matches on name prefix, so a long phrase ("avalon catalina island")
+   often misses — retry with progressively shorter prefixes. */
+async function asstGeocodeBest(name) {
+  const words = name.split(/\s+/);
+  const tries = [name];
+  if (words.length > 2) tries.push(words.slice(0, 2).join(' '));
+  if (words.length > 1) tries.push(words[0]);
+  for (const q of tries) { const g = await asstGeocode(q); if (g) return g; }
+  return null;
+}
+/* If a tool input carries a `place` name (and no explicit coords), geocode it to
+   lat/lng so the rest of the tool treats it like any other point. */
+async function asstGeocodeInput(input) {
+  input = input || {};
+  if (input.place && input.lat == null && input.lng == null) {
+    const g = await asstGeocodeBest(String(input.place));
+    if (g) return { lat: g.lat, lng: g.lng, place_label: g.label };
+    return { error: 'could not find a place called "' + input.place + '"' };
+  }
+  return input;
+}
+/* Pull a place name out of a location question: "...in Avalon", "temp at Morro
+   Bay", "weather for Catalina". Returns the trailing phrase, or '' if none. */
+function asstExtractPlace(t) {
+  const m = t.match(/\b(?:in|at|for|near|around|off|by)\s+(.+?)[?.!]*$/);
+  if (!m) return '';
+  const place = m[1].trim();
+  if (place.length < 3 || place.length > 48) return '';
+  // reject non-place tails ("in the morning", "for the week", "at anchor")
+  if (/^(the|a|an|my|this|that|here|there|now|today|tonight|tomorrow|anchor|sea|shore|home|noon|dawn|dusk|night|morning|afternoon|evening|dark|light)\b/.test(place)) return '';
+  if (/\b(week|day|days|morning|afternoon|evening|night|hour|minute)s?\b/.test(place)) return '';
+  return place;
+}
+
 /* The free proxy brain has no tools, so it can't fetch live data on its own.
    When the user's question needs conditions or tides, fetch them client-side
    (reusing the same tool functions the keyed AI uses) and hand the numbers to
-   the proxy so it can answer hands-free instead of punting to the app's panels. */
+   the proxy so it can answer hands-free instead of punting to the app's panels.
+   If the user names a place ("weather in Avalon"), geocode it and fetch there. */
 async function asstProxyLiveContext(userText, botEl) {
   const t = (userText || '').toLowerCase();
   const has = (...w) => w.some((x) => t.includes(x));
   const wantWx = has('weather', 'wind', 'windy', 'gust', 'breeze', 'conditions', 'forecast',
     'wave', 'swell', 'seas', 'surf', 'chop', 'rough', 'sea state', 'small craft',
-    'water temp', 'sea temp', 'sst', 'water temperature', 'how warm', 'how cold',
-    'fishable', 'go out', 'too rough', 'how rough', 'safe to go');
+    'temp', 'temperature', 'how warm', 'how cold', 'hot out', 'cold out', 'degrees', 'humid',
+    'sst', 'fishable', 'go out', 'too rough', 'how rough', 'safe to go');
   const wantTide = has('tide', 'high tide', 'low tide', 'slack', 'ebb', 'flood');
   if (!wantWx && !wantTide) return '';
+
+  // Resolve the target: a named place (geocoded) or the boat's own position.
+  let loc = {}, forWhere = "the boat's position";
+  const placeName = asstExtractPlace(t);
+  if (placeName) {
+    if (botEl) { botEl.textContent = '⚙️ locating ' + placeName + '…'; asstScroll(); }
+    const g = await asstGeocodeBest(placeName);
+    if (g) { loc = { lat: g.lat, lng: g.lng }; forWhere = g.label; }
+    // if geocoding fails we fall back to the boat and let the proxy note it
+  }
+
   const blocks = [];
   try {
     if (wantWx) {
       if (botEl) { botEl.textContent = '⚙️ checking conditions…'; asstScroll(); }
-      const c = await asstToolConditions({});
-      if (c && !c.error) blocks.push("LIVE CONDITIONS — just fetched for the boat's position " +
-        (c.position || '') + " (wave_ft = total seas, swell_ft = groundswell only):\n" + JSON.stringify(c));
+      const c = await asstToolConditions(loc);
+      if (c && !c.error) blocks.push('LIVE CONDITIONS — just fetched for ' + forWhere + ' ' +
+        (c.position || '') + ' (wave_ft = total seas, swell_ft = groundswell only):\n' + JSON.stringify(c));
     }
     if (wantTide) {
       if (botEl) { botEl.textContent = '⚙️ checking tides…'; asstScroll(); }
-      const td = await asstToolTides({});
-      if (td && !td.error) blocks.push('LIVE TIDES — just fetched:\n' + JSON.stringify(td));
+      const td = await asstToolTides(loc);
+      if (td && !td.error) blocks.push('LIVE TIDES — just fetched for ' + forWhere + ':\n' + JSON.stringify(td));
     }
   } catch (e) { /* offline / unreachable — proxy falls back to advising */ }
   return blocks.length ? blocks.join('\n\n') : '';
@@ -950,10 +1011,10 @@ function asstToolAreaIntel(input) {
 /* ---- Tool schemas handed to Claude ---- */
 function asstTools() {
   return [
-    { name: 'get_conditions', description: 'Live marine weather at a point: wind, gusts, air temp, total wave height/period/direction, swell height/period/direction (the groundswell component), and sea-surface water temp. Defaults to the boat\'s current position.',
-      input_schema: { type: 'object', properties: { lat: { type: 'number' }, lng: { type: 'number' } } } },
-    { name: 'get_tides', description: 'Today\'s high/low tide predictions for the nearest tide station (or a given point).',
-      input_schema: { type: 'object', properties: { lat: { type: 'number' }, lng: { type: 'number' } } } },
+    { name: 'get_conditions', description: 'Live marine weather at a point: wind, gusts, air temp, total wave height/period/direction, swell height/period/direction (the groundswell component), and sea-surface water temp. Defaults to the boat\'s current position. For any OTHER location the user names (e.g. "weather in Avalon"), pass its name as `place` — it will be geocoded — instead of guessing coordinates.',
+      input_schema: { type: 'object', properties: { lat: { type: 'number' }, lng: { type: 'number' }, place: { type: 'string', description: 'A place name to look up instead of the boat position' } } } },
+    { name: 'get_tides', description: 'Today\'s high/low tide predictions for the nearest tide station. Defaults to the boat\'s position; pass `place` (a place name, geocoded) or lat/lng for somewhere else.',
+      input_schema: { type: 'object', properties: { lat: { type: 'number' }, lng: { type: 'number' }, place: { type: 'string', description: 'A place name to look up instead of the boat position' } } } },
     { name: 'place_waypoint', description: 'Drop and save a named waypoint/spot on the map. Defaults to the boat\'s current position unless lat/lng are given.',
       input_schema: { type: 'object', properties: {
         name: { type: 'string', description: 'Waypoint name' },
@@ -999,10 +1060,13 @@ async function asstExecTool(name, input) {
 }
 
 async function asstToolConditions(input) {
+  input = await asstGeocodeInput(input);
+  if (input && input.error) return input;
   const ll = asstPointFrom(input);
   if (!ll) return { error: 'no position — provide lat and lng' };
   const lat = ll.lat, lng = ll.lng;
   const out = { position: lat.toFixed(4) + ', ' + lng.toFixed(4) };
+  if (input && input.place_label) out.place = input.place_label;
   try {
     const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lng +
       '&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m&wind_speed_unit=kn&temperature_unit=fahrenheit');
@@ -1032,6 +1096,8 @@ async function asstToolConditions(input) {
 }
 
 async function asstToolTides(input) {
+  input = await asstGeocodeInput(input);
+  if (input && input.error) return input;
   const ll = asstPointFrom(input);
   if (!ll) return { error: 'no position' };
   if (typeof nearestTideStation !== 'function') return { error: 'tides unavailable' };
