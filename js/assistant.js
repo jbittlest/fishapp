@@ -857,17 +857,25 @@ async function asstGeocodeInput(input) {
   }
   return input;
 }
-/* Pull a place name out of a location question: "...in Avalon", "temp at Morro
-   Bay", "weather for Catalina". Returns the trailing phrase, or '' if none. */
-function asstExtractPlace(t) {
-  const m = t.match(/\b(?:in|at|for|near|around|off|by)\s+(.+?)[?.!]*$/);
-  if (!m) return '';
-  const place = m[1].trim();
-  if (place.length < 3 || place.length > 48) return '';
-  // reject non-place tails ("in the morning", "for the week", "at anchor")
-  if (/^(the|a|an|my|this|that|here|there|now|today|tonight|tomorrow|anchor|sea|shore|home|noon|dawn|dusk|night|morning|afternoon|evening|dark|light)\b/.test(place)) return '';
-  if (/\b(week|day|days|morning|afternoon|evening|night|hour|minute)s?\b/.test(place)) return '';
-  return place;
+/* Pull candidate place names out of a location question. Each preposition
+   ("in/at/for/near/around/off/by") starts a phrase that runs until a conjunction,
+   another preposition, or punctuation — so "near Catalina or around Catalina
+   Island" yields ["catalina island", "catalina"] (most-specific first), not one
+   messy blob. Returns [] if no place is named. */
+function asstExtractPlaces(t) {
+  // words that end a place phrase (conjunctions, prepositions, filler verbs)
+  const stop = 'or|and|near|around|at|in|on|off|by|to|from|but|is|are|right|now|today|tonight|tomorrow|please|vs|versus|then';
+  const re = new RegExp('\\b(?:in|at|for|near|around|off|by)\\s+([a-z][a-z .\'\\-]*?)(?=\\s+(?:' + stop + ')\\b|[,?.!]|$)', 'g');
+  const out = [];
+  let m;
+  while ((m = re.exec(t)) !== null) {
+    const place = m[1].trim().replace(/\s+/g, ' ');
+    if (place.length < 3 || place.length > 40) continue;
+    if (/^(the|a|an|my|this|that|here|there|now|today|tonight|tomorrow|anchor|sea|shore|home|noon|dawn|dusk|night|morning|afternoon|evening|dark|light)\b/.test(place)) continue;
+    if (/\b(week|day|days|morning|afternoon|evening|night|hour|minute)s?\b/.test(place)) continue;
+    out.push(place);
+  }
+  return [...new Set(out)].sort((a, b) => b.length - a.length);   // most-specific (longest) first
 }
 
 /* The free proxy brain has no tools, so it can't fetch live data on its own.
@@ -886,13 +894,13 @@ async function asstProxyLiveContext(userText, botEl) {
   if (!wantWx && !wantTide) return '';
 
   // Resolve the target: a named place (geocoded) or the boat's own position.
+  // Try candidates most-specific first; use the first that geocodes.
   let loc = {}, forWhere = "the boat's position";
-  const placeName = asstExtractPlace(t);
-  if (placeName) {
-    if (botEl) { botEl.textContent = '⚙️ locating ' + placeName + '…'; asstScroll(); }
-    const g = await asstGeocodeBest(placeName);
-    if (g) { loc = { lat: g.lat, lng: g.lng }; forWhere = g.label; }
-    // if geocoding fails we fall back to the boat and let the proxy note it
+  for (const name of asstExtractPlaces(t)) {
+    if (botEl) { botEl.textContent = '⚙️ locating ' + name + '…'; asstScroll(); }
+    const g = await asstGeocodeBest(name);
+    if (g) { loc = { lat: g.lat, lng: g.lng }; forWhere = g.label; break; }
+    // if none geocode we fall back to the boat and let the proxy note it
   }
 
   const blocks = [];
