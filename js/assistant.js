@@ -7,6 +7,7 @@
 
 const ASST = {
   history: [],          // {role:'user'|'assistant', content:'…'}
+  lastLoc: null,        // {lat,lng,label} of the last place the user asked about (for follow-ups)
   streaming: false,
   key() { return (localStorage.getItem('fishapp.asst.key') || '').trim(); },
   model() { return localStorage.getItem('fishapp.asst.model') || 'claude-opus-4-8'; },
@@ -811,7 +812,7 @@ function asstProxySystem() {
   return [
     "You are First Mate, a concise, friendly assistant inside an offline marine navigation app for a recreational boater and angler.",
     "Use the LIVE boat data below — prefer it over guessing. Units: nautical miles, knots, °F, feet. Be brief; this is read on a phone on a boat. Lead with the answer.",
-    "When a LIVE CONDITIONS or LIVE TIDES block appears below, it was just fetched for the boat's position — answer weather, wind, seas, swell, water-temp and tide questions DIRECTLY from those numbers. Never tell the user to open the Weather or Tides panel when that live data is present; this app is meant to be hands-free. Only if no live block is present (offline) may you point them to the 🌤 Weather / 🌙 Tides panels.",
+    "A LIVE CONDITIONS / LIVE TIDES block below is real data just fetched for the location it names (the boat, or a place the user asked about). Answer weather, wind, seas, WAVE HEIGHT, SWELL, water-temp and tide questions DIRECTLY from those numbers — report the exact figures (wave_ft, swell_ft, water_temp_f, etc.). This app is hands-free: NEVER tell the user to open the Weather/Tides panel, check a buoy, or look it up themselves. If a wave/swell figure is missing because the point is inland, briefly say so and ask them to name a coastal spot — do not deflect to a panel. Only when NO live block is present at all (fully offline) may you mention the 🌤 / 🌙 panels.",
     "You can't place waypoints, start trips, or navigate the map yourself — for those actions, point them to the on-screen buttons.",
     "Fishing regulations are general reference — tell them to confirm current limits with the state agency (CDFW in California) before keeping fish. For emergencies: VHF Channel 16 / Coast Guard and the app's 🆘 button.",
     "",
@@ -893,23 +894,43 @@ async function asstProxyLiveContext(userText, botEl) {
   const wantTide = has('tide', 'high tide', 'low tide', 'slack', 'ebb', 'flood');
   if (!wantWx && !wantTide) return '';
 
-  // Resolve the target: a named place (geocoded) or the boat's own position.
-  // Try candidates most-specific first; use the first that geocodes.
-  let loc = {}, forWhere = "the boat's position";
+  // Resolve the target location, in priority order:
+  //  1) a place named in THIS message (geocoded, most-specific candidate first)
+  //  2) if the user explicitly means "here" → the boat, and forget the last place
+  //  3) otherwise reuse the last place asked about this session, so a follow-up
+  //     like "what's the swell?" after "...near Catalina" still means Catalina
+  //  4) fall back to the boat's own position
+  const wantHere = has('where i am', 'where am i', ' here', 'my location', 'current position',
+    'my position', 'my spot', 'where we are', 'my area', 'right here');
+  let loc = {}, forWhere = "the boat's position", named = false;
   for (const name of asstExtractPlaces(t)) {
     if (botEl) { botEl.textContent = '⚙️ locating ' + name + '…'; asstScroll(); }
     const g = await asstGeocodeBest(name);
-    if (g) { loc = { lat: g.lat, lng: g.lng }; forWhere = g.label; break; }
-    // if none geocode we fall back to the boat and let the proxy note it
+    if (g) {
+      loc = { lat: g.lat, lng: g.lng }; forWhere = g.label; named = true;
+      ASST.lastLoc = { lat: g.lat, lng: g.lng, label: g.label };
+      break;
+    }
   }
+  if (wantHere) { ASST.lastLoc = null; }
+  else if (!named && ASST.lastLoc) { loc = { lat: ASST.lastLoc.lat, lng: ASST.lastLoc.lng }; forWhere = ASST.lastLoc.label; }
 
+  const wantMarine = has('wave', 'swell', 'seas', 'surf', 'chop', 'sea state');
   const blocks = [];
   try {
     if (wantWx) {
       if (botEl) { botEl.textContent = '⚙️ checking conditions…'; asstScroll(); }
       const c = await asstToolConditions(loc);
-      if (c && !c.error) blocks.push('LIVE CONDITIONS — just fetched for ' + forWhere + ' ' +
-        (c.position || '') + ' (wave_ft = total seas, swell_ft = groundswell only):\n' + JSON.stringify(c));
+      if (c && !c.error) {
+        let b = 'LIVE CONDITIONS — just fetched for ' + forWhere + ' ' + (c.position || '') +
+          ' (wave_ft = total seas, swell_ft = groundswell only):\n' + JSON.stringify(c);
+        // Inland points have no ocean wave/swell — tell the model to ask for a
+        // coastal spot rather than punt the user to a panel.
+        if (wantMarine && c.wave_ft == null)
+          b += "\n(No ocean wave/swell here — this point is inland or outside the marine grid. " +
+            "Say so briefly and ASK the user which coastal spot they mean, e.g. \"near Catalina\". Do NOT tell them to open a panel.)";
+        blocks.push(b);
+      }
     }
     if (wantTide) {
       if (botEl) { botEl.textContent = '⚙️ checking tides…'; asstScroll(); }
