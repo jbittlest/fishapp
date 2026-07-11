@@ -4,7 +4,7 @@
 
 const Nav = {
   mode: null,                                  // 'route' | 'measure' | null
-  route: { line: null, markers: [], pts: [] },
+  route: { line: null, markers: [], pts: [], legLayer: null },
   measure: { line: null, a: null, layer: null },
   anchor: { ll: null, circle: null, marker: null, radiusFt: 150, watching: false, dragging: false, dismissed: false, audio: null, alarmTimer: null },
   trip: { active: false, start: 0, dist: 0, maxKn: 0, sumKn: 0, nKn: 0, lastLL: null },
@@ -13,6 +13,7 @@ const Nav = {
 function navInit(map) {
   Nav.measure.layer = L.layerGroup().addTo(map);
   Nav.route.layerGroup = L.layerGroup().addTo(map);
+  Nav.route.legLayer = L.layerGroup().addTo(map);   // per-leg distance labels (redrawn each change)
 }
 
 /* Returns true if the map tap was consumed by a nav mode (so inspect should skip) */
@@ -29,33 +30,72 @@ function navSetMode(mode) {
   else if (Nav.mode === 'measure') { document.getElementById('btn-measure').classList.add('active'); measureReset(); toast('Tap two points to measure'); }
 }
 
-/* ---- Route planner ---- */
+/* ---- Route planner ----
+   Tap to drop numbered waypoints; consecutive points connect into a route. Each
+   point is draggable (nudge the line around an island), and every leg shows its
+   own distance both on the map and in the panel breakdown. */
+function routeIcon(n) {
+  return L.divIcon({ className: '', iconSize: [22, 22], iconAnchor: [11, 11],
+    html: '<div class="route-pt">' + n + '</div>' });
+}
 function routeAddPoint(ll) {
   Nav.route.pts.push(ll);
-  const m = L.circleMarker(ll, { radius: 5, color: '#fff', weight: 2, fillColor: '#1a6fb5', fillOpacity: 1 }).addTo(Nav.route.layerGroup);
+  const m = L.marker(ll, { draggable: true, icon: routeIcon(Nav.route.pts.length), zIndexOffset: 1000 })
+    .addTo(Nav.route.layerGroup);
+  m.on('drag', () => { const i = Nav.route.markers.indexOf(m); if (i >= 0) { Nav.route.pts[i] = m.getLatLng(); routeRedraw(); } });
   Nav.route.markers.push(m);
   routeRedraw();
 }
 function routeRedraw() {
+  // route line
   if (Nav.route.line) Nav.route.layerGroup.removeLayer(Nav.route.line);
+  Nav.route.line = null;
   if (Nav.route.pts.length >= 2) {
     Nav.route.line = L.polyline(Nav.route.pts, { color: '#1a6fb5', weight: 3, dashArray: '6 4' }).addTo(Nav.route.layerGroup);
+  }
+  // keep marker numbers in sync (after an undo/drag) and per-leg distance labels
+  Nav.route.markers.forEach((m, i) => m.setIcon(routeIcon(i + 1)));
+  Nav.route.legLayer.clearLayers();
+  for (let i = 1; i < Nav.route.pts.length; i++) {
+    const a = Nav.route.pts[i - 1], b = Nav.route.pts[i];
+    const nm = nmBetween(a, b);
+    const mid = L.latLng((a.lat + b.lat) / 2, (a.lng + b.lng) / 2);
+    L.marker(mid, { interactive: false, icon: L.divIcon({ className: '', iconSize: [0, 0],
+      html: '<div class="route-leg">' + nm.toFixed(1) + ' nm</div>' }) }).addTo(Nav.route.legLayer);
   }
   routeStats();
 }
 function routeStats() {
-  let nm = 0;
-  for (let i = 1; i < Nav.route.pts.length; i++) nm += nmBetween(Nav.route.pts[i - 1], Nav.route.pts[i]);
+  const out = document.getElementById('route-stats');
+  if (!out) return;
+  const pts = Nav.route.pts;
+  if (pts.length < 2) {
+    out.innerHTML = pts.length === 1
+      ? 'Point 1 dropped — tap again to add the next and start the route.'
+      : 'Tap “➕ Add points”, then tap the map to drop waypoints. Each leg shows its distance; drag a point to adjust.';
+    return;
+  }
   const spd = parseFloat(document.getElementById('route-speed').value) || 0;
   const gph = parseFloat(document.getElementById('route-gph').value) || 0;
-  const hrs = spd > 0 ? nm / spd : 0;
-  document.getElementById('route-stats').innerHTML =
-    '<b>' + nm.toFixed(1) + ' nm</b>' +
+  let total = 0;
+  const legs = [];
+  for (let i = 1; i < pts.length; i++) {
+    const nm = nmBetween(pts[i - 1], pts[i]);
+    total += nm;
+    legs.push('<div class="rt-leg"><span>Leg ' + i + '→' + (i + 1) + '</span>' +
+      '<span>' + nm.toFixed(2) + ' nm · ' + Math.round(bearingBetween(pts[i - 1], pts[i])) + '°</span></div>');
+  }
+  const hrs = spd > 0 ? total / spd : 0;
+  out.innerHTML =
+    '<div class="rt-total"><b>' + total.toFixed(1) + ' nm</b> total' +
     (spd > 0 ? ' · ' + fmtDur(hrs * 3600) + ' at ' + spd + ' kn' : '') +
-    (spd > 0 && gph > 0 ? ' · ' + (hrs * gph).toFixed(1) + ' gal' : '');
+    (spd > 0 && gph > 0 ? ' · ' + (hrs * gph).toFixed(1) + ' gal' : '') +
+    ' · ' + pts.length + ' points</div>' +
+    legs.join('');
 }
 function routeClear() {
   Nav.route.layerGroup.clearLayers();
+  Nav.route.legLayer.clearLayers();
   Nav.route.line = null; Nav.route.markers = []; Nav.route.pts = [];
   routeStats();
 }
