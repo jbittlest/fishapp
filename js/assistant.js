@@ -203,6 +203,16 @@ function asstRegsTable() {
   return 'CA SALTWATER REGS (general reference — verify with CDFW):\n' +
     FISH_ID.map((f) => '- ' + f.name + ': min size ' + f.size + '; bag ' + f.bag + (f.note ? '; ' + f.note : '')).join('\n');
 }
+/* Condensed fishing cheat-sheet handed to the AI so it gives specific lure/bait/
+   technique advice from the same knowledge the offline engine uses. */
+function asstTipsTable() {
+  if (typeof FISH_TIPS === 'undefined') return '';
+  const fish = FISH_TIPS.map((f) => '- ' + f.name + ': ' + f.sum).join('\n');
+  const areas = (typeof AREA_TIPS !== 'undefined') ? AREA_TIPS.map((a) => '- ' + a.name + ': ' + a.text).join('\n') : '';
+  const tech = (typeof TECHNIQUE_TIPS !== 'undefined') ? TECHNIQUE_TIPS.map((tp) => '- ' + tp.name + ': ' + tp.text).join('\n') : '';
+  return 'FIRST MATE FISHING KNOWLEDGE (Southern & Central California — general reference). Use this to give specific lure/jig/bait/technique advice; never tell the user to look it up elsewhere.\nTARGETS (species → go-to):\n' + fish +
+    '\nAREA GAME PLANS:\n' + areas + '\nTECHNIQUES:\n' + tech;
+}
 
 /* ================= OFFLINE deterministic engine ================= */
 function asstOffline(q) {
@@ -243,8 +253,14 @@ function asstOffline(q) {
     'nearest anchorage', 'closest anchorage', 'nearest hazard', 'nearest wreck', 'place to anchor')) {
     const near = asstAnsNearest(t); if (near) return near;
   }
-  // What bait/lure works for a species (from the catch log)
-  if (has('what bait', 'best bait', 'what should i use', 'what lure', 'which lure', 'what to throw', 'what do they hit')) {
+  // Lures / jigs / bait / technique / how-to-catch — answered from the fishing
+  // knowledge base (fish-tips.js), area-aware, plus the user's catch log.
+  if (has('what bait', 'best bait', 'what should i use', 'what lure', 'which lure', 'what to throw',
+    'what should i throw', 'should i throw', 'throw for', 'what do they hit', 'how do i catch', 'how to catch',
+    'how do i target', 'how to target', 'how do i fish', 'how to fish', 'fish for', 'target ', 'catch a ',
+    'catch some', 'what works for', 'tips for', 'technique', 'dropper loop', 'fly line', 'fly-line', 'flyline',
+    'yo-yo', 'yoyo', 'surface iron', 'sabiki', 'flat fall', 'flat-fall', 'good lure', 'right lure', 'best lure',
+    'best jig', 'what jig', 'lure for', 'jig for', 'bait for', 'iron for', 'setup for', 'rig for')) {
     const bait = asstAnsBait(t); if (bait) return bait;
   }
   // Sun / daylight
@@ -259,7 +275,7 @@ function asstOffline(q) {
   // Fish history in this area (from the downloaded pack)
   if (has('what fish', 'been caught', 'caught here', 'biting', 'what bites', 'species here',
     'what lives here', 'what can i catch', 'fish been', 'whats around', "what's around"))
-    return asstAnsFishHistory();
+    return asstAnsFishHistory(t);
   // Closures / protected areas  (note: avoid bare 'mpa' — it's a substring of "compare")
   if (has('closure', 'closed to fish', 'protected area', 'marine protected', ' mpa', 'mpas',
     'can i fish here', 'legal to fish here', 'no-take', 'no take', 'reserve'))
@@ -438,7 +454,7 @@ function asstAnsTides(q) {
   }
   return "I don't have tide predictions offline for here. Download this area while online — it now captures a week of tides — or open the 🌙 Tides panel with signal.";
 }
-function asstAnsFishHistory() {
+function asstAnsFishHistory(t) {
   const a = asstAreaPack();
   if (a && a.data && a.data.fish && a.data.fish.total) {
     const top = Object.entries(a.data.fish.tally).sort((x, y) => y[1] - x[1]).slice(0, 8).map(([k, v]) => k + ' ×' + v).join(', ');
@@ -446,7 +462,12 @@ function asstAnsFishHistory() {
     return '🐟 Reported in this area (iNaturalist, downloaded ' + asstAgo(a.data.capturedTs) + ' · ' + a.data.fish.total + ' records):\nTop: ' + top +
       (recent ? '\n\nRecent:\n' + recent : '') + '\n\n(Community sightings — divers & anglers, not all rod-and-reel.)';
   }
-  return "No local fish-sighting data offline. Turn on the 🐟 layer with signal, or download this area — it captures recent sightings.";
+  // No downloaded sightings — fall back to the area game-plan / general targets so we still help.
+  const area = (typeof areaTipsFor === 'function') ? areaTipsFor(t || '') : null;
+  if (area) return '📍 What to target — ' + area.name + '\n' + area.text +
+    '\n\n(That\'s the general game plan. Download this area with signal to also see recent community sightings.)';
+  return "🎣 What to target here depends on the spot — tell me where (e.g. \"at Catalina\", \"the flats\") or what you're after, and I'll give you species, lures and how to fish them. " +
+    "Popular SoCal targets: calico bass, sand bass, halibut, yellowtail, white seabass, barracuda, bonito, rockfish, lingcod, sheephead.";
 }
 function asstAnsClosures() {
   const a = asstAreaPack();
@@ -569,17 +590,44 @@ function asstAnsNearest(t) {
 
 /* What bait/lure has worked for a species, from your own catch log. */
 function asstAnsBait(t) {
-  const sp = asstFindSpecies(t);
-  if (!sp || typeof Catch === 'undefined' || !Catch.all.length) return null;
-  // match logged catches on ANY significant word of the species name — its first word is
-  // often a generic qualifier ("California"/"Pacific"/"Kelp"), so split(' ')[0] missed the popular targets
-  const nameWords = sp.name.toLowerCase().split(/[^a-z]+/).filter((w) => w.length > 3);
-  const matches = Catch.all.filter((c) => c.species && c.bait && nameWords.some((w) => c.species.toLowerCase().includes(w)));
-  if (!matches.length) return null;
-  const tally = {};
-  matches.forEach((c) => { const b = c.bait.trim(); tally[b] = (tally[b] || 0) + 1; });
-  const top = Object.entries(tally).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([b, n]) => b + ' ×' + n);
-  return '🎣 From your catch log, ' + matches[0].species + ' have hit: ' + top.join(', ') + '.';
+  const sp = (typeof fishTipsFor === 'function') ? fishTipsFor(t) : null;
+  const area = (typeof areaTipsFor === 'function') ? areaTipsFor(t) : null;
+  const tech = (typeof techniqueTipsFor === 'function') ? techniqueTipsFor(t) : null;
+
+  // Pure technique question ("how do I fish a dropper loop?") with no species named.
+  if (tech && !sp) return '🎣 ' + tech.name + '\n' + tech.text;
+
+  if (sp) {
+    let s = '🎣 ' + sp.name + '\n' +
+      '• Lures/jigs: ' + sp.lures + '\n' +
+      '• Bait: ' + sp.baits + '\n' +
+      '• How: ' + sp.method + '\n' +
+      '• Where/when: ' + sp.where + ' ' + sp.when;
+    // Area-specific note if the question names one this species has tips for.
+    if (sp.areas) {
+      const ak = Object.keys(sp.areas).find((k) => t.includes(k));
+      if (ak) s += '\n• ' + ak.replace(/\b\w/g, (c) => c.toUpperCase()) + ': ' + sp.areas[ak];
+    }
+    // Fold in the user's own catch log if it has data for this species.
+    if (typeof Catch !== 'undefined' && Catch.all && Catch.all.length) {
+      const nameWords = sp.name.toLowerCase().split(/[^a-z]+/).filter((w) => w.length > 3);
+      const matches = Catch.all.filter((c) => c.species && c.bait && nameWords.some((w) => c.species.toLowerCase().includes(w)));
+      if (matches.length) {
+        const tally = {};
+        matches.forEach((c) => { const b = c.bait.trim(); tally[b] = (tally[b] || 0) + 1; });
+        const top = Object.entries(tally).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([b, n]) => b + ' ×' + n);
+        s += '\n\n📖 From your log, these have hit: ' + top.join(', ') + '.';
+      }
+    }
+    return s + '\n\n⚠️ Confirm size/bag limits with CDFW before keeping fish.';
+  }
+
+  if (area) return '📍 ' + area.name + '\n' + area.text +
+    '\n\n(Ask about a species — e.g. "what should I throw for yellowtail here" — for lure/bait specifics.)';
+
+  // Nothing matched — nudge with useful options rather than punting.
+  return "🎣 Tell me what you're after (and roughly where) and I'll give you lures, bait and how to fish it — e.g. \"calico bass at Catalina\", \"halibut on the flats\", \"yellowtail on the iron\".\n" +
+    "Popular SoCal targets: calico bass, sand bass, halibut, yellowtail, white seabass, barracuda, bonito, rockfish, lingcod, sheephead.";
 }
 
 function asstAnsWaterTemp() {
@@ -745,7 +793,8 @@ function asstAnsHelp() {
     "• Tides, sunrise/sunset, moon phase, solunar bite windows\n" +
     "• Weather for now or 'tomorrow afternoon', wind, seas, water temp & breaks\n" +
     "• Your position, speed, heading; nearest reef / ramp / anchorage / spot\n" +
-    "• What's been caught here & what bait worked (from your log)\n" +
+    "• What to throw — lures, jigs, bait & technique for a species or area (calico, yellowtail, halibut, WSB…)\n" +
+    "• What's biting at a spot & what bait worked (from your log)\n" +
     "• Fish size/bag limits, closures, knots, Mayday info\n" +
     "• Drop & name a waypoint\n\n" +
     "(Tides, multi-day weather & fish history need the area downloaded first.) Add an API key in ⚙️ and, with signal, I'll also chat freely and take actions.";
@@ -795,10 +844,13 @@ function asstSystemPrompt() {
     "You can take real actions in the app via tools: place / list / delete waypoints, toggle map layers, start or stop trip tracking, center the map, and pull LIVE weather & tides for a point. For current weather, seas, water temp or tides, CALL get_conditions / get_tides — don't answer those from the cached snapshot alone. Default every location to the boat's current position unless the user gives coordinates or names a saved spot. After acting, confirm briefly and naturally what you did.",
     "If the user is offline (get_conditions / get_tides can't reach the network) or asks about a downloaded area, call get_area_intel — it reads the offline data pack captured when the area was downloaded (multi-day forecast, a week of tides, water-temp grid, fish-sighting history, closures). Always mention when the data was captured so they know its age.",
     "Catch logging and knots aren't automated yet — for those, point them to the 🧭 and 📖 buttons.",
+    "You are a knowledgeable local deckhand: you have a built-in fishing brain (below) covering species, lures/jigs/baits, techniques, and area game-plans for Southern & Central California. When asked what to throw, what bait, how to catch something, or what's biting at a spot, give a SPECIFIC, confident recommendation from it. NEVER tell the user to ask a local, hire a guide, google it, buy a book, or check somewhere else — you are the local. The only thing to defer is confirming legal size/bag limits with CDFW.",
     "",
     asstSnapshot(),
     "",
     asstRegsTable(),
+    "",
+    asstTipsTable(),
   ].join('\n');
 }
 
@@ -815,10 +867,13 @@ function asstProxySystem() {
     "A LIVE CONDITIONS / LIVE TIDES block below is real data just fetched for the location it names (the boat, or a place the user asked about). Answer weather, wind, seas, WAVE HEIGHT, SWELL, water-temp and tide questions DIRECTLY from those numbers — report the exact figures (wave_ft, swell_ft, water_temp_f, etc.). This app is hands-free: NEVER tell the user to open the Weather/Tides panel, check a buoy, or look it up themselves. If a wave/swell figure is missing because the point is inland, briefly say so and ask them to name a coastal spot — do not deflect to a panel. Only when NO live block is present at all (fully offline) may you mention the 🌤 / 🌙 panels.",
     "You can't place waypoints, start trips, or navigate the map yourself — for those actions, point them to the on-screen buttons.",
     "Fishing regulations are general reference — tell them to confirm current limits with the state agency (CDFW in California) before keeping fish. For emergencies: VHF Channel 16 / Coast Guard and the app's 🆘 button.",
+    "You are a knowledgeable local deckhand with a built-in fishing brain (below): species, lures/jigs/baits, techniques, and area game-plans for Southern & Central California. When asked what to throw, what bait, how to catch something, or what's biting at a spot, answer with SPECIFIC, confident picks from it. NEVER tell the user to ask a local, hire a guide, google it, or check elsewhere — you ARE the local. Only defer on confirming legal size/bag limits (CDFW).",
     "",
     asstSnapshot(),
     "",
     asstRegsTable(),
+    "",
+    asstTipsTable(),
   ].join('\n');
 }
 
@@ -1361,7 +1416,8 @@ function asstSetSending(on) {
 
 const ASST_CHIPS = [
   'Best day to fish this week?', 'Is it too rough today?', "What's the weather where I am?",
-  'Tides today', 'Drop a waypoint here', "What's been caught here?",
+  'Tides today', "What should I throw for calico bass?", 'Best lure for yellowtail at Catalina?',
+  "What's biting at Catalina?", 'How do I fish a dropper loop?', 'Drop a waypoint here',
 ];
 function asstRenderChips() {
   const box = document.getElementById('asst-suggest');
