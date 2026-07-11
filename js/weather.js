@@ -239,7 +239,7 @@ async function loadNow24() {
           '&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m,precipitation_probability' +
           '&wind_speed_unit=kn&temperature_unit=fahrenheit').then((r) => r.ok ? r.json() : null),
         fetch('https://marine-api.open-meteo.com/v1/marine?' + common +
-          '&current=wave_height,wave_direction,wave_period' +
+          '&current=wave_height,wave_direction,wave_period,swell_wave_height,swell_wave_direction,swell_wave_period' +
           '&hourly=wave_height,wave_period').then((r) => r.ok ? r.json() : null).catch(() => null),
       ]);
       if (!wx || wx.error || !wx.current) throw new Error('forecast unavailable');   // fall to cache instead of crashing render

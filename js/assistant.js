@@ -143,7 +143,9 @@ function asstSnapshot() {
     if (wx.marine && wx.marine.current) {
       const m = wx.marine.current;
       L1.push('Seas (cached): ' + (m.wave_height * 3.28084).toFixed(1) + ' ft @ ' +
-        Math.round(m.wave_period) + 's from ' + asstCompass(m.wave_direction));
+        Math.round(m.wave_period) + 's from ' + asstCompass(m.wave_direction) +
+        (m.swell_wave_height != null ? '; swell ' + (m.swell_wave_height * 3.28084).toFixed(1) + ' ft @ ' +
+          Math.round(m.swell_wave_period) + 's from ' + asstCompass(m.swell_wave_direction) : ''));
     }
   } else {
     L1.push('Weather: none cached (open the Weather panel while online to cache it).');
@@ -409,6 +411,8 @@ function asstAnsWaves() {
   const m = wx.marine.current, age = Math.round((Date.now() - wx.ts) / 60000);
   const ft = (m.wave_height * 3.28084);
   let s = "🌊 Seas (cached " + age + " min ago):\n" + ft.toFixed(1) + ' ft @ ' + Math.round(m.wave_period) + 's from ' + asstCompass(m.wave_direction);
+  if (m.swell_wave_height != null)
+    s += '\nSwell: ' + (m.swell_wave_height * 3.28084).toFixed(1) + ' ft @ ' + Math.round(m.swell_wave_period) + 's from ' + asstCompass(m.swell_wave_direction);
   if (ft >= 5) s += '\n\n⚠️ Big — small boats beware.';
   else if (ft >= 3) s += '\n\nModerate chop — bumpy ride.';
   else s += '\n\nCalm-ish. Good conditions.';
@@ -807,7 +811,8 @@ function asstProxySystem() {
   return [
     "You are First Mate, a concise, friendly assistant inside an offline marine navigation app for a recreational boater and angler.",
     "Use the LIVE boat data below — prefer it over guessing. Units: nautical miles, knots, °F, feet. Be brief; this is read on a phone on a boat. Lead with the answer.",
-    "You cannot control the app or fetch new data — you advise. For live weather/tides/water temp, tell them the app already has it (🌤 Weather, 🌙 Tides, or tap the map). To drop a waypoint, start a trip, or navigate, point them to the on-screen buttons.",
+    "When a LIVE CONDITIONS or LIVE TIDES block appears below, it was just fetched for the boat's position — answer weather, wind, seas, swell, water-temp and tide questions DIRECTLY from those numbers. Never tell the user to open the Weather or Tides panel when that live data is present; this app is meant to be hands-free. Only if no live block is present (offline) may you point them to the 🌤 Weather / 🌙 Tides panels.",
+    "You can't place waypoints, start trips, or navigate the map yourself — for those actions, point them to the on-screen buttons.",
     "Fishing regulations are general reference — tell them to confirm current limits with the state agency (CDFW in California) before keeping fish. For emergencies: VHF Channel 16 / Coast Guard and the app's 🆘 button.",
     "",
     asstSnapshot(),
@@ -816,13 +821,46 @@ function asstProxySystem() {
   ].join('\n');
 }
 
-async function asstAskProxy(userText) {
+/* The free proxy brain has no tools, so it can't fetch live data on its own.
+   When the user's question needs conditions or tides, fetch them client-side
+   (reusing the same tool functions the keyed AI uses) and hand the numbers to
+   the proxy so it can answer hands-free instead of punting to the app's panels. */
+async function asstProxyLiveContext(userText, botEl) {
+  const t = (userText || '').toLowerCase();
+  const has = (...w) => w.some((x) => t.includes(x));
+  const wantWx = has('weather', 'wind', 'windy', 'gust', 'breeze', 'conditions', 'forecast',
+    'wave', 'swell', 'seas', 'surf', 'chop', 'rough', 'sea state', 'small craft',
+    'water temp', 'sea temp', 'sst', 'water temperature', 'how warm', 'how cold',
+    'fishable', 'go out', 'too rough', 'how rough', 'safe to go');
+  const wantTide = has('tide', 'high tide', 'low tide', 'slack', 'ebb', 'flood');
+  if (!wantWx && !wantTide) return '';
+  const blocks = [];
+  try {
+    if (wantWx) {
+      if (botEl) { botEl.textContent = '⚙️ checking conditions…'; asstScroll(); }
+      const c = await asstToolConditions({});
+      if (c && !c.error) blocks.push("LIVE CONDITIONS — just fetched for the boat's position " +
+        (c.position || '') + " (wave_ft = total seas, swell_ft = groundswell only):\n" + JSON.stringify(c));
+    }
+    if (wantTide) {
+      if (botEl) { botEl.textContent = '⚙️ checking tides…'; asstScroll(); }
+      const td = await asstToolTides({});
+      if (td && !td.error) blocks.push('LIVE TIDES — just fetched:\n' + JSON.stringify(td));
+    }
+  } catch (e) { /* offline / unreachable — proxy falls back to advising */ }
+  return blocks.length ? blocks.join('\n\n') : '';
+}
+
+async function asstAskProxy(userText, botEl) {
+  const live = await asstProxyLiveContext(userText, botEl);
+  if (botEl) { botEl.textContent = '…'; }
   const messages = ASST.history.map((m) => ({ role: m.role, content: m.content }));
   messages.push({ role: 'user', content: userText });
+  const system = live ? asstProxySystem() + '\n\n' + live : asstProxySystem();
   const resp = await fetch(asstProxyUrl(), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ system: asstProxySystem(), messages }),
+    body: JSON.stringify({ system, messages }),
   });
   if (!resp.ok) {
     let msg = 'HTTP ' + resp.status;
@@ -912,7 +950,7 @@ function asstToolAreaIntel(input) {
 /* ---- Tool schemas handed to Claude ---- */
 function asstTools() {
   return [
-    { name: 'get_conditions', description: 'Live marine weather at a point: wind, gusts, air temp, wave height/period/direction, and sea-surface water temp. Defaults to the boat\'s current position.',
+    { name: 'get_conditions', description: 'Live marine weather at a point: wind, gusts, air temp, total wave height/period/direction, swell height/period/direction (the groundswell component), and sea-surface water temp. Defaults to the boat\'s current position.',
       input_schema: { type: 'object', properties: { lat: { type: 'number' }, lng: { type: 'number' } } } },
     { name: 'get_tides', description: 'Today\'s high/low tide predictions for the nearest tide station (or a given point).',
       input_schema: { type: 'object', properties: { lat: { type: 'number' }, lng: { type: 'number' } } } },
@@ -976,12 +1014,17 @@ async function asstToolConditions(input) {
   } catch (e) { out.wind = 'unavailable (offline?)'; }
   try {
     const r = await fetch('https://marine-api.open-meteo.com/v1/marine?latitude=' + lat + '&longitude=' + lng +
-      '&current=wave_height,wave_period,wave_direction,sea_surface_temperature&temperature_unit=fahrenheit');
+      '&current=wave_height,wave_period,wave_direction,swell_wave_height,swell_wave_period,swell_wave_direction,sea_surface_temperature&temperature_unit=fahrenheit');
     const c = (await r.json()).current || {};
     if (c.wave_height != null) {
-      out.wave_ft = +(c.wave_height * 3.28084).toFixed(1);
+      out.wave_ft = +(c.wave_height * 3.28084).toFixed(1);   // total significant wave height (wind sea + swell)
       out.wave_period_s = Math.round(c.wave_period);
       out.wave_from = asstCompass(c.wave_direction);
+    }
+    if (c.swell_wave_height != null) {
+      out.swell_ft = +(c.swell_wave_height * 3.28084).toFixed(1);   // swell component only (longer-period groundswell)
+      out.swell_period_s = Math.round(c.swell_wave_period);
+      out.swell_from = asstCompass(c.swell_wave_direction);
     }
     if (c.sea_surface_temperature != null) out.water_temp_f = Math.round(c.sea_surface_temperature);
   } catch (e) { /* marine may be unavailable inland */ }
@@ -1186,7 +1229,7 @@ async function asstSend(text) {
     const botEl = asstAddMsg('bot', '…');
     botEl.classList.add('thinking');
     try {
-      const reply = useClaude ? await asstAskOnline(text, botEl) : await asstAskProxy(text);
+      const reply = useClaude ? await asstAskOnline(text, botEl) : await asstAskProxy(text, botEl);
       botEl.classList.remove('thinking');
       botEl.textContent = reply;
       asstScroll();
