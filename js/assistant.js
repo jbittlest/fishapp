@@ -959,6 +959,9 @@ async function asstProxyLiveContext(userText, botEl) {
     'my position', 'my spot', 'where we are', 'my area', 'right here');
   let loc = {}, forWhere = "the boat's position", named = false;
   for (const name of asstExtractPlaces(t)) {
+    // A fish species after "for" ("weather for yellowtail…") is not a place — skip
+    // it so we don't geocode "yellowtail" to Yellowtail, Montana.
+    if (typeof fishTipsFor === 'function' && fishTipsFor(name)) continue;
     if (botEl) { botEl.textContent = '⚙️ locating ' + name + '…'; asstScroll(); }
     const g = await asstGeocodeBest(name);
     if (g) {
