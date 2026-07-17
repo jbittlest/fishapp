@@ -7,7 +7,7 @@
 
 const FISH_TIPS = [
   {
-    name: 'Kelp (Calico) Bass', aka: ['calico', 'calicos', 'kelp bass', 'calico bass', 'bass'],
+    name: 'Kelp (Calico) Bass', aka: ['calico', 'calicos', 'kelp bass', 'calico bass'],
     lures: 'Weedless swimbaits (5–7" MC/Big Hammer/Keitech on a 3/8–1 oz leadhead), surface iron (Tady 45, Salas 7X light) at gray light, and hard jerkbaits worked over the kelp.',
     baits: 'Fly-lined or lightly-weighted live sardines and greenback mackerel; live squid when it shows.',
     method: 'Cast INTO the kelp stringers and boiler rocks and swim the bait out. Set hard and pull them away from the structure fast — give a calico slack and he\'s back in the kelp and gone.',

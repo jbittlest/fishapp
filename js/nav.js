@@ -53,8 +53,9 @@ function routeRedraw() {
   if (Nav.route.pts.length >= 2) {
     Nav.route.line = L.polyline(Nav.route.pts, { color: '#1a6fb5', weight: 3, dashArray: '6 4' }).addTo(Nav.route.layerGroup);
   }
-  // keep marker numbers in sync (after an undo/drag) and per-leg distance labels
-  Nav.route.markers.forEach((m, i) => m.setIcon(routeIcon(i + 1)));
+  // Note: markers keep their creation number (append gets the next number, undo
+  // removes the last) so we must NOT setIcon() here — doing so mid-drag would
+  // rebuild the dragged marker's DOM element and cancel the drag.
   Nav.route.legLayer.clearLayers();
   for (let i = 1; i < Nav.route.pts.length; i++) {
     const a = Nav.route.pts[i - 1], b = Nav.route.pts[i];
