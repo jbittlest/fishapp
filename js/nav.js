@@ -26,7 +26,7 @@ function navHandleClick(latlng) {
 function navSetMode(mode) {
   Nav.mode = (Nav.mode === mode) ? null : mode;
   ['btn-route-add', 'btn-measure'].forEach((id) => { const b = document.getElementById(id); if (b) b.classList.remove('active'); });
-  if (Nav.mode === 'route') { document.getElementById('btn-route-add').classList.add('active'); toast('Tap the map to add route points'); }
+  if (Nav.mode === 'route') { document.getElementById('btn-route-add').classList.add('active'); toast('Tap the map to drop your first navigation point'); }
   else if (Nav.mode === 'measure') { document.getElementById('btn-measure').classList.add('active'); measureReset(); toast('Tap two points to measure'); }
 }
 
@@ -45,6 +45,23 @@ function routeAddPoint(ll) {
   m.on('drag', () => { const i = Nav.route.markers.indexOf(m); if (i >= 0) { Nav.route.pts[i] = m.getLatLng(); routeRedraw(); } });
   Nav.route.markers.push(m);
   routeRedraw();
+  // Walk the user through building the route, one tap at a time.
+  const n = Nav.route.pts.length;
+  if (typeof toast === 'function') {
+    toast(n === 1
+      ? '📍 Navigation point 1 dropped — click another point on the map to make a route'
+      : '📍 Point ' + n + ' added — keep tapping to extend, or press ▶ Start route');
+  }
+}
+/* Turn the planned points into a live navigation line you can follow. */
+function routeStart() {
+  if (Nav.route.pts.length < 2) {
+    if (typeof toast === 'function') toast('Drop at least 2 points first — tap ➕ Add points, then tap the map');
+    return;
+  }
+  if (Nav.mode === 'route') navSetMode('route');          // leave add-points mode
+  if (typeof closePanels === 'function') closePanels();   // get the panel out of the way
+  if (typeof gotoStartRoute === 'function') gotoStartRoute(Nav.route.pts);
 }
 function routeRedraw() {
   // route line
@@ -70,10 +87,12 @@ function routeStats() {
   const out = document.getElementById('route-stats');
   if (!out) return;
   const pts = Nav.route.pts;
+  const startBtn = document.getElementById('btn-route-start');
+  if (startBtn) startBtn.disabled = pts.length < 2;
   if (pts.length < 2) {
     out.innerHTML = pts.length === 1
-      ? 'Point 1 dropped — tap again to add the next and start the route.'
-      : 'Tap “➕ Add points”, then tap the map to drop waypoints. Each leg shows its distance; drag a point to adjust.';
+      ? 'Navigation point 1 dropped — click another point on the map to make a route.'
+      : 'Tap “➕ Add points”, then click the map to drop navigation points. Each leg shows its distance; drag a point to adjust.';
     return;
   }
   const spd = parseFloat(document.getElementById('route-speed').value) || 0;
@@ -92,7 +111,8 @@ function routeStats() {
     (spd > 0 ? ' · ' + fmtDur(hrs * 3600) + ' at ' + spd + ' kn' : '') +
     (spd > 0 && gph > 0 ? ' · ' + (hrs * gph).toFixed(1) + ' gal' : '') +
     ' · ' + pts.length + ' points</div>' +
-    legs.join('');
+    legs.join('') +
+    '<div class="hint" style="margin-top:6px">Press ▶ Start route to follow it — you\'ll get a green course line, steer bearing and ETA, advancing waypoint to waypoint.</div>';
 }
 function routeClear() {
   Nav.route.layerGroup.clearLayers();

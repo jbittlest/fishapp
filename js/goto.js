@@ -15,12 +15,16 @@ const Goto = {
   line: null,         // course polyline (current pos → dest)
   destMarker: null,
   shown: {},          // saved-trip id -> polyline on map
+  route: null,        // [L.LatLng] when following a multi-point route
+  legIdx: 0,          // index of the waypoint we're currently steering to
+  routeLine: null,    // the remaining route ahead of the active leg
   _lastPt: null, _lastTs: 0, _arrived: false,
 };
 
 function gotoStart(latlng, name) {
   gotoClearLayers();
   Goto.active = true;
+  Goto.route = null; Goto.legIdx = 0;   // plain single-destination run unless gotoStartRoute sets these
   Goto.dest = L.latLng(latlng.lat, latlng.lng);
   Goto.destName = (name || 'Destination').trim();
   Goto.startTs = Date.now();
@@ -41,6 +45,33 @@ function gotoStart(latlng, name) {
   window._map.closePopup();
 }
 
+/* Follow a multi-point route: steer to waypoint 1, then auto-advance through the
+   rest as each is reached. Reuses the single-destination banner + course line. */
+function gotoStartRoute(pts) {
+  if (!pts || pts.length < 2) {
+    if (typeof toast === 'function') toast('Drop at least 2 points first');
+    return;
+  }
+  const route = pts.map((p) => L.latLng(p.lat, p.lng));
+  gotoStart(route[0], 'WP 1');
+  Goto.route = route;
+  Goto.legIdx = 0;
+  gotoRouteLabel();
+  gotoUpdateBanner(Goto.startLL, null);
+  if (typeof toast === 'function') toast('🧭 Route started — ' + route.length + ' waypoints. Follow the green line.');
+}
+function gotoRouteLabel() {
+  if (!Goto.route) return;
+  Goto.destName = 'WP ' + (Goto.legIdx + 1) + ' of ' + Goto.route.length;
+}
+/* nm still to run: the active leg plus every leg after it */
+function gotoRouteRemainingNm(from) {
+  if (!Goto.route) return null;
+  let nm = from ? nmBetween(from, Goto.dest) : 0;
+  for (let i = Goto.legIdx; i < Goto.route.length - 1; i++) nm += nmBetween(Goto.route[i], Goto.route[i + 1]);
+  return nm;
+}
+
 function gotoUpdateBanner(ll, kn) {
   const dest = Goto.dest;
   if (!dest) return;
@@ -56,24 +87,37 @@ function gotoUpdateBanner(ll, kn) {
     steer = Math.abs(diff) <= 5 ? ' ⬆︎' : (diff > 0 ? ' ↱' + Math.round(diff) + '°' : ' ↰' + Math.round(-diff) + '°');
   }
 
+  // On a route the useful ETA is to the FINISH, not just the next waypoint.
+  const routeRem = gotoRouteRemainingNm(from);
+  const etaNm = routeRem != null ? routeRem : remNm;
+
   // ETA — use live speed if moving, else the planned cruise speed from Nav tools
   let spd = (kn != null && kn > 1) ? kn : (parseFloat((document.getElementById('route-speed') || {}).value) || 0);
   const planned = !(kn != null && kn > 1);
   let eta = 'ETA —';
   if (spd > 0) {
-    const hrs = remNm / spd;
+    const hrs = etaNm / spd;
     const at = new Date(Date.now() + hrs * 3600000);
     eta = 'ETA ' + at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + ' · ' + fmtDur(hrs * 3600) + (planned ? ' @' + Math.round(spd) + 'kn' : '');
   }
+  if (routeRem != null) eta += ' · ' + routeRem.toFixed(1) + ' nm to finish';
 
   document.getElementById('gb-name').textContent = Goto.destName;
   document.getElementById('gb-dist').textContent = remNm.toFixed(2) + ' nm (' + (remNm * 1.15078).toFixed(1) + ' mi)';
   document.getElementById('gb-brg').textContent = 'steer ' + Math.round(brg) + '° ' + (typeof compass === 'function' ? compass(brg) : '') + steer;
   document.getElementById('gb-eta').textContent = eta;
 
-  // redraw the course line from where we are to the destination
+  // redraw the course line from where we are to the active waypoint
   if (Goto.line) window._map.removeLayer(Goto.line);
   if (from) Goto.line = L.polyline([from, dest], { color: '#37d67a', weight: 4, opacity: 0.9 }).addTo(window._map);
+
+  // …and the rest of the route ahead of it, so there's a line to follow
+  if (Goto.routeLine) { window._map.removeLayer(Goto.routeLine); Goto.routeLine = null; }
+  if (Goto.route && Goto.legIdx < Goto.route.length - 1) {
+    Goto.routeLine = L.polyline(Goto.route.slice(Goto.legIdx), {
+      color: '#37d67a', weight: 4, opacity: 0.55, dashArray: '10 7',
+    }).addTo(window._map);
+  }
 }
 
 /* Called every GPS fix (from navOnFix). */
@@ -88,6 +132,19 @@ function gotoOnFix(ll, kn) {
 
   const rem = nmBetween(ll, Goto.dest);
   const banner = document.getElementById('goto-banner');
+
+  // Following a route: on reaching a waypoint, advance to the next leg.
+  if (rem < 0.08 && Goto.route && Goto.legIdx < Goto.route.length - 1) {
+    Goto.legIdx++;
+    Goto.dest = Goto.route[Goto.legIdx];
+    gotoRouteLabel();
+    Goto._arrived = false;
+    banner.classList.remove('arriving');
+    if (typeof toast === 'function') toast('✅ WP ' + Goto.legIdx + ' reached — steering to WP ' + (Goto.legIdx + 1));
+    gotoUpdateBanner(ll, kn);
+    return;
+  }
+
   if (rem < 0.08 && !Goto._arrived) {
     Goto._arrived = true; banner.classList.add('arriving');
     if (typeof toast === 'function') toast('🎯 Arriving at ' + Goto.destName + ' — tap ✓ Arrived to log it');
@@ -109,7 +166,7 @@ async function gotoEnd(save) {
       const end = Date.now();
       const durS = (end - Goto.startTs) / 1000;
       const trip = {
-        name: 'To ' + Goto.destName,
+        name: Goto.route ? ('Route · ' + Goto.route.length + ' waypoints') : ('To ' + Goto.destName),
         dest: { lat: Goto.dest.lat, lng: Goto.dest.lng, name: Goto.destName },
         start: Goto.startTs, end: end,
         planNm: Goto.planNm, actualNm: actualNm,
@@ -130,6 +187,7 @@ async function gotoEnd(save) {
 
 function gotoClearLayers() {
   if (Goto.line) { window._map.removeLayer(Goto.line); Goto.line = null; }
+  if (Goto.routeLine) { window._map.removeLayer(Goto.routeLine); Goto.routeLine = null; }
   if (Goto.destMarker) { window._map.removeLayer(Goto.destMarker); Goto.destMarker = null; }
 }
 

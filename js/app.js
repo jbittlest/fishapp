@@ -304,6 +304,7 @@
   document.getElementById('btn-route-add').onclick = () => navSetMode('route');
   document.getElementById('btn-route-undo').onclick = routeUndo;
   document.getElementById('btn-route-clear').onclick = routeClear;
+  document.getElementById('btn-route-start').onclick = routeStart;
   document.getElementById('route-speed').addEventListener('input', routeStats);
   document.getElementById('route-gph').addEventListener('input', routeStats);
   document.getElementById('btn-measure').onclick = () => navSetMode('measure');
