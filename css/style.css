@@ -12,6 +12,51 @@ html, body {
 .leaflet-tile-pane img { image-rendering: auto; }
 .hidden { display: none !important; }
 
+/* ---- Shared loading system ----
+   One spinner, one skeleton, one inline load row and one state box, reused everywhere
+   so every panel loads/errors/empties with the same look. */
+.spinner {
+  display: inline-block; width: 22px; height: 22px; border-radius: 50%;
+  border: 2.5px solid rgba(255,255,255,0.16); border-top-color: #4aa3e0;
+  animation: spin 0.7s linear infinite; flex-shrink: 0;
+}
+.spinner.sm { width: 14px; height: 14px; border-width: 2px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.load-row { display: flex; align-items: center; gap: 10px; padding: 14px 2px; font-size: 13px; opacity: 0.85; }
+.state-box { text-align: center; padding: 18px 12px; }
+.state-box .state-ico { font-size: 26px; opacity: 0.8; }
+.state-box .state-msg { font-size: 13px; opacity: 0.72; line-height: 1.45; margin-top: 6px; }
+.state-box .state-retry {
+  margin-top: 12px; padding: 8px 20px; border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 8px; background: rgba(255,255,255,0.08); color: #fff; font-size: 13px; cursor: pointer;
+}
+/* Shimmering placeholder blocks for content that's about to arrive */
+.skeleton {
+  background: linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.13) 37%, rgba(255,255,255,0.05) 63%);
+  background-size: 400% 100%; animation: shimmer 1.3s ease-in-out infinite; border-radius: 8px;
+}
+.skeleton + .skeleton { margin-top: 8px; }
+@keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 1.4s; }
+  .skeleton { animation: none; }
+  #boot { transition: none; }
+}
+
+/* ---- Boot splash ---- */
+#boot {
+  position: fixed; inset: 0; z-index: 9000; background: #0b1d2e;
+  display: flex; align-items: center; justify-content: center;
+  transition: opacity 0.35s ease;
+}
+#boot.hide { opacity: 0; pointer-events: none; }
+.boot-inner { text-align: center; display: flex; flex-direction: column; align-items: center; }
+.boot-logo { font-size: 56px; line-height: 1; animation: bob 2s ease-in-out infinite; }
+@keyframes bob { 50% { transform: translateY(-6px); } }
+.boot-title { font-size: 22px; font-weight: 700; letter-spacing: 1.5px; margin: 8px 0 20px; }
+.boot-spinner { width: 30px; height: 30px; border-width: 3px; }
+.boot-status { font-size: 12px; opacity: 0.55; margin-top: 16px; min-height: 15px; }
+
 /* ---- Top status bar ---- */
 #topbar {
   position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
@@ -39,10 +84,20 @@ html, body {
   position: fixed; right: calc(env(safe-area-inset-right, 0px) + 10px); z-index: 1000;
   display: flex; flex-direction: column; gap: 8px;
 }
-#controls { top: calc(env(safe-area-inset-top, 0px) + 52px); }
+/* The button stack is top-anchored while the zoom controls are bottom-anchored; on
+   any viewport shorter than the full stack they used to collide (zoom buttons landing
+   on top of Layers/Download/Record). Bound the stack above the zoom cluster and let it
+   scroll if it still doesn't fit, so the two columns can never overlap. */
+#controls {
+  top: calc(env(safe-area-inset-top, 0px) + 52px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 128px);
+  overflow-y: auto; overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+#controls::-webkit-scrollbar { display: none; }
 #zoomctl { bottom: calc(env(safe-area-inset-bottom, 0px) + 20px); }
 .ctl {
-  width: 46px; height: 46px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.15);
+  width: 46px; height: 46px; flex-shrink: 0; border-radius: 12px; border: 1px solid rgba(255,255,255,0.15);
   background: rgba(10, 28, 44, 0.88); color: #e8f1f8; font-size: 20px;
   cursor: pointer; touch-action: manipulation;
   -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
@@ -234,7 +289,10 @@ button.primary {
 .ins-val b { font-size: 15px; }
 .ins-alt { font-size: 11px; opacity: 0.6; }
 .ins-muted { font-size: 12px; opacity: 0.5; font-style: italic; }
-.ins-load { opacity: 0.6; }
+/* Live-data placeholder: swap the literal "…" glyph for a small inline spinner */
+.ins-load { display: inline-block; width: 13px; height: 13px; vertical-align: -1px;
+  border-radius: 50%; border: 2px solid rgba(255,255,255,0.16); border-top-color: #4aa3e0;
+  animation: spin 0.7s linear infinite; font-size: 0; color: transparent; }
 .ins-mark {
   width: 100%; margin-top: 10px; padding: 8px; border: none; border-radius: 8px;
   background: #1a6fb5; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer;

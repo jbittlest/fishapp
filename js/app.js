@@ -2,6 +2,9 @@
 'use strict';
 
 (async function init() {
+  let map;
+  try {
+  bootStatus('Opening charts…');
   await openDB();
   loadTileKeys();   // build the offline-tile key index in the background (non-blocking)
 
@@ -15,8 +18,8 @@
   }
 
   /* ---- Map ---- */
-  const saved = JSON.parse(localStorage.getItem('fishapp.view') || 'null');
-  const map = L.map('map', {
+  const saved = readJSON('fishapp.view', null);
+  map = L.map('map', {
     zoomControl: false,
     center: saved ? saved.c : [27.9, -82.8],  // Gulf coast default until GPS kicks in
     zoom: saved ? saved.z : 7,
@@ -25,14 +28,20 @@
     worldCopyJump: true,
   });
   window._map = map;
+  /* In follow mode every GPS fix pans the map → fires moveend. Debounce the view save so
+     we're not doing a JSON.stringify + localStorage write on every fix. */
+  let _viewSaveTimer = null;
   map.on('moveend', () => {
-    localStorage.setItem('fishapp.view', JSON.stringify({ c: [map.getCenter().lat, map.getCenter().lng], z: map.getZoom() }));
+    clearTimeout(_viewSaveTimer);
+    _viewSaveTimer = setTimeout(() => {
+      localStorage.setItem('fishapp.view', JSON.stringify({ c: [map.getCenter().lat, map.getCenter().lng], z: map.getZoom() }));
+    }, 600);
     if (!document.getElementById('panel-download').classList.contains('hidden')) updateEstimate();
   });
 
   /* ---- Layers ---- */
   const live = { base: null, enc: null, seamark: null, labels: null, reliefhi: null };
-  const prefs = JSON.parse(localStorage.getItem('fishapp.layers') || '{"base":"ocean","enc":true,"seamark":true,"wind":false}');
+  const prefs = readJSON('fishapp.layers', { base: 'ocean', enc: true, seamark: true, wind: false });
 
   function setBase(id, isUserAction) {
     if (live.base) map.removeLayer(live.base);
@@ -95,19 +104,21 @@
   document.getElementById('ovl-enc').addEventListener('change', (e) => setOverlay('enc', e.target.checked));
   document.getElementById('ovl-seamark').addEventListener('change', (e) => setOverlay('seamark', e.target.checked));
 
-  /* California reefs + MPAs (reefs.js) — bundled, offline */
-  await reefsInit(map);
+  /* California reefs + MPAs (reefs.js) — bundled, offline. Loaded in the background so it
+     never blocks first paint; the toggles work immediately and markers pop in a moment later. */
   const reefPrefs = { reefs: prefs.reefs !== false, mpa: prefs.mpa !== false };
   document.getElementById('ovl-reefs').checked = reefPrefs.reefs;
   document.getElementById('ovl-mpa').checked = reefPrefs.mpa;
-  reefsSetVisible('reefs', reefPrefs.reefs);
-  reefsSetVisible('mpa', reefPrefs.mpa);
   document.getElementById('ovl-reefs').addEventListener('change', (e) => {
     reefsSetVisible('reefs', e.target.checked); prefs.reefs = e.target.checked; savePrefs();
   });
   document.getElementById('ovl-mpa').addEventListener('change', (e) => {
     reefsSetVisible('mpa', e.target.checked); prefs.mpa = e.target.checked; savePrefs();
   });
+  reefsInit(map).then(() => {
+    reefsSetVisible('reefs', reefPrefs.reefs);
+    reefsSetVisible('mpa', reefPrefs.mpa);
+  }).catch(() => {});
 
   /* Wind overlay (weather.js) */
   wxInit(map);
@@ -294,7 +305,7 @@
 
   /* ---- Tides / catch log / nav tools ---- */
   tidesInit();
-  await catchInit(map);
+  catchInit(map).catch(() => {});   // background: catch markers appear over the visible map
   navInit(map);
   document.getElementById('btn-log-catch').onclick = openCatchModal;
   document.getElementById('catch-save').onclick = saveCatch;
@@ -320,16 +331,59 @@
   WakeLock.acquire();
   wakeBox.addEventListener('change', (e) => WakeLock.setEnabled(e.target.checked));
 
-  /* ---- Modules ---- */
-  await spotsInit(map);
+  /* ---- Modules (background: spots + tracks fill in over the already-visible map) ---- */
+  spotsInit(map).catch(() => {});
   renderTracksList();
-  gpsStart(map);
 
-  /* ---- Service worker (makes the app itself work offline) ---- */
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  } catch (e) {
+    // A module init failed — don't let it take the whole app down (GPS + SW still start below).
+    if (typeof toast === 'function') toast('Startup problem — some features may be limited');
+    bootStatus('Startup problem');
+  } finally {
+    /* Always start GPS and register the service worker, even after a non-fatal init error,
+       so live location and offline support survive. */
+    bootStatus('Getting your location…');
+    if (map) { try { gpsStart(map); } catch (e) {} }
+    bootDone();
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js').catch(() => {});
+    }
   }
 })();
+
+/* Parse JSON from localStorage, surviving a corrupt/truncated value (a killed tab or a
+   quota-exceeded write) by clearing the bad key and returning the fallback — a bad value
+   used to throw and brick startup before the map was even built. */
+function readJSON(key, fallback) {
+  const raw = localStorage.getItem(key);
+  if (raw == null) return fallback;
+  try { return JSON.parse(raw); }
+  catch (e) { try { localStorage.removeItem(key); } catch (e2) {} return fallback; }
+}
+
+/* ---- Shared loading / state UI helpers (used by every panel) ---- */
+function loadingHTML(msg) {
+  return '<div class="load-row"><span class="spinner"></span><span>' + (msg || 'Loading…') + '</span></div>';
+}
+/* A centered state block for empty / offline / error. Pass retry as a global function
+   name (string) to get a Retry button wired to it. */
+function stateHTML(icon, msg, retryFn) {
+  return '<div class="state-box"><div class="state-ico">' + icon + '</div>' +
+    '<div class="state-msg">' + msg + '</div>' +
+    (retryFn ? '<button class="state-retry" onclick="' + retryFn + '()">↻ Retry</button>' : '') +
+    '</div>';
+}
+/* Boot splash control */
+function bootStatus(msg) {
+  const s = document.getElementById('boot-status');
+  if (s) s.textContent = msg;
+}
+function bootDone() {
+  const b = document.getElementById('boot');
+  if (!b || b.classList.contains('hide')) return;
+  b.classList.add('hide');
+  setTimeout(() => { if (b.parentNode) b.parentNode.removeChild(b); }, 400);
+}
 
 /* ---- Toast ---- */
 let _toastTimer = null;

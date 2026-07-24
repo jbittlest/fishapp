@@ -100,10 +100,13 @@ function gotoUpdateBanner(ll, kn) {
     const at = new Date(Date.now() + hrs * 3600000);
     eta = 'ETA ' + at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + ' · ' + fmtDur(hrs * 3600) + (planned ? ' @' + Math.round(spd) + 'kn' : '');
   }
-  if (routeRem != null) eta += ' · ' + routeRem.toFixed(1) + ' nm to finish';
-
   document.getElementById('gb-name').textContent = Goto.destName;
-  document.getElementById('gb-dist').textContent = remNm.toFixed(2) + ' nm (' + (remNm * 1.15078).toFixed(1) + ' mi)';
+  // On a route the headline distance is the whole remaining run (not just the hop to the
+  // next waypoint, which drops to ~0 as you pass each mark). Show the leg distance small.
+  const headNm = routeRem != null ? routeRem : remNm;
+  document.getElementById('gb-dist').textContent =
+    headNm.toFixed(2) + ' nm (' + (headNm * 1.15078).toFixed(1) + ' mi)' +
+    (routeRem != null ? ' · leg ' + remNm.toFixed(2) + ' nm' : '');
   document.getElementById('gb-brg').textContent = 'steer ' + Math.round(brg) + '° ' + (typeof compass === 'function' ? compass(brg) : '') + steer;
   document.getElementById('gb-eta').textContent = eta;
 
@@ -138,6 +141,12 @@ function gotoOnFix(ll, kn) {
     Goto.legIdx++;
     Goto.dest = Goto.route[Goto.legIdx];
     gotoRouteLabel();
+    // move the 🎯 pin (and its popup) forward to the new active waypoint — it used to
+    // stay frozen on WP 1 for the whole voyage while the banner advanced
+    if (Goto.destMarker) {
+      Goto.destMarker.setLatLng(Goto.dest);
+      Goto.destMarker.setPopupContent('🎯 ' + escapeHtml(Goto.destName));
+    }
     Goto._arrived = false;
     banner.classList.remove('arriving');
     if (typeof toast === 'function') toast('✅ WP ' + Goto.legIdx + ' reached — steering to WP ' + (Goto.legIdx + 1));

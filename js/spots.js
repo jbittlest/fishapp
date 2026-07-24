@@ -141,9 +141,18 @@ function renderSpotsList() {
   });
 }
 
+/* Called on every GPS fix. Rebuilding the whole list each second is wasteful — the list
+   only shows 2-decimal nm, so throttle to a few seconds and skip when barely moved. */
+let _spotDistTs = 0, _spotDistLL = null;
 function refreshSpotDistances() {
   const panel = document.getElementById('panel-spots');
-  if (!panel.classList.contains('hidden')) renderSpotsList();
+  if (panel.classList.contains('hidden')) return;   // list not visible → nothing to update
+  const now = Date.now();
+  if (now - _spotDistTs < 3000) return;
+  const here = GPS.lastLatLng;
+  if (here && _spotDistLL && here.distanceTo(_spotDistLL) < 5) { _spotDistTs = now; return; }
+  _spotDistTs = now; _spotDistLL = here;
+  renderSpotsList();
 }
 
 /* ---- Export / import ---- */

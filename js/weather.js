@@ -226,37 +226,48 @@ async function loadNow24() {
   locEl.textContent = (GPS.lastLatLng ? 'At your position — ' : 'At map center — ') +
     formatCoord(ll.lat, 'lat') + ' ' + formatCoord(ll.lng, 'lon');
 
-  let data = null;
-  if (navigator.onLine) {
-    curEl.innerHTML = '<p class="hint">Loading forecast…</p>';
-    hrEl.innerHTML = '';
-    try {
-      const common = 'latitude=' + ll.lat.toFixed(3) + '&longitude=' + ll.lng.toFixed(3) +
-        '&timezone=auto&forecast_days=2';
-      const [wx, marine] = await Promise.all([
-        fetch('https://api.open-meteo.com/v1/forecast?' + common +
-          '&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m' +
-          '&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m,precipitation_probability' +
-          '&wind_speed_unit=kn&temperature_unit=fahrenheit').then((r) => r.ok ? r.json() : null),
-        fetch('https://marine-api.open-meteo.com/v1/marine?' + common +
-          '&current=wave_height,wave_direction,wave_period,swell_wave_height,swell_wave_direction,swell_wave_period' +
-          '&hourly=wave_height,wave_period').then((r) => r.ok ? r.json() : null).catch(() => null),
-      ]);
-      if (!wx || wx.error || !wx.current) throw new Error('forecast unavailable');   // fall to cache instead of crashing render
-      data = { wx, marine: marine && !marine.error ? marine : null, ts: Date.now(), lat: ll.lat, lng: ll.lng };
-      localStorage.setItem('fishapp.lastwx', JSON.stringify(data));
-    } catch (e) { /* fall through to cache */ }
-  }
-  if (!data) {
-    data = JSON.parse(localStorage.getItem('fishapp.lastwx') || 'null');
-    if (!data) {
-      curEl.innerHTML = '<p class="hint">No internet and no saved forecast yet. Open this panel once while online.</p>';
-      hrEl.innerHTML = '';
-      staleEl.textContent = '';
-      return;
+  if (WX._loadingNow) return;   // dedupe: ignore rapid re-opens while a fetch is in flight
+
+  // Cache-first: paint the last saved forecast instantly (with its "saved X ago" badge) so
+  // the panel is never blank, then refresh over it if we're online.
+  const cached = readJSON('fishapp.lastwx', null);
+  if (cached) renderWeather(cached);
+
+  if (!navigator.onLine) {
+    if (!cached) {
+      curEl.innerHTML = stateHTML('📡', 'No internet and no saved forecast yet. Open this panel once while online.', 'loadNow24');
+      hrEl.innerHTML = ''; staleEl.textContent = '';
     }
+    return;
   }
-  renderWeather(data);
+  if (!cached) { curEl.innerHTML = loadingHTML('Loading forecast…'); hrEl.innerHTML = ''; }
+
+  WX._loadingNow = true;
+  try {
+    const common = 'latitude=' + ll.lat.toFixed(3) + '&longitude=' + ll.lng.toFixed(3) +
+      '&timezone=auto&forecast_days=2';
+    const [wx, marine] = await Promise.all([
+      fetch('https://api.open-meteo.com/v1/forecast?' + common +
+        '&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m' +
+        '&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m,precipitation_probability' +
+        '&wind_speed_unit=kn&temperature_unit=fahrenheit').then((r) => r.ok ? r.json() : null),
+      fetch('https://marine-api.open-meteo.com/v1/marine?' + common +
+        '&current=wave_height,wave_direction,wave_period,swell_wave_height,swell_wave_direction,swell_wave_period' +
+        '&hourly=wave_height,wave_period').then((r) => r.ok ? r.json() : null).catch(() => null),
+    ]);
+    if (!wx || wx.error || !wx.current) throw new Error('forecast unavailable');
+    const data = { wx, marine: marine && !marine.error ? marine : null, ts: Date.now(), lat: ll.lat, lng: ll.lng };
+    localStorage.setItem('fishapp.lastwx', JSON.stringify(data));
+    renderWeather(data);
+  } catch (e) {
+    // Keep the cached view if we have one; only show an error when there's nothing to show.
+    if (!cached) {
+      curEl.innerHTML = stateHTML('⚠️', 'Couldn’t load the forecast. Check your connection and retry.', 'loadNow24');
+      hrEl.innerHTML = ''; staleEl.textContent = '';
+    }
+  } finally {
+    WX._loadingNow = false;
+  }
 }
 
 function dirArrow(deg) {
@@ -349,34 +360,45 @@ async function loadForecast10(override) {
   const daysEl = document.getElementById('fc-days');
   const staleEl = document.getElementById('fc-stale');
 
-  let data = null;
-  if (navigator.onLine) {
-    daysEl.innerHTML = '<p class="hint">Loading 10-day forecast…</p>';
-    try {
-      const base = 'latitude=' + ll.lat.toFixed(3) + '&longitude=' + ll.lng.toFixed(3) + '&timezone=auto';
-      const [wx, marine] = await Promise.all([
-        fetch('https://api.open-meteo.com/v1/forecast?' + base + '&forecast_days=10' +
-          '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant,sunrise,sunset,uv_index_max' +
-          '&hourly=temperature_2m,precipitation_probability,wind_speed_10m,wind_direction_10m,wind_gusts_10m' +
-          '&wind_speed_unit=kn&temperature_unit=fahrenheit&precipitation_unit=inch').then((r) => r.ok ? r.json() : null),
-        fetch('https://marine-api.open-meteo.com/v1/marine?' + base + '&forecast_days=8' +
-          '&daily=wave_height_max,wave_direction_dominant,wave_period_max,swell_wave_height_max,swell_wave_period_max' +
-          '&hourly=wave_height,sea_surface_temperature&temperature_unit=fahrenheit').then((r) => r.ok ? r.json() : null).catch(() => null),
-      ]);
-      if (!wx || wx.error || !wx.daily) throw new Error('forecast unavailable');   // fall to cache instead of crashing render
-      data = { wx, marine: marine && !marine.error ? marine : null, ts: Date.now(), lat: ll.lat, lng: ll.lng };
-      localStorage.setItem('fishapp.fc10', JSON.stringify(data));
-    } catch (e) { /* fall through to cache */ }
-  }
-  if (!data) {
-    data = JSON.parse(localStorage.getItem('fishapp.fc10') || 'null');
-    if (!data) {
-      daysEl.innerHTML = '<p class="hint">No internet and no saved 10-day forecast yet. Open this tab once while online.</p>';
+  if (WX._loadingFc) return;   // dedupe rapid re-opens
+
+  // Cache-first: show the saved 10-day instantly, then refresh over it if online.
+  const cached = readJSON('fishapp.fc10', null);
+  if (cached) renderForecast10(cached);
+
+  if (!navigator.onLine) {
+    if (!cached) {
+      daysEl.innerHTML = stateHTML('📡', 'No internet and no saved 10-day forecast yet. Open this tab once while online.', 'loadForecast10');
       staleEl.textContent = '';
-      return;
     }
+    return;
   }
-  renderForecast10(data);
+  if (!cached) daysEl.innerHTML = loadingHTML('Loading 10-day forecast…');
+
+  WX._loadingFc = true;
+  try {
+    const base = 'latitude=' + ll.lat.toFixed(3) + '&longitude=' + ll.lng.toFixed(3) + '&timezone=auto';
+    const [wx, marine] = await Promise.all([
+      fetch('https://api.open-meteo.com/v1/forecast?' + base + '&forecast_days=10' +
+        '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant,sunrise,sunset,uv_index_max' +
+        '&hourly=temperature_2m,precipitation_probability,wind_speed_10m,wind_direction_10m,wind_gusts_10m' +
+        '&wind_speed_unit=kn&temperature_unit=fahrenheit&precipitation_unit=inch').then((r) => r.ok ? r.json() : null),
+      fetch('https://marine-api.open-meteo.com/v1/marine?' + base + '&forecast_days=8' +
+        '&daily=wave_height_max,wave_direction_dominant,wave_period_max,swell_wave_height_max,swell_wave_period_max' +
+        '&hourly=wave_height,sea_surface_temperature&temperature_unit=fahrenheit').then((r) => r.ok ? r.json() : null).catch(() => null),
+    ]);
+    if (!wx || wx.error || !wx.daily) throw new Error('forecast unavailable');
+    const data = { wx, marine: marine && !marine.error ? marine : null, ts: Date.now(), lat: ll.lat, lng: ll.lng };
+    localStorage.setItem('fishapp.fc10', JSON.stringify(data));
+    renderForecast10(data);
+  } catch (e) {
+    if (!cached) {
+      daysEl.innerHTML = stateHTML('⚠️', 'Couldn’t load the 10-day forecast. Check your connection and retry.', 'loadForecast10');
+      staleEl.textContent = '';
+    }
+  } finally {
+    WX._loadingFc = false;
+  }
 }
 
 function renderForecast10(data) {

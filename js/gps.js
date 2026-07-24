@@ -14,6 +14,10 @@ const GPS = {
 
 const KNOTS_PER_MS = 1.94384; // m/s -> knots
 
+/* Cache the status-bar element refs — gpsOnFix runs every fix, so avoid re-querying the DOM. */
+const _gpsEl = {};
+function gpsEl(id) { return _gpsEl[id] || (_gpsEl[id] = document.getElementById(id)); }
+
 function gpsStart(map) {
   if (!('geolocation' in navigator)) {
     toast('GPS not available on this device');
@@ -48,24 +52,29 @@ function gpsOnFix(map, pos) {
   /* Boat marker */
   if (!GPS.marker) {
     GPS.marker = L.marker(ll, { icon: boatIcon(heading), zIndexOffset: 1000, interactive: false }).addTo(map);
+    GPS._renderedHeading = heading;
     GPS.accCircle = L.circle(ll, {
       radius: c.accuracy || 0, weight: 1, color: '#4aa3e0',
       fillColor: '#4aa3e0', fillOpacity: 0.12, interactive: false,
     }).addTo(map);
   } else {
     GPS.marker.setLatLng(ll);
-    if (heading !== null) GPS.marker.setIcon(boatIcon(heading));
+    // Rebuilding the SVG divIcon every fix is costly; only redraw on a real heading change.
+    if (heading !== null && (GPS._renderedHeading == null ||
+        Math.abs(((heading - GPS._renderedHeading + 540) % 360) - 180) >= 3)) {
+      GPS.marker.setIcon(boatIcon(heading));
+      GPS._renderedHeading = heading;
+    }
     GPS.accCircle.setLatLng(ll).setRadius(c.accuracy || 0);
   }
 
   /* Status bar */
-  const dot = document.getElementById('gps-dot');
-  dot.className = 'dot ' + (c.accuracy <= 20 ? 'ok' : 'warn');
-  document.getElementById('gps-acc').textContent = '±' + Math.round(c.accuracy) + 'm';
+  gpsEl('gps-dot').className = 'dot ' + (c.accuracy <= 20 ? 'ok' : 'warn');
+  gpsEl('gps-acc').textContent = '±' + Math.round(c.accuracy) + 'm';
   const kn = c.speed !== null && !isNaN(c.speed) ? (c.speed * KNOTS_PER_MS) : null;
-  document.getElementById('stat-speed').textContent = kn !== null ? kn.toFixed(1) : '—';
-  document.getElementById('stat-heading').textContent = heading !== null ? Math.round(heading) : '—';
-  document.getElementById('stat-coords').innerHTML =
+  gpsEl('stat-speed').textContent = kn !== null ? kn.toFixed(1) : '—';
+  gpsEl('stat-heading').textContent = heading !== null ? Math.round(heading) : '—';
+  gpsEl('stat-coords').innerHTML =
     formatCoord(c.latitude, 'lat') + '<br>' + formatCoord(c.longitude, 'lon');
 
   /* Follow */

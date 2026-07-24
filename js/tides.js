@@ -27,10 +27,24 @@ async function loadTidesTimes() {
   /* ---- Tides (online) ---- */
   const box = document.getElementById('tide-body');
   const st = Tides.stations.length ? nearestTideStation(ll) : null;
-  if (!st) { box.innerHTML = '<p class="hint">No tide station data.</p>'; return; }
+  if (!st) { box.innerHTML = stateHTML('🌊', 'No tide station data available.', ''); return; }
   document.getElementById('tide-station').textContent = st.n;
-  if (!navigator.onLine) { box.innerHTML = '<p class="hint">Connect to the internet to load tide predictions.</p>'; return; }
-  box.innerHTML = '<p class="hint">Loading tides…</p>';
+
+  // Cache-first: reuse a recent (<24h) saved prediction for this station so tides render
+  // instantly and still work offline; only fetch fresh when we have a connection.
+  const cacheKey = 'fishapp.tides.' + st.id;
+  const cached = readJSON(cacheKey, null);
+  const fresh = cached && cached.ts && (Date.now() - cached.ts) < 24 * 3600000 && cached.hl && cached.hl.length;
+  const showCached = () => { if (fresh) { renderTideGraph(cached.hl); renderHiLo(cached.hl); return true; } return false; };
+
+  if (!navigator.onLine) {
+    if (!showCached()) box.innerHTML = stateHTML('📡', 'Connect to the internet to load tide predictions.', 'loadTidesTimes');
+    return;
+  }
+  if (Tides._loading) return;   // dedupe rapid re-opens
+  if (!showCached()) box.innerHTML = loadingHTML('Loading tides…');
+
+  Tides._loading = true;
   try {
     const now = new Date(), end = new Date(now.getTime() + 2 * 86400000);
     // hi/lo works for every station (incl. subordinate ones with no time-series)
@@ -39,10 +53,13 @@ async function loadTidesTimes() {
       '&begin_date=' + ymd(now) + '&end_date=' + ymd(end);
     const hilo = await fetch(url).then((r) => r.json());
     const hl = hilo.predictions || [];
+    localStorage.setItem(cacheKey, JSON.stringify({ hl, ts: Date.now() }));
     renderTideGraph(hl);
     renderHiLo(hl);
   } catch (e) {
-    box.innerHTML = '<p class="hint">Could not load tides.</p>';
+    if (!fresh) box.innerHTML = stateHTML('⚠️', 'Couldn’t load tide predictions. Retry when you have signal.', 'loadTidesTimes');
+  } finally {
+    Tides._loading = false;
   }
 }
 
