@@ -43,13 +43,26 @@ const SHELL = [
   './icons/icon-512.png',
 ];
 
+/* The files without which the app can't start at all. These must all land or the
+   install genuinely should fail; everything else is allowed to arrive later. */
+const CRITICAL = ['./', './index.html', './css/app.css', './libs/leaflet/leaflet.css',
+  './libs/leaflet/leaflet.js', './js/app.js', './js/db.js', './js/tiles.js', './js/gps.js'];
+
 self.addEventListener('install', (e) => {
   // cache: 'reload' forces fresh fetches from the network (bypass HTTP cache) so an
   // update never caches a stale/mismatched file mix.
+  const add = (c, u) => c.add(new Request(u, { cache: 'reload' }));
+  /* Install used to be all-or-nothing across 44 parallel requests: one timeout on a
+     marginal LTE link rejected the whole thing, so the new worker never installed and
+     nothing was kept. On a boat that's exactly when updates matter most. Critical
+     files still gate the install; the rest retry once and are allowed to fail. */
   e.waitUntil(
-    caches.open(CACHE)
-      .then((c) => Promise.all(SHELL.map((u) => c.add(new Request(u, { cache: 'reload' })))))
-      .then(() => self.skipWaiting())
+    caches.open(CACHE).then(async (c) => {
+      await Promise.all(CRITICAL.map((u) => add(c, u)));
+      const rest = SHELL.filter((u) => CRITICAL.indexOf(u) === -1);
+      await Promise.allSettled(rest.map((u) => add(c, u).catch(() => add(c, u))));
+      return self.skipWaiting();
+    })
   );
 });
 
@@ -70,6 +83,10 @@ self.addEventListener('message', (e) => {
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (url.origin !== location.origin) return; // chart tiles are handled by IndexedDB, not here
+  /* Cache.put rejects for anything that isn't a GET, and the clone's body is then
+     buffered and never read. A same-origin proxy URL in the assistant settings is
+     enough to hit this on every POST. */
+  if (e.request.method !== 'GET') return;
 
   e.respondWith(
     caches.match(e.request, { ignoreSearch: true }).then((cached) => {
@@ -77,7 +94,7 @@ self.addEventListener('fetch', (e) => {
       return fetch(e.request).then((resp) => {
         if (resp.ok) {
           const copy = resp.clone();
-          caches.open(CACHE).then((c) => c.put(e.request, copy));
+          caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
         }
         return resp;
       }).catch(() => {

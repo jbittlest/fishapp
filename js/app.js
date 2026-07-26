@@ -52,8 +52,12 @@ const APP_BUILD = 'v85';
      Guarded so a partial/stale asset load can never brick startup. */
   if (typeof deleteTilesByPrefix === 'function' &&
       localStorage.getItem('fishapp.reliefSource') !== 'gebco') {
-    try { await deleteTilesByPrefix('gmrt/'); } catch (e) { /* non-fatal */ }
+    /* Mark it done FIRST and don't await. Nothing here is worth blocking first paint
+       on — and if the sweep is interrupted (phone locks, iOS tears down in-flight
+       IDB work) the old code left the flag unwritten and the splash stuck at
+       "Opening charts…" forever, repeating on every launch. Bricked, silently. */
     localStorage.setItem('fishapp.reliefSource', 'gebco');
+    Promise.resolve().then(() => deleteTilesByPrefix('gmrt/')).catch(() => {});
   }
 
   /* ---- Map ---- */

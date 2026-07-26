@@ -14,6 +14,10 @@ async function catchInit(map) {
   Catch.layer = L.layerGroup().addTo(map);
   Catch.all = await idb.getAll('catches');
   Catch.all.forEach(addCatchMarker);
+  /* Render the list too. Without this, opening Nav Tools before the load resolved
+     showed "No catches logged yet" over a map covered in catch markers — and it
+     never corrected itself until the panel was closed and reopened. */
+  if (typeof renderCatchList === 'function') renderCatchList();
 }
 
 function addCatchMarker(c) {
@@ -53,6 +57,10 @@ function openCatchModal() {
   Catch._photo = null;
   ['catch-species', 'catch-length', 'catch-weight', 'catch-bait', 'catch-notes'].forEach((id) => document.getElementById(id).value = '');
   document.getElementById('catch-photo-preview').innerHTML = '';
+  /* Clear the file input too, or picking the SAME photo again fires no change event
+     and the catch saves with no picture while the user watched themselves attach one. */
+  const ph = document.getElementById('catch-photo');
+  if (ph) ph.value = '';
   document.getElementById('modal-catch').classList.remove('hidden');
   setTimeout(() => document.getElementById('catch-species').focus(), 50);
 }
@@ -80,24 +88,42 @@ function onCatchPhoto(file) {
 
 async function saveCatch() {
   const e = Catch._editing;
-  if (!e) return;
-  const cond = await captureConditions(L.latLng(e.lat, e.lng));
-  const c = {
-    lat: e.lat, lng: e.lng, ts: Date.now(),
-    species: document.getElementById('catch-species').value.trim() || 'Catch',
-    length: document.getElementById('catch-length').value.trim(),
-    weight: document.getElementById('catch-weight').value.trim(),
-    bait: document.getElementById('catch-bait').value.trim(),
-    notes: document.getElementById('catch-notes').value.trim(),
-    photo: Catch._photo, cond,
-  };
-  const id = await idb.put('catches', c);
-  c.id = id;
-  Catch.all.push(c);
-  addCatchMarker(c);
-  closeCatchModal();
-  toast('🎣 Catch logged');
-  renderCatchList();
+  /* Guard re-entry. captureConditions makes three network calls, so Save could sit
+     there for tens of seconds looking like it did nothing — a second tap logged the
+     fish twice, with two markers and a skewed bite model. */
+  if (!e || Catch._saving) return;
+  Catch._saving = true;
+  const btn = document.getElementById('catch-save');
+  if (btn) { btn.disabled = true; btn.dataset.label = btn.textContent; btn.textContent = 'Saving…'; }
+  try {
+    /* Read the form BEFORE the await — the conditions lookup is slow and the fields
+       shouldn't be able to change underneath it. */
+    const c = {
+      lat: e.lat, lng: e.lng, ts: Date.now(),
+      species: document.getElementById('catch-species').value.trim() || 'Catch',
+      length: document.getElementById('catch-length').value.trim(),
+      weight: document.getElementById('catch-weight').value.trim(),
+      bait: document.getElementById('catch-bait').value.trim(),
+      notes: document.getElementById('catch-notes').value.trim(),
+      photo: Catch._photo, cond: {},
+    };
+    /* Conditions are a bonus; the CATCH is the thing that must not be lost. If the
+       lookup throws or times out, save the fish anyway — this used to reject and
+       leave the modal open with nothing written and no error shown. */
+    try { c.cond = await captureConditions(L.latLng(e.lat, e.lng)) || {}; } catch (err) { c.cond = {}; }
+    const id = await idb.put('catches', c);
+    c.id = id;
+    Catch.all.push(c);
+    addCatchMarker(c);
+    closeCatchModal();
+    toast('🎣 Catch logged');
+    renderCatchList();
+  } catch (err) {
+    toast('⚠️ Couldn\'t save that catch: ' + ((err && err.message) || err));
+  } finally {
+    Catch._saving = false;
+    if (btn) { btn.disabled = false; if (btn.dataset.label) btn.textContent = btn.dataset.label; }
+  }
 }
 
 /* Auto-capture the conditions at the moment/place of the catch.
@@ -109,15 +135,20 @@ async function saveCatch() {
 async function captureConditions(ll) {
   const cond = {};
   const now = new Date();
-  const ill = Astro.moonIllumination(now);
-  cond.moon = Astro.moonPhaseName(ill.phase);
-  cond.moonLit = Math.round(ill.fraction * 100);
-  cond.moonPhase = +ill.phase.toFixed(3);        // 0-1, numeric for matching
-  // solunar: was it a major/minor period?
-  const per = Astro.solunar(now, ll.lat, ll.lng);
-  const nowMs = Date.now();
-  const act = per.find((p) => nowMs >= p.start && nowMs <= p.end);
-  cond.solunar = act ? act.type : 'off';
+  /* Guarded like every other block here. This was the one section running bare, so a
+     malformed solunar return threw straight out of saveCatch — and the fish, not just
+     the conditions, was silently never written. */
+  try {
+    const ill = Astro.moonIllumination(now);
+    cond.moon = Astro.moonPhaseName(ill.phase);
+    cond.moonLit = Math.round(ill.fraction * 100);
+    cond.moonPhase = +ill.phase.toFixed(3);        // 0-1, numeric for matching
+    // solunar: was it a major/minor period?
+    const per = Astro.solunar(now, ll.lat, ll.lng);
+    const nowMs = Date.now();
+    const act = Array.isArray(per) ? per.find((p) => nowMs >= p.start && nowMs <= p.end) : null;
+    cond.solunar = act ? act.type : 'off';
+  } catch (e) { /* non-fatal — the catch itself matters more */ }
 
   /* Light phase and minutes to the nearest sunrise/sunset — dawn/dusk proximity is one of
      the strongest timing signals in fishing, and it can't be reconstructed after the fact. */
