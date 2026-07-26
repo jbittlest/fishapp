@@ -1347,17 +1347,64 @@ function asstStripForSpeech(text) {
     .replace(/\s+/g, ' ')
     .trim();
 }
+/* Cloud voice is usable only with a proxy configured AND signal — offshore it silently
+   reverts to the device voice, which is the whole reason the device path stays. */
+function asstCloudVoiceOn() {
+  return localStorage.getItem('fishapp.asst.cloudvoice') === '1' &&
+    !!asstProxyUrl() && navigator.onLine;
+}
+function asstStopSpeech() {
+  try { if ('speechSynthesis' in window) window.speechSynthesis.cancel(); } catch (e) {}
+  if (ASST._audio) { try { ASST._audio.pause(); } catch (e) {} ASST._audio = null; }
+}
 function asstSpeak(text) {
-  if (!ASST.speak || !('speechSynthesis' in window)) return;
+  if (!ASST.speak) return;
+  const clean = asstStripForSpeech(text).slice(0, 700);
+  if (!clean) return;
+  asstStopSpeech();
+  if (asstCloudVoiceOn()) asstSpeakCloud(clean);
+  else asstSpeakDevice(clean);
+}
+function asstSpeakDevice(clean) {
+  if (!('speechSynthesis' in window)) return;
   try {
-    window.speechSynthesis.cancel();
-    const clean = asstStripForSpeech(text).slice(0, 700);
-    if (!clean) return;
     const u = new SpeechSynthesisUtterance(clean);
     u.lang = 'en-US'; u.rate = 1; u.pitch = 1;
     if (ASST._voice) u.voice = ASST._voice;
     window.speechSynthesis.speak(u);
   } catch (e) { /* ignore */ }
+}
+/* Natural speech via the Worker's /tts route. Every failure path — no key on the Worker
+   (501), no signal, blocked autoplay — falls back to the device voice rather than leaving
+   the user in silence, which underway is worse than a robotic voice. */
+async function asstSpeakCloud(clean) {
+  const gen = ASST._speakGen = (ASST._speakGen || 0) + 1;
+  try {
+    const r = await fetch(asstProxyUrl().replace(/\/+$/, '') + '/tts', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: clean, voice: localStorage.getItem('fishapp.asst.ttsvoice') || undefined }),
+    });
+    if (!r.ok) throw new Error('tts ' + r.status);
+    const blob = await r.blob();
+    if (gen !== ASST._speakGen) return;              // a newer utterance superseded this one
+    const audio = new Audio(URL.createObjectURL(blob));
+    ASST._audio = audio;
+    /* Hold the mic muted for the REAL audio length rather than a guess from character
+       count — otherwise Hey Fish hears the tail of its own reply and answers itself. */
+    audio.addEventListener('loadedmetadata', () => {
+      if (typeof Voice !== 'undefined' && isFinite(audio.duration)) {
+        Voice._muteUntil = Date.now() + audio.duration * 1000 + 700;
+      }
+    });
+    audio.addEventListener('ended', () => {
+      if (ASST._audio === audio) ASST._audio = null;
+      try { URL.revokeObjectURL(audio.src); } catch (e) {}
+    });
+    await audio.play();
+  } catch (e) {
+    if (gen === ASST._speakGen) asstSpeakDevice(clean);   // never fail silent
+  }
 }
 /* Rank installed voices by how human they sound.
 
@@ -1575,18 +1622,24 @@ function asstInit() {
   if (keyIn) keyIn.value = ASST.key();
   if (modelIn) modelIn.value = ASST.model();
   if (proxyIn) proxyIn.value = localStorage.getItem('fishapp.asst.proxy') || '';
+  const cloudIn = document.getElementById('asst-cloudvoice');
+  if (cloudIn) cloudIn.checked = localStorage.getItem('fishapp.asst.cloudvoice') === '1';
 
   document.getElementById('asst-save').onclick = () => {
     if (keyIn) localStorage.setItem('fishapp.asst.key', keyIn.value.trim());
     if (modelIn) localStorage.setItem('fishapp.asst.model', modelIn.value);
     if (proxyIn) localStorage.setItem('fishapp.asst.proxy', proxyIn.value.trim());
+    const cloudIn = document.getElementById('asst-cloudvoice');
+    if (cloudIn) localStorage.setItem('fishapp.asst.cloudvoice', cloudIn.checked ? '1' : '0');
     const voiceIn = document.getElementById('asst-voice');
     if (voiceIn && voiceIn.value) {
       localStorage.setItem('fishapp.asst.voice', voiceIn.value);
       const v = asstVoiceList().find((x) => x.name === voiceIn.value);
       if (v) ASST._voice = v;
-      asstSpeak('This is how I sound.');   // immediate feedback so the choice is auditable
     }
+    // Speak a sample so the choice is immediately auditable — routed through asstSpeak so
+    // it exercises whichever path (cloud or device) was just selected.
+    if (voiceIn || cloudIn) asstSpeak('This is how I sound.');
     asstSetStatus();
     if (typeof toast === 'function') toast('Assistant settings saved');
     const det = document.getElementById('asst-settings'); if (det) det.open = false;

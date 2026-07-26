@@ -25,6 +25,12 @@ const ALLOWED_ORIGIN = 'https://jbittlest.github.io';   // lock the endpoint to 
 const MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const MAX_TOKENS = 512;
 
+/* Natural speech for the /tts route (see below). Needs an OPENAI_KEY secret on the Worker;
+   without it the route 501s and the app falls back to the phone's built-in voice. */
+const TTS_MODEL = 'gpt-4o-mini-tts';
+const TTS_VOICE = 'onyx';                                // calm, low — suits a boat
+const ALLOWED_TTS_VOICES = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
+
 export default {
   async fetch(request, env) {
     const origin = request.headers.get('Origin') || '';
@@ -41,6 +47,41 @@ export default {
 
     let body;
     try { body = await request.json(); } catch (e) { return json({ error: 'bad json' }, 400, cors); }
+
+    /* ---- /tts : natural speech ----------------------------------------------
+       iOS Safari won't let a web app use the good system voices, so the built-in
+       speech always sounds robotic. This route swaps in a real TTS voice.
+
+       The key lives HERE, in the Worker — never in the phone. Calling OpenAI
+       straight from the browser also trips CORS, so proxying is required, not
+       merely tidier.
+
+       SETUP: Worker → Settings → Variables and Secrets → add secret
+              OPENAI_KEY = sk-...     (then Deploy)
+       Not configured → returns 501 and the app quietly keeps its device voice. */
+    if (new URL(request.url).pathname.replace(/\/+$/, '') === '/tts') {
+      const text = String(body.text || '').trim().slice(0, 1200);
+      if (!text) return json({ error: 'no text' }, 400, cors);
+      if (!env.OPENAI_KEY) return json({ error: 'tts not configured' }, 501, cors);
+      try {
+        const r = await fetch('https://api.openai.com/v1/audio/speech', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: 'Bearer ' + env.OPENAI_KEY },
+          body: JSON.stringify({
+            model: TTS_MODEL,
+            voice: ALLOWED_TTS_VOICES.includes(body.voice) ? body.voice : TTS_VOICE,
+            input: text,
+            response_format: 'mp3',
+          }),
+        });
+        if (!r.ok) return json({ error: 'tts upstream ' + r.status }, 502, cors);
+        return new Response(r.body, {
+          headers: { ...cors, 'content-type': 'audio/mpeg', 'cache-control': 'no-store' },
+        });
+      } catch (e) {
+        return json({ error: String((e && e.message) || e) }, 502, cors);
+      }
+    }
 
     const messages = [];
     if (body.system) messages.push({ role: 'system', content: String(body.system).slice(0, 8000) });

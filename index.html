@@ -214,7 +214,8 @@
         <option value="claude-haiku-4-5">Claude Haiku 4.5 — fastest / cheapest</option>
       </select>
     </label>
-    <label class="fld">Speaking voice
+    <label class="row"><input type="checkbox" id="asst-cloudvoice"> 🔊 Natural cloud voice <span class="hint">— needs signal; falls back to the phone voice offline</span></label>
+    <label class="fld">Phone voice <span class="hint">— used offline, and if the cloud voice is off</span>
       <select id="asst-voice"></select>
     </label>
     <p class="hint" id="asst-voice-hint">Checking available voices…</p>

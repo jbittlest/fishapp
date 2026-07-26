@@ -3,7 +3,7 @@
 
 /* Keep in step with CACHE in sw.js. Shown in the More sheet next to the build the service
    worker is actually serving, so a device running stale cached code is visible at a glance. */
-const APP_BUILD = 'v83';
+const APP_BUILD = 'v84';
 
 (async function init() {
   let map;
