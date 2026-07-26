@@ -1,7 +1,7 @@
 /* Service worker: caches the app shell so FishApp launches with zero internet */
 'use strict';
 
-const CACHE = 'fishapp-v77';
+const CACHE = 'fishapp-v78';
 const SHELL = [
   './',
   './index.html',
@@ -58,6 +58,12 @@ self.addEventListener('activate', (e) => {
       .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
+});
+
+/* Lets the page display which worker is actually serving it — the difference between
+   "the fix isn't working" and "your device is still on the old build". */
+self.addEventListener('message', (e) => {
+  if (e.data === 'version' && e.source) e.source.postMessage({ type: 'version', cache: CACHE });
 });
 
 self.addEventListener('fetch', (e) => {

@@ -262,6 +262,8 @@ function voiceStop() {
   voiceSetAwake(false);
   if (Voice.rec) { try { Voice.rec.abort(); } catch (e) {} Voice.rec = null; }
   voiceUpdateUi();
+  // Hands-free was the last thing holding back a pending app update — apply it now.
+  if (typeof applyPendingUpdate === 'function') applyPendingUpdate();
 }
 
 function voiceUpdateUi() {

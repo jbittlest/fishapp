@@ -1,6 +1,10 @@
 /* App bootstrap: map, layer switching, UI wiring, service worker */
 'use strict';
 
+/* Keep in step with CACHE in sw.js. Shown in the More sheet next to the build the service
+   worker is actually serving, so a device running stale cached code is visible at a glance. */
+const APP_BUILD = 'v78';
+
 (async function init() {
   let map;
   try {
@@ -295,6 +299,26 @@
   document.getElementById('btn-knots').onclick = () => togglePanel('panel-knots');
   document.getElementById('btn-emergency').onclick = () => togglePanel('panel-emergency');
   document.getElementById('btn-assistant').onclick = () => togglePanel('panel-assistant');
+  /* Show the loaded build alongside the build the service worker is actually serving. If
+     they differ, this device is running cached code and an update is waiting — which is
+     otherwise invisible and looks exactly like "the fix didn't work". */
+  (function showBuild() {
+    const el = document.getElementById('app-build');
+    if (!el) return;
+    el.textContent = 'build ' + APP_BUILD;
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.addEventListener('message', (e) => {
+      if (!e.data || e.data.type !== 'version') return;
+      const sw = String(e.data.cache || '').replace('fishapp-', '');
+      el.textContent = (sw === APP_BUILD)
+        ? 'build ' + APP_BUILD
+        : 'build ' + APP_BUILD + ' · update ready (' + sw + ') — close and reopen';
+    });
+    navigator.serviceWorker.ready
+      .then((reg) => { if (reg.active) reg.active.postMessage('version'); })
+      .catch(() => {});
+  })();
+
   asstInit();
   if (typeof voiceInit === 'function') voiceInit();
   if (typeof areaDataInit === 'function') areaDataInit();
@@ -458,16 +482,34 @@
          is already being served new assets while running the old JS/CSS. Reload once to make
          them match — but never interrupt a live voyage or an active track recording. */
       let swReloaded = false;
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (swReloaded || !hadController) return;
-        if (typeof Goto !== 'undefined' && Goto.active) return;
-        if (typeof Tracks !== 'undefined' && Tracks.recording) return;
-        // A reload tears down the microphone session, and the browser won't let us reopen it
-        // without a fresh user gesture — so an update would silently end hands-free mode.
-        // Skip it; the new version applies on the next cold start.
-        if (typeof Voice !== 'undefined' && (Voice.on || Voice._wantOn)) return;
+      /* Busy = mid-voyage, recording, or listening hands-free. A reload would interrupt all
+         three (it tears down the mic session, which can't reopen without a user gesture). */
+      const updateWouldInterrupt = () =>
+        (typeof Goto !== 'undefined' && Goto.active) ||
+        (typeof Tracks !== 'undefined' && Tracks.recording) ||
+        (typeof Voice !== 'undefined' && (Voice.on || Voice._wantOn));
+      let updatePending = false;
+      /* DEFER, never discard. Previously this just returned, so leaving hands-free on and
+         never fully closing the app meant the update was dropped and you stayed on old code
+         indefinitely. Now we remember it and apply the moment it's safe. */
+      window.applyPendingUpdate = () => {
+        if (!updatePending || swReloaded || updateWouldInterrupt()) return;
         swReloaded = true;
         location.reload();
+      };
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (swReloaded || !hadController) return;
+        if (updateWouldInterrupt()) {
+          updatePending = true;
+          if (typeof toast === 'function') toast('⬆️ Update ready — applies when you stop');
+          return;
+        }
+        swReloaded = true;
+        location.reload();
+      });
+      // Re-check whenever the app comes back to the foreground.
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') applyPendingUpdate();
       });
     }
   }
