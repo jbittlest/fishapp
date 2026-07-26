@@ -1415,13 +1415,25 @@ function asstFillVoicePicker() {
     escapeHtml(v.name) + (/enhanced|premium|neural/i.test(v.name) ? ' ⭐ natural' : '') + '</option>').join('');
   if (!hint) return;
   const good = vs.filter((v) => /enhanced|premium|neural/i.test(v.name));
-  hint.innerHTML = good.length
-    ? '🔊 Using <b>' + escapeHtml(current) + '</b>' +
-      (/enhanced|premium|neural/i.test(current) ? ' — this is a natural voice.' :
-        ' — pick one marked ⭐ above for a natural voice.')
-    : '🤖 Your phone only has basic (robotic) voices installed. To fix the sound: ' +
-      '<b>iPhone Settings → Accessibility → Spoken Content → Voices → English</b>, then download ' +
-      'one marked <b>Enhanced</b> (Ava or Allison). Reopen this panel afterwards and it will be picked automatically.';
+  /* Be honest about the platform ceiling. Safari does NOT expose iOS's downloadable
+     Enhanced/Premium voices to the Web Speech API — getVoices() returns only a limited
+     built-in subset — so telling an iPhone user to download a better voice sends them on a
+     chase that cannot work. Only say that where it's actually true. */
+  const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (good.length) {
+    hint.innerHTML = '🔊 Using <b>' + escapeHtml(current) + '</b>' +
+      (/enhanced|premium|neural/i.test(current) ? ' — this is a natural voice.'
+        : ' — pick one marked ⭐ above for a natural voice.');
+  } else if (iOS) {
+    hint.innerHTML = '🔊 Using <b>' + escapeHtml(current) + '</b>. On iPhone these built-in web ' +
+      'voices are the only ones available — Safari does not let web apps use the natural ' +
+      '“Enhanced” voices you can download in iOS Settings, so downloading one will not change ' +
+      'this. Try the other options above; they vary in how robotic they sound.';
+  } else {
+    hint.innerHTML = '🔊 Using <b>' + escapeHtml(current) + '</b>. No natural (Enhanced/Premium) ' +
+      'voice is installed on this device — installing one at the system level will let it appear here.';
+  }
 }
 function asstUpdateSpeakBtn() {
   const b = document.getElementById('asst-speak');
