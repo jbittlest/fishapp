@@ -1056,7 +1056,31 @@ async function asstAskProxy(userText, botEl) {
   return (j.reply || '').trim() || '(no reply)';
 }
 
+/* Adaptive thinking is only on the newer family (Opus 4.6+, Sonnet 5/4.6, Fable 5).
+   Haiku 4.5 — one of the options in the model picker — rejects it with a 400, so this is
+   gated rather than sent unconditionally. Older models used a fixed `budget_tokens`; that
+   parameter is removed on the current models and we deliberately don't reintroduce it. */
+function asstSupportsThinking(model) {
+  return /^claude-(opus-4-(6|7|8)|sonnet-5|sonnet-4-6|fable-5|mythos-5)/.test(model || '');
+}
+
 async function asstApiCall(messages) {
+  const model = ASST.model();
+  const body = {
+    model: model,
+    /* Was 1024, which truncated longer answers mid-sentence. Thinking tokens also count
+       against this, so it needs real headroom. Kept below the streaming threshold since
+       these are plain non-streaming requests. */
+    max_tokens: 16000,
+    system: asstSystemPrompt(),
+    tools: asstTools(),
+    messages,
+  };
+  /* Let Claude decide how much to reason per question — a tide lookup stays cheap while
+     "is it too rough to cross tomorrow" gets real thought. Effort is left at its default
+     (high); the reasoning itself isn't displayed, so no `display` opt-in is needed. */
+  if (asstSupportsThinking(model)) body.thinking = { type: 'adaptive' };
+
   const resp = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -1065,13 +1089,7 @@ async function asstApiCall(messages) {
       'anthropic-version': '2023-06-01',
       'anthropic-dangerous-direct-browser-access': 'true',
     },
-    body: JSON.stringify({
-      model: ASST.model(),
-      max_tokens: 1024,
-      system: asstSystemPrompt(),
-      tools: asstTools(),
-      messages,
-    }),
+    body: JSON.stringify(body),
   });
   if (!resp.ok) {
     let msg = 'HTTP ' + resp.status;
