@@ -105,7 +105,13 @@ html, body {
 @keyframes pulse { 50% { opacity: 0.6; } }
 
 /* ---- Bottom tab bar ---- */
-:root { --tabbar-h: 62px; }
+:root {
+  --tabbar-h: 62px;
+  /* How much room a sheet must leave at the top: the device status bar / notch PLUS the
+     app's own topbar. Without the safe-area term a tall sheet slides under the clock and
+     battery, taking the ✕ in its header with it — leaving no way to close it. */
+  --panel-top-gap: calc(env(safe-area-inset-top, 0px) + 54px);
+}
 #tabbar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 2500;
   height: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px));
@@ -159,10 +165,15 @@ html, body {
 .panel {
   position: fixed; left: 0; right: 0; z-index: 2000;
   bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px));
-  max-height: calc(100vh - var(--tabbar-h) - env(safe-area-inset-bottom, 0px) - 58px);
+  /* dvh tracks the *visible* viewport as mobile browser chrome shows/hides; plain vh is the
+     larger toolbars-hidden height, which overshoots. vh line first as the fallback. */
+  max-height: calc(100vh - var(--tabbar-h) - env(safe-area-inset-bottom, 0px) - var(--panel-top-gap));
+  max-height: calc(100dvh - var(--tabbar-h) - env(safe-area-inset-bottom, 0px) - var(--panel-top-gap));
   overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
   background: #0e2438; border-radius: 18px 18px 0 0;
-  padding: 14px 16px 20px;
+  /* No top padding: the sticky .panel-head supplies it, so the header can pin flush to the
+     very top of the sheet with no gap for content to scroll through above it. */
+  padding: 0 16px 20px;
   box-shadow: 0 -4px 30px rgba(0,0,0,0.55);
 }
 /* Panels animate in when they flip from display:none — keeps opening from feeling abrupt.
@@ -182,13 +193,24 @@ html, body {
   to   { transform: none; }
 }
 @media (prefers-reduced-motion: reduce) { .panel:not(.hidden) { animation: none; } }
-.panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+/* Pinned to the top of the scrolling sheet so ✕ is reachable no matter how far down the
+   content you've scrolled. Bleeds past the panel's side padding so content can't show
+   through behind it. */
+.panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 3;
+  background: #0e2438;
+  margin: 0 -16px 6px; padding: 14px 16px 10px;
+  border-radius: 18px 18px 0 0;
+}
 .panel h2 { margin: 0; font-size: 17px; }
 .panel h3 { margin: 14px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.6; }
 .panel .close {
-  background: rgba(255,255,255,0.1); border: none; color: #fff;
-  width: 30px; height: 30px; border-radius: 50%; font-size: 14px; cursor: pointer;
+  background: rgba(255,255,255,0.14); border: none; color: #fff;
+  width: 40px; height: 40px; flex: none; border-radius: 50%; font-size: 17px; cursor: pointer;
+  touch-action: manipulation;
 }
+.panel .close:active { background: rgba(255,255,255,0.28); }
 .row { display: flex; align-items: center; gap: 10px; padding: 9px 2px; font-size: 15px; cursor: pointer; }
 .row input { width: 18px; height: 18px; }
 .hint { font-size: 12.5px; opacity: 0.7; line-height: 1.4; }
@@ -464,7 +486,8 @@ button.primary {
 .ctl.asst.active { background: #1a6fb5; border-color: #4aa3e0; }
 #panel-assistant {
   display: flex; flex-direction: column;
-  height: calc(100vh - var(--tabbar-h) - env(safe-area-inset-bottom, 0px) - 58px);
+  height: calc(100vh - var(--tabbar-h) - env(safe-area-inset-bottom, 0px) - var(--panel-top-gap));
+  height: calc(100dvh - var(--tabbar-h) - env(safe-area-inset-bottom, 0px) - var(--panel-top-gap));
   overflow: hidden;
 }
 .asst-status { font-size: 11.5px; opacity: 0.75; margin: 2px 0 6px; display: flex; align-items: center; gap: 6px; }
