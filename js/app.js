@@ -209,11 +209,35 @@
     panels.forEach((p) => document.getElementById(p).classList.add('hidden'));
     syncTabs();
   };
+
+  /* Belt-and-braces sheet sizing.
+     The CSS already reserves room via env(safe-area-inset-top) + 100dvh, but in a
+     standalone PWA with a translucent status bar those can report values that leave a tall
+     sheet (worst: First Mate, which uses a fixed height) rendering under the clock/battery —
+     taking its ✕ with it and trapping the user. So rather than trust the math, measure the
+     real geometry: #topbar's bottom edge is the true "safe to draw below" line on any
+     device, and the sheet's own measured bottom already includes the bottom inset. */
+  function clampPanelHeight(el) {
+    if (!el || el.classList.contains('hidden')) return;
+    const topbar = document.getElementById('topbar');
+    const minTop = (topbar ? topbar.getBoundingClientRect().bottom : 46) + 8;
+    const bottomOffset = window.innerHeight - el.getBoundingClientRect().bottom;
+    // Content-independent: bounds how tall the sheet may ever grow, not how tall it is now.
+    const allowed = Math.max(160, window.innerHeight - bottomOffset - minTop);
+    el.style.maxHeight = Math.round(allowed) + 'px';
+  }
+  window.clampOpenPanel = () => {
+    const open = panels.find((p) => !document.getElementById(p).classList.contains('hidden'));
+    if (open) clampPanelHeight(document.getElementById(open));
+  };
+  // Re-clamp when the viewport changes shape (rotation, browser chrome sliding away).
+  window.addEventListener('resize', clampOpenPanel);
+  window.addEventListener('orientationchange', () => setTimeout(clampOpenPanel, 250));
   window.togglePanel = function togglePanel(id) {
     const el = document.getElementById(id);
     const wasHidden = el.classList.contains('hidden');
     closePanels();
-    if (wasHidden) el.classList.remove('hidden');
+    if (wasHidden) { el.classList.remove('hidden'); clampPanelHeight(el); }
     syncTabs();
     if (id === 'panel-download' && wasHidden) { updateEstimate(); renderAreasList(); updateStorageInfo(); }
     if (id === 'panel-spots' && wasHidden) { renderSpotsList(); renderTracksList(); renderReefsList(); renderTripsList(); }
@@ -422,7 +446,25 @@
     if (map) { try { gpsStart(map); } catch (e) {} }
     bootDone();
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js').catch(() => {});
+      // Was a worker already driving this page? If not, this is a first install and the
+      // claim below is expected — don't treat it as an update.
+      const hadController = !!navigator.serviceWorker.controller;
+      // updateViaCache:'none' stops the browser serving sw.js from its own HTTP cache, so a
+      // new build gets noticed on the next launch rather than whenever that cache expires.
+      navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
+        .then((reg) => { try { reg.update(); } catch (e) {} })
+        .catch(() => {});
+      /* The new worker calls skipWaiting() + clients.claim(), so once it takes over the page
+         is already being served new assets while running the old JS/CSS. Reload once to make
+         them match — but never interrupt a live voyage or an active track recording. */
+      let swReloaded = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (swReloaded || !hadController) return;
+        if (typeof Goto !== 'undefined' && Goto.active) return;
+        if (typeof Tracks !== 'undefined' && Tracks.recording) return;
+        swReloaded = true;
+        location.reload();
+      });
     }
   }
 })();
