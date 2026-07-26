@@ -545,7 +545,11 @@ button.primary {
 }
 .fc-when { width: 78px; flex: none; display: flex; flex-direction: column; line-height: 1.15; }
 .fc-when b { font-size: 13.5px; }
-.fc-when span { font-size: 11px; opacity: 0.6; }
+/* The date must stay legible — a 10-day list holds two of most weekdays, so the weekday
+   name alone can't identify a row. */
+.fc-when span { font-size: 11.5px; opacity: 0.8; }
+.fc-lr { flex: none; width: 10px; text-align: center; opacity: 0.45; font-size: 13px; }
+.fc-lr-note { opacity: 0.7; font-style: italic; }
 .fc-ico { font-size: 20px; width: 26px; text-align: center; flex: none; }
 .fc-temp { width: 56px; flex: none; font-weight: 700; }
 .fc-temp small { opacity: 0.6; font-weight: 400; }

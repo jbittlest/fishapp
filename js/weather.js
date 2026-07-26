@@ -217,6 +217,18 @@ function showAreaForecast(ll) {
   loadForecast10(WX._fcLoc);
 }
 
+/* A cached payload is only safe to display if it was saved for essentially THIS place —
+   otherwise we render another location's numbers under this location's heading. Age is
+   capped for the show-instantly path; offline we accept any age (the stale badge says how
+   old) but never the wrong place. */
+function wxCacheFor(key, ll, maxAgeMs) {
+  const c = readJSON(key, null);
+  if (!c || c.lat == null || c.lng == null) return null;
+  if (Math.abs(c.lat - ll.lat) > 0.25 || Math.abs(c.lng - ll.lng) > 0.25) return null;  // ~25 km
+  if (maxAgeMs && c.ts && (Date.now() - c.ts) > maxAgeMs) return null;
+  return c;
+}
+
 async function loadNow24() {
   const ll = GPS.lastLatLng || window._map.getCenter();
   const locEl = document.getElementById('wx-loc');
@@ -230,7 +242,7 @@ async function loadNow24() {
 
   // Cache-first: paint the last saved forecast instantly (with its "saved X ago" badge) so
   // the panel is never blank, then refresh over it if we're online.
-  const cached = readJSON('fishapp.lastwx', null);
+  const cached = wxCacheFor('fishapp.lastwx', ll, navigator.onLine ? 12 * 3600000 : null);
   if (cached) renderWeather(cached);
 
   if (!navigator.onLine) {
@@ -363,7 +375,7 @@ async function loadForecast10(override) {
   if (WX._loadingFc) return;   // dedupe rapid re-opens
 
   // Cache-first: show the saved 10-day instantly, then refresh over it if online.
-  const cached = readJSON('fishapp.fc10', null);
+  const cached = wxCacheFor('fishapp.fc10', ll, navigator.onLine ? 12 * 3600000 : null);
   if (cached) renderForecast10(cached);
 
   if (!navigator.onLine) {
@@ -408,10 +420,20 @@ function renderForecast10(data) {
   const mh = data.marine && data.marine.hourly;
   const daysEl = document.getElementById('fc-days');
   let html = '';
+  const today = new Date(); today.setHours(0, 0, 0, 0);
   for (let i = 0; i < d.time.length; i++) {
     const date = new Date(d.time[i] + 'T12:00');
-    const wd = i === 0 ? 'Today' : (i === 1 ? 'Tomorrow' : date.toLocaleDateString([], { weekday: 'long' }));
+    /* Label from the ACTUAL date, never the array index. A cached payload can be a day or
+       more old, and index-based labels would stamp "Today" on stale data and shift every
+       weekday after it. Days already past are dropped outright. */
+    const dayOut = Math.round((new Date(d.time[i] + 'T00:00') - today) / 86400000);
+    if (dayOut < 0) continue;
+    /* Short weekday + an always-legible date: a 10-day list contains TWO of most weekdays,
+       so "Tuesday" alone is ambiguous — which is how a day-9 reading gets mistaken for the
+       one coming up in two days. */
+    const wd = dayOut === 0 ? 'Today' : (dayOut === 1 ? 'Tomorrow' : date.toLocaleDateString([], { weekday: 'short' }));
     const md2 = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    const longRange = dayOut >= 7;   // beyond ~a week these are model trends, not numbers
     const [emo, desc] = wmoIcon(d.weather_code[i]);
     const windMax = Math.round(d.wind_speed_10m_max[i]);
     const gust = Math.round(d.wind_gusts_10m_max[i]);
@@ -443,6 +465,7 @@ function renderForecast10(data) {
     const summary =
       `<div class="fc-day-head">` +
       `<div class="fc-when"><b>${wd}</b><span>${md2}</span></div>` +
+      (longRange ? `<span class="fc-lr" title="${dayOut} days out — long-range model, low confidence">~</span>` : '') +
       `<div class="fc-ico" title="${desc}">${emo}</div>` +
       `<div class="fc-temp">${hi}°<small>/${lo}°</small></div>` +
       `<div class="fc-wind" style="color:${windColor(windMax)}">${windMax}<small> kn ${wdir}</small></div>` +
@@ -458,6 +481,7 @@ function renderForecast10(data) {
         `${swellFt != null ? ' · swell ' + swellFt.toFixed(1) + ' ft' + (swellPer ? ' @ ' + swellPer + 's' : '') : ''}</div>` +
       `<div class="fc-detrow">🌧️ Rain ${pop != null ? pop + '% chance' : '—'}${rainSum ? ' · ' + rainSum.toFixed(2) + ' in' : ''}` +
         `${sst != null ? ' &nbsp;·&nbsp; 🌡️ Water ' + sst + '°F' : ''}</div>` +
+      (longRange ? `<div class="fc-detrow fc-lr-note">~ ${dayOut} days out — long-range model output. Treat this as a trend, not a temperature; it typically shifts several degrees per day as the date nears.</div>` : '') +
       fc3hStrip(hh, mh, d.time[i]) +
       `</div>`;
 
