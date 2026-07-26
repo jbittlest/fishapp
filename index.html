@@ -33,6 +33,7 @@
 <!-- Top status bar -->
 <div id="topbar">
   <div class="stat" id="stat-gps"><span class="dot" id="gps-dot"></span><span id="gps-acc">NO GPS</span></div>
+  <span class="spinner sm hidden" id="tile-busy" title="Loading chart tiles"></span>
   <div class="stat big"><span id="stat-speed">—</span><small>kn</small></div>
   <div class="stat big"><span id="stat-heading">—</span><small>°</small></div>
   <div class="stat coords" id="stat-coords">—</div>
@@ -52,25 +53,39 @@
   </div>
 </div>
 
-<!-- Right button stack -->
+<!-- Right map controls: safety + map manipulation only. Everything else lives in the
+     bottom tab bar, so this column can never grow long enough to overlap the zoom keys. -->
 <div id="controls">
-  <button id="btn-follow" class="ctl active" title="Follow GPS">◉</button>
-  <button id="btn-assistant" class="ctl asst" title="First Mate — fishing &amp; boating assistant">💬</button>
-  <button id="btn-mark" class="ctl" title="Mark spot">📌</button>
-  <button id="btn-spots" class="ctl" title="Spots &amp; tracks">☰</button>
-  <button id="btn-weather" class="ctl" title="Weather &amp; waves">🌤</button>
-  <button id="btn-tides" class="ctl" title="Tides &amp; bite times">🌙</button>
-  <button id="btn-tools" class="ctl" title="Nav tools &amp; catch log">🧭</button>
-  <button id="btn-knots" class="ctl" title="Guides — knots &amp; fish">📖</button>
   <button id="btn-emergency" class="ctl emg" title="Emergency">🆘</button>
-  <button id="btn-layers" class="ctl" title="Layers">🗺</button>
-  <button id="btn-download" class="ctl" title="Download charts">⇩</button>
-  <button id="btn-track" class="ctl" title="Record track">⏺</button>
+  <button id="btn-follow" class="ctl active" title="Follow GPS">◉</button>
 </div>
 
 <div id="zoomctl">
-  <button id="btn-zoomin" class="ctl">+</button>
-  <button id="btn-zoomout" class="ctl">−</button>
+  <button id="btn-zoomin" class="ctl" title="Zoom in">+</button>
+  <button id="btn-zoomout" class="ctl" title="Zoom out">−</button>
+</div>
+
+<!-- Bottom tab bar — thumb-reachable primary navigation -->
+<nav id="tabbar">
+  <button class="tab-btn" id="btn-weather"><span class="tb-ico">🌤</span><span class="tb-lbl">Weather</span></button>
+  <button class="tab-btn" id="btn-tides"><span class="tb-ico">🌙</span><span class="tb-lbl">Tides</span></button>
+  <button class="tab-btn voice" id="btn-voice" title="Hands-free voice control"><span class="tb-ico">🎤</span><span class="tb-lbl">Hey Fish</span></button>
+  <button class="tab-btn" id="btn-mark"><span class="tb-ico">📌</span><span class="tb-lbl">Mark</span></button>
+  <button class="tab-btn" id="btn-more"><span class="tb-ico">☰</span><span class="tb-lbl">More</span></button>
+</nav>
+
+<!-- "More" sheet: the rest of the app as big labeled tiles -->
+<div class="panel hidden" id="panel-more">
+  <div class="panel-head"><h2>More</h2><button class="close" data-close="panel-more">✕</button></div>
+  <div class="more-grid">
+    <button class="more-tile" id="btn-spots"><span class="mt-ico">☰</span><b>Spots &amp; Tracks</b></button>
+    <button class="more-tile" id="btn-tools"><span class="mt-ico">🧭</span><b>Nav Tools</b></button>
+    <button class="more-tile" id="btn-layers"><span class="mt-ico">🗺</span><b>Map Layers</b></button>
+    <button class="more-tile" id="btn-assistant"><span class="mt-ico">💬</span><b>First Mate</b></button>
+    <button class="more-tile" id="btn-knots"><span class="mt-ico">📖</span><b>Guides</b></button>
+    <button class="more-tile" id="btn-download"><span class="mt-ico">⇩</span><b>Offline Charts</b></button>
+    <button class="more-tile" id="btn-track"><span class="mt-ico">⏺</span><b>Record Track</b></button>
+  </div>
 </div>
 
 <!-- Layers panel -->
@@ -407,6 +422,7 @@
 <script src="./js/fish-tips.js"></script>
 <script src="./js/areadata.js"></script>
 <script src="./js/assistant.js"></script>
+<script src="./js/voice.js"></script>
 <script src="./js/download.js"></script>
 <script src="./js/app.js"></script>
 </body>

@@ -10,6 +10,8 @@ html, body {
 /* Smoothly upscale tiles (relief/structure past their native zoom) so they read as soft
    depth shading, never blocky pixels, when zoomed beyond the source data's resolution. */
 .leaflet-tile-pane img { image-rendering: auto; }
+/* Leaflet's own per-tile fade handles switch-on smoothness; see the note in app.js for why
+   there is deliberately no whole-layer fade-in here. */
 .hidden { display: none !important; }
 
 /* ---- Shared loading system ----
@@ -80,41 +82,106 @@ html, body {
 }
 
 /* ---- Control buttons ---- */
+/* Only 2 buttons live here now (safety + follow); the rest moved to the tab bar, so this
+   column is short by construction and can never collide with the zoom keys. */
 #controls, #zoomctl {
   position: fixed; right: calc(env(safe-area-inset-right, 0px) + 10px); z-index: 1000;
-  display: flex; flex-direction: column; gap: 8px;
+  display: flex; flex-direction: column; gap: 10px;
 }
-/* The button stack is top-anchored while the zoom controls are bottom-anchored; on
-   any viewport shorter than the full stack they used to collide (zoom buttons landing
-   on top of Layers/Download/Record). Bound the stack above the zoom cluster and let it
-   scroll if it still doesn't fit, so the two columns can never overlap. */
-#controls {
-  top: calc(env(safe-area-inset-top, 0px) + 52px);
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 128px);
-  overflow-y: auto; overscroll-behavior: contain;
-  scrollbar-width: none;
-}
-#controls::-webkit-scrollbar { display: none; }
-#zoomctl { bottom: calc(env(safe-area-inset-bottom, 0px) + 20px); }
+#controls { top: calc(env(safe-area-inset-top, 0px) + 52px); }
+#zoomctl { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + 16px); }
 .ctl {
-  width: 46px; height: 46px; flex-shrink: 0; border-radius: 12px; border: 1px solid rgba(255,255,255,0.15);
-  background: rgba(10, 28, 44, 0.88); color: #e8f1f8; font-size: 20px;
+  width: 54px; height: 54px; flex-shrink: 0; border-radius: 15px; border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(10, 28, 44, 0.9); color: #e8f1f8; font-size: 23px;
   cursor: pointer; touch-action: manipulation;
-  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
   display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+  transition: transform 0.12s ease, background 0.18s ease, border-color 0.18s ease;
 }
+.ctl:active { transform: scale(0.92); }
 .ctl.active { background: #1a6fb5; border-color: #4aa3e0; }
 .ctl.recording { background: #a02020; border-color: #e05050; animation: pulse 1.5s infinite; }
 @keyframes pulse { 50% { opacity: 0.6; } }
 
-/* ---- Panels (bottom sheets) ---- */
-.panel {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 2000;
-  max-height: 75vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
-  background: #0e2438; border-radius: 16px 16px 0 0;
-  padding: 14px 16px calc(env(safe-area-inset-bottom, 0px) + 20px);
-  box-shadow: 0 -4px 30px rgba(0,0,0,0.5);
+/* ---- Bottom tab bar ---- */
+:root { --tabbar-h: 62px; }
+#tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 2500;
+  height: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  display: flex; align-items: stretch;
+  background: rgba(8, 22, 36, 0.94);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  border-top: 1px solid rgba(255,255,255,0.1);
+  box-shadow: 0 -2px 18px rgba(0,0,0,0.4);
 }
+.tab-btn {
+  flex: 1; min-width: 0; border: none; background: none; color: #cfe0ee;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.2px;
+  cursor: pointer; touch-action: manipulation; padding: 0;
+  transition: color 0.18s ease, transform 0.12s ease;
+}
+.tab-btn .tb-ico { font-size: 23px; line-height: 1; transition: transform 0.18s ease; }
+.tab-btn .tb-lbl { opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.tab-btn:active { transform: scale(0.9); }
+.tab-btn.active { color: #6cc6ff; }
+.tab-btn.active .tb-ico { transform: translateY(-1px) scale(1.1); }
+/* Voice tab: the hands-free hero, raised out of the bar */
+.tab-btn.voice .tb-ico {
+  width: 50px; height: 50px; border-radius: 50%;
+  background: #12604a; border: 1px solid #37b98a;
+  display: flex; align-items: center; justify-content: center;
+  margin-top: -16px; box-shadow: 0 3px 14px rgba(0,0,0,0.45);
+  font-size: 24px;
+}
+.tab-btn.voice.listening .tb-ico { background: #a02020; border-color: #e05050; animation: pulse 1.2s infinite; }
+.tab-btn.voice.awake .tb-ico { background: #1a6fb5; border-color: #6cc6ff; }
+
+/* ---- "More" sheet tiles ---- */
+.more-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 6px; }
+.more-tile {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  min-height: 86px; padding: 12px 6px; cursor: pointer; touch-action: manipulation;
+  border-radius: 14px; border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.06); color: #e8f1f8;
+  font-size: 12px; font-weight: 600; text-align: center; line-height: 1.25;
+  transition: transform 0.12s ease, background 0.18s ease;
+}
+.more-tile:active { transform: scale(0.95); background: rgba(255,255,255,0.12); }
+.more-tile .mt-ico { font-size: 26px; line-height: 1; }
+.more-tile.recording { background: rgba(160,32,32,0.35); border-color: #e05050; animation: pulse 1.5s infinite; }
+
+/* ---- Panels (bottom sheets) ---- */
+/* Sheets stop at the top of the tab bar so navigation stays visible and tappable
+   while a panel is open (you can hop Weather → Tides without closing anything). */
+.panel {
+  position: fixed; left: 0; right: 0; z-index: 2000;
+  bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px));
+  max-height: calc(100vh - var(--tabbar-h) - env(safe-area-inset-bottom, 0px) - 58px);
+  overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+  background: #0e2438; border-radius: 18px 18px 0 0;
+  padding: 14px 16px 20px;
+  box-shadow: 0 -4px 30px rgba(0,0,0,0.55);
+}
+/* Panels animate in when they flip from display:none — keeps opening from feeling abrupt.
+   Deliberately NOT a translateY slide: a slide has to start below its resting place, so a
+   stalled/throttled animation (app backgrounded, dropped frames) can leave the sheet parked
+   over the tab bar. Scaling from the bottom edge pins the bottom, so the panel can never
+   extend past its own box no matter where the animation stops. */
+.panel:not(.hidden) {
+  transform-origin: bottom center;
+  animation: sheetUp 0.24s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+/* Transform-only, never opacity: if the animation is frozen mid-flight (backgrounded app,
+   stalled compositor) the panel is still fully opaque and readable — just momentarily 4%
+   short. Starting from opacity 0 would risk an invisible-but-present sheet. */
+@keyframes sheetUp {
+  from { transform: scaleY(0.96); }
+  to   { transform: none; }
+}
+@media (prefers-reduced-motion: reduce) { .panel:not(.hidden) { animation: none; } }
 .panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 .panel h2 { margin: 0; font-size: 17px; }
 .panel h3 { margin: 14px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.6; }
@@ -208,7 +275,7 @@ button.primary {
 /* ---- Animation control bars (rain / wind loops) ---- */
 #anim-controls {
   position: fixed; left: 50%; transform: translateX(-50%);
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); z-index: 1000;
+  bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + 12px); z-index: 1000;
   display: flex; flex-direction: column; gap: 6px; align-items: center;
 }
 .anim-bar {
@@ -238,7 +305,7 @@ button.primary {
 /* ---- SST legend ---- */
 #sst-legend {
   position: fixed; left: calc(env(safe-area-inset-left, 0px) + 10px);
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); z-index: 1000;
+  bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + 12px); z-index: 1000;
   background: rgba(8, 22, 36, 0.85); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
   border: 1px solid rgba(255,255,255,0.15); border-radius: 10px; padding: 8px 10px; width: 148px;
 }
@@ -397,7 +464,8 @@ button.primary {
 .ctl.asst.active { background: #1a6fb5; border-color: #4aa3e0; }
 #panel-assistant {
   display: flex; flex-direction: column;
-  height: 84vh; max-height: 84vh; overflow: hidden;
+  height: calc(100vh - var(--tabbar-h) - env(safe-area-inset-bottom, 0px) - 58px);
+  overflow: hidden;
 }
 .asst-status { font-size: 11.5px; opacity: 0.75; margin: 2px 0 6px; display: flex; align-items: center; gap: 6px; }
 .asst-status .dot { width: 8px; height: 8px; }
@@ -501,7 +569,7 @@ button.primary {
 
 /* ---- Toast ---- */
 #toast {
-  position: fixed; bottom: calc(env(safe-area-inset-bottom, 0px) + 90px);
+  position: fixed; bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + 22px);
   left: 50%; transform: translateX(-50%); z-index: 4000;
   background: rgba(10, 30, 48, 0.95); border: 1px solid rgba(255,255,255,0.2);
   color: #fff; padding: 10px 18px; border-radius: 24px; font-size: 14px;

@@ -41,26 +41,55 @@
 
   /* ---- Layers ---- */
   const live = { base: null, enc: null, seamark: null, labels: null, reliefhi: null };
+
+  /* Layers used to pop out the instant a checkbox changed, which reads as a flicker. Fade
+     them out on removal, and show a small spinner in the status bar while any layer's tiles
+     are still arriving so "nothing happened yet" is visibly distinct from "done". */
+  const _loadingLayers = new Set();
+  function updateTileBusy() {
+    const el = document.getElementById('tile-busy');
+    if (el) el.classList.toggle('hidden', _loadingLayers.size === 0);
+  }
+  function trackLayer(layer) {
+    layer.on('loading', () => { _loadingLayers.add(layer); updateTileBusy(); });
+    layer.on('load', () => { _loadingLayers.delete(layer); updateTileBusy(); });
+    layer.on('remove', () => { _loadingLayers.delete(layer); updateTileBusy(); });
+    return layer;
+  }
+  /* NOTE: deliberately no fade-IN on layers. Any fade that begins at opacity 0 leaves the
+     layer invisible if the animation never advances (backgrounded tab, frozen compositor),
+     and a blank chart underway is a safety problem — not worth a 300ms flourish. Leaflet
+     already fades each tile in as it loads, which gives the smoothness with no such risk. */
+  /* Fade out, then drop the layer. The caller clears its `live` slot immediately, so a fast
+     re-toggle just builds a fresh layer — this only ever removes the object it captured. */
+  function fadeOutRemove(layer) {
+    const c = layer.getContainer && layer.getContainer();
+    if (!c) { map.removeLayer(layer); return; }
+    c.style.transition = 'opacity 0.28s ease';
+    c.style.opacity = '0';
+    setTimeout(() => { try { map.removeLayer(layer); } catch (e) {} }, 280);
+  }
   const prefs = readJSON('fishapp.layers', { base: 'ocean', enc: true, seamark: true, wind: false });
 
   function setBase(id, isUserAction) {
-    if (live.base) map.removeLayer(live.base);
-    live.base = makeLayer(id).addTo(map);
+    const prevBase = live.base;
+    live.base = trackLayer(makeLayer(id)).addTo(map);
     live.base.setZIndex(0);
+    if (prevBase) fadeOutRemove(prevBase);   // cross-fade rather than a hard swap
     /* relief & satellite have no place names — add a labels overlay so you can find things */
     const needsLabels = id === 'gmrt' || id === 'sat';
-    if (needsLabels && !live.labels) { live.labels = makeLayer('labels').addTo(map); live.labels.setZIndex(3); }
-    if (!needsLabels && live.labels) { map.removeLayer(live.labels); live.labels = null; }
+    if (needsLabels && !live.labels) { live.labels = trackLayer(makeLayer('labels')).addTo(map); live.labels.setZIndex(3); }
+    if (!needsLabels && live.labels) { fadeOutRemove(live.labels); live.labels = null; }
     /* Bottom STRUCTURE: GMRT high-res multibeam hillshade (z11+), multiply-blended so its
        3D shading darkens the blue base with real relief — canyon walls, banks, ledges — while
        keeping the depth colour. GEBCO shows major structure instantly; GMRT sharpens the fine
        detail over a couple seconds, then caches (instant on revisit / offline downloads). */
     if (id === 'gmrt' && !live.reliefhi) {
-      live.reliefhi = makeLayer('reliefhi').addTo(map);
+      live.reliefhi = trackLayer(makeLayer('reliefhi')).addTo(map);
       live.reliefhi.setZIndex(1);
       live.reliefhi._container.style.mixBlendMode = 'multiply';
     }
-    if (id !== 'gmrt' && live.reliefhi) { map.removeLayer(live.reliefhi); live.reliefhi = null; }
+    if (id !== 'gmrt' && live.reliefhi) { fadeOutRemove(live.reliefhi); live.reliefhi = null; }
     prefs.base = id;
     savePrefs();
     /* NAVIONICS-STYLE relief: the base is GEBCO blue depth-shading, and the NOAA vector
@@ -75,8 +104,8 @@
     updateEncBlend();
   }
   function setOverlay(id, on) {
-    if (on && !live[id]) { live[id] = makeLayer(id).addTo(map); live[id].setZIndex(id === 'enc' ? 5 : 6); }
-    if (!on && live[id]) { map.removeLayer(live[id]); live[id] = null; }
+    if (on && !live[id]) { live[id] = trackLayer(makeLayer(id)).addTo(map); live[id].setZIndex(id === 'enc' ? 5 : 6); }
+    if (!on && live[id]) { fadeOutRemove(live[id]); live[id] = null; }
     prefs[id] = on;
     savePrefs();
     if (id === 'enc') updateEncBlend();
@@ -168,13 +197,24 @@
   document.getElementById('wind-scrub').addEventListener('input', (e) => windScrub(e.target.value));
 
   /* ---- Panels ---- */
-  const panels = ['panel-layers', 'panel-spots', 'panel-download', 'panel-weather', 'panel-tides', 'panel-tools', 'panel-knots', 'panel-emergency', 'panel-assistant'];
-  window.closePanels = () => panels.forEach((p) => document.getElementById(p).classList.add('hidden'));
-  function togglePanel(id) {
+  const panels = ['panel-layers', 'panel-spots', 'panel-download', 'panel-weather', 'panel-tides', 'panel-tools', 'panel-knots', 'panel-emergency', 'panel-assistant', 'panel-more'];
+  /* Which tab-bar button corresponds to which panel, so the bar can show what's open. */
+  const TAB_FOR_PANEL = { 'panel-weather': 'btn-weather', 'panel-tides': 'btn-tides', 'panel-more': 'btn-more' };
+  window.syncTabs = () => {
+    const openPanel = panels.find((p) => !document.getElementById(p).classList.contains('hidden'));
+    const activeBtn = openPanel ? TAB_FOR_PANEL[openPanel] : null;
+    document.querySelectorAll('#tabbar .tab-btn').forEach((b) => b.classList.toggle('active', b.id === activeBtn));
+  };
+  window.closePanels = () => {
+    panels.forEach((p) => document.getElementById(p).classList.add('hidden'));
+    syncTabs();
+  };
+  window.togglePanel = function togglePanel(id) {
     const el = document.getElementById(id);
     const wasHidden = el.classList.contains('hidden');
     closePanels();
     if (wasHidden) el.classList.remove('hidden');
+    syncTabs();
     if (id === 'panel-download' && wasHidden) { updateEstimate(); renderAreasList(); updateStorageInfo(); }
     if (id === 'panel-spots' && wasHidden) { renderSpotsList(); renderTracksList(); renderReefsList(); renderTripsList(); }
     if (id === 'panel-weather' && wasHidden) loadWeatherPanel();
@@ -185,11 +225,31 @@
     if (id === 'panel-assistant' && wasHidden) asstOnOpen();
   }
   document.querySelectorAll('.close').forEach((b) =>
-    b.addEventListener('click', () => document.getElementById(b.dataset.close).classList.add('hidden')));
+    b.addEventListener('click', () => { document.getElementById(b.dataset.close).classList.add('hidden'); syncTabs(); }));
 
   /* ---- Buttons ---- */
-  document.getElementById('btn-follow').onclick = () => setFollow(!GPS.follow);
-  map.on('dragstart', () => setFollow(false));
+  /* Hands-free follow: panning away turns follow off so you can look around, but after a
+     stretch of no interaction we snap back to the boat on our own — the way a chartplotter
+     does — so you never have to reach for the screen just to re-centre. An explicit tap on
+     ◉ Follow to turn it OFF is respected and never auto-reverted. */
+  const REFOLLOW_MS = 45000;
+  let _refollowTimer = null;
+  let _followOffByUser = false;
+  function scheduleRefollow() {
+    clearTimeout(_refollowTimer);
+    _refollowTimer = setTimeout(() => {
+      if (_followOffByUser || GPS.follow || !GPS.lastLatLng) return;
+      setFollow(true);
+    }, REFOLLOW_MS);
+  }
+  document.getElementById('btn-follow').onclick = () => {
+    const turningOn = !GPS.follow;
+    setFollow(turningOn);
+    _followOffByUser = !turningOn;      // deliberate "off" — don't auto-revert it
+    clearTimeout(_refollowTimer);
+  };
+  map.on('dragstart', () => { setFollow(false); scheduleRefollow(); });
+  map.on('zoomstart', scheduleRefollow);
 
   document.getElementById('btn-mark').onclick = () => {
     const ll = GPS.lastLatLng || map.getCenter();
@@ -202,6 +262,8 @@
   /* Single tap → route/measure tool if active, else inspect depth/wind/swell */
   map.on('click', (e) => { if (!navHandleClick(e.latlng)) inspectAt(e.latlng); });
 
+  document.getElementById('btn-more').onclick = () => togglePanel('panel-more');
+  document.getElementById('btn-voice').onclick = () => { if (typeof voiceToggle === 'function') voiceToggle(); };
   document.getElementById('btn-spots').onclick = () => togglePanel('panel-spots');
   document.getElementById('btn-weather').onclick = () => togglePanel('panel-weather');
   document.getElementById('btn-tides').onclick = () => togglePanel('panel-tides');
@@ -210,6 +272,7 @@
   document.getElementById('btn-emergency').onclick = () => togglePanel('panel-emergency');
   document.getElementById('btn-assistant').onclick = () => togglePanel('panel-assistant');
   asstInit();
+  if (typeof voiceInit === 'function') voiceInit();
   if (typeof areaDataInit === 'function') areaDataInit();
 
   /* Weather tabs (now / 10-day) */
@@ -271,7 +334,7 @@
   };
   document.getElementById('btn-layers').onclick = () => togglePanel('panel-layers');
   document.getElementById('btn-download').onclick = () => togglePanel('panel-download');
-  document.getElementById('btn-track').onclick = () => trackToggle();
+  document.getElementById('btn-track').onclick = () => { closePanels(); trackToggle(); };
   document.getElementById('gb-arrive').onclick = () => gotoArrive();
   document.getElementById('gb-cancel').onclick = () => gotoCancel();
   document.getElementById('btn-zoomin').onclick = () => map.zoomIn();
@@ -294,6 +357,19 @@
     if (e.target.files[0]) importData(e.target.files[0]);
     e.target.value = '';
   });
+
+  /* ---- Zero-tap refresh: keep an open data panel current without being touched.
+     Both loaders are cache-first and de-duped, so a tick that fails or overlaps is a no-op. ---- */
+  setInterval(() => {
+    if (document.hidden || !navigator.onLine) return;
+    if (!document.getElementById('panel-weather').classList.contains('hidden')) {
+      if (typeof loadNow24 === 'function') loadNow24();
+      if (WX._fc10loaded && typeof loadForecast10 === 'function') loadForecast10();
+    }
+    if (!document.getElementById('panel-tides').classList.contains('hidden')) {
+      if (typeof loadTidesTimes === 'function') loadTidesTimes();
+    }
+  }, 10 * 60 * 1000);
 
   /* ---- Online / offline badge ---- */
   function updateOnline() {
