@@ -89,17 +89,17 @@ const VOICE_COMMANDS = [
   { re: /\bwhere am i\b|\bmy position\b|\bcoordinates?\b/, run: () => voiceSayPosition() },
   { re: /\bhow fast\b|\bmy speed\b|\bspeed\b/, run: () => voiceSaySpeed() },
 
-  // --- panels ---
-  { re: /\b(?:weather|wind|forecast|waves?|swell)\b/, run: () => voicePanel('panel-weather', 'Weather.') },
-  { re: /\b(?:tide|tides|bite time|solunar|moon)\b/, run: () => voicePanel('panel-tides', 'Tides and bite times.') },
-  { re: /\b(?:spots?|waypoints?|tracks?|voyages?)\b/, run: () => voicePanel('panel-spots', 'Your spots.') },
-  { re: /\b(?:nav tools?|tools?|catch log|trip)\b/, run: () => voicePanel('panel-tools', 'Nav tools.') },
+  // --- panels (skipped for questions — see voiceIsQuestion) ---
+  { panel: 1, re: /\b(?:weather|wind|forecast|waves?|swell)\b/, run: () => voicePanel('panel-weather', 'Weather.') },
+  { panel: 1, re: /\b(?:tide|tides|bite time|solunar|moon)\b/, run: () => voicePanel('panel-tides', 'Tides and bite times.') },
+  { panel: 1, re: /\b(?:spots?|waypoints?|tracks?|voyages?)\b/, run: () => voicePanel('panel-spots', 'Your spots.') },
+  { panel: 1, re: /\b(?:nav tools?|tools?|catch log|trip)\b/, run: () => voicePanel('panel-tools', 'Nav tools.') },
   // Download must precede the layers rule — "offline charts" also contains "charts".
-  { re: /\b(?:download|offline)\b/, run: () => voicePanel('panel-download', 'Offline charts.') },
-  { re: /\b(?:layers?|chart|charts|map)\b/, run: () => voicePanel('panel-layers', 'Map layers.') },
-  { re: /\b(?:guides?|knots?|fish id|regulations?|limits?)\b/, run: () => voicePanel('panel-knots', 'Guides.') },
-  { re: /\b(?:emergency|mayday|sos|distress)\b/, run: () => voicePanel('panel-emergency', 'Emergency.') },
-  { re: /\b(?:more|menu)\b/, run: () => voicePanel('panel-more', 'More.') },
+  { panel: 1, re: /\b(?:download|offline)\b/, run: () => voicePanel('panel-download', 'Offline charts.') },
+  { panel: 1, re: /\b(?:layers?|chart|charts|map)\b/, run: () => voicePanel('panel-layers', 'Map layers.') },
+  { panel: 1, re: /\b(?:guides?|knots?|fish id|regulations?|limits?)\b/, run: () => voicePanel('panel-knots', 'Guides.') },
+  { panel: 1, re: /\b(?:emergency|mayday|sos|distress)\b/, run: () => voicePanel('panel-emergency', 'Emergency.') },
+  { panel: 1, re: /\b(?:more|menu)\b/, run: () => voicePanel('panel-more', 'More.') },
 ];
 
 function voicePanel(id, say) {
@@ -185,10 +185,24 @@ async function voiceHandleTranscript(raw) {
   await voiceRun(t.replace(WAKE_RE, '').trim());
 }
 
+/* Is this a QUESTION rather than a command to open something?
+   "show me the weather" wants the panel. "what's the weather in Catalina" wants an ANSWER —
+   and the panel can only ever show the boat's own position, so routing a question there is
+   guaranteed to answer the wrong thing. Questions are handed to First Mate instead, which
+   can geocode a named place and speak the result back. Only the panel rules are skipped;
+   actions ("mark this spot at the point") and the direct readouts still match first. */
+const VOICE_QUESTION_RE = /^(?:what|whats|when|where|why|how|is|are|was|will|should|can|could|do|does|did|any)\b/;
+const VOICE_ELSEWHERE_RE = /\b(?:in|at|near|around|off|by|over)\s+[a-z]/;   // "…in catalina", not "…in 30 feet"
+function voiceIsQuestion(cmd) {
+  return VOICE_QUESTION_RE.test(cmd) || VOICE_ELSEWHERE_RE.test(cmd);
+}
+
 async function voiceRun(cmd) {
   if (!cmd) return;
   voiceSetAwake(false);
+  const asking = voiceIsQuestion(cmd);
   for (const c of VOICE_COMMANDS) {
+    if (c.panel && asking) continue;   // a question isn't a request to open a screen
     if (c.re.test(cmd)) {
       let say;
       try { say = await c.run(); } catch (e) { say = 'That did not work.'; }

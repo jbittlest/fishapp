@@ -1359,17 +1359,52 @@ function asstSpeak(text) {
     window.speechSynthesis.speak(u);
   } catch (e) { /* ignore */ }
 }
+/* Rank installed voices by how human they sound.
+
+   The single biggest factor is out of our hands: iOS ships only "compact" quality voices by
+   default, and those are the robotic ones. The natural variants (Enhanced / Premium) have to
+   be downloaded by the user in Settings → Accessibility → Spoken Content → Voices. We can
+   only choose among what's actually installed, so rank and take the best available — and let
+   the user override the choice, since which voices exist differs per device. */
+function asstVoiceScore(v) {
+  const n = v.name || '';
+  let s = 0;
+  if (/enhanced|premium|neural/i.test(n)) s += 100;   // the natural-sounding downloads
+  if (/siri/i.test(n)) s += 60;
+  if (/\b(ava|allison|samantha|joelle|nicky|zoe|evan|noelle|tom)\b/i.test(n)) s += 30;
+  if (/compact/i.test(n)) s -= 50;                    // explicitly the robotic ones
+  if (/en[-_]US/i.test(v.lang)) s += 20;
+  else if (/^en/i.test(v.lang)) s += 10;
+  if (v.localService) s += 5;                         // local = no network hitch mid-sentence
+  return s;
+}
+function asstVoiceList() {
+  if (!('speechSynthesis' in window)) return [];
+  return (window.speechSynthesis.getVoices() || []).filter((v) => /^en/i.test(v.lang));
+}
 function asstPickVoice() {
   if (!('speechSynthesis' in window)) return;
   const pick = () => {
-    const vs = window.speechSynthesis.getVoices() || [];
-    ASST._voice =
-      vs.find((v) => /en[-_]US/i.test(v.lang) && /samantha|aaron|natural|enhanced|siri/i.test(v.name)) ||
-      vs.find((v) => /en[-_]US/i.test(v.lang)) ||
-      vs.find((v) => /^en/i.test(v.lang)) || null;
+    const vs = asstVoiceList();
+    if (!vs.length) return;                            // iOS populates this asynchronously
+    const saved = localStorage.getItem('fishapp.asst.voice');
+    ASST._voice = (saved && vs.find((v) => v.name === saved)) ||
+      vs.slice().sort((a, b) => asstVoiceScore(b) - asstVoiceScore(a))[0] || null;
+    asstFillVoicePicker();
   };
   pick();
-  window.speechSynthesis.onvoiceschanged = pick;
+  window.speechSynthesis.onvoiceschanged = pick;      // fires once the list is ready
+}
+/* Populate the settings dropdown with whatever this device actually has, best first. */
+function asstFillVoicePicker() {
+  const sel = document.getElementById('asst-voice');
+  if (!sel) return;
+  const vs = asstVoiceList().slice().sort((a, b) => asstVoiceScore(b) - asstVoiceScore(a));
+  if (!vs.length) return;
+  const current = (ASST._voice && ASST._voice.name) || '';
+  sel.innerHTML = vs.map((v) =>
+    '<option value="' + escapeHtml(v.name) + '"' + (v.name === current ? ' selected' : '') + '>' +
+    escapeHtml(v.name) + (/enhanced|premium|neural/i.test(v.name) ? ' ⭐' : '') + '</option>').join('');
 }
 function asstUpdateSpeakBtn() {
   const b = document.getElementById('asst-speak');
@@ -1512,6 +1547,13 @@ function asstInit() {
     if (keyIn) localStorage.setItem('fishapp.asst.key', keyIn.value.trim());
     if (modelIn) localStorage.setItem('fishapp.asst.model', modelIn.value);
     if (proxyIn) localStorage.setItem('fishapp.asst.proxy', proxyIn.value.trim());
+    const voiceIn = document.getElementById('asst-voice');
+    if (voiceIn && voiceIn.value) {
+      localStorage.setItem('fishapp.asst.voice', voiceIn.value);
+      const v = asstVoiceList().find((x) => x.name === voiceIn.value);
+      if (v) ASST._voice = v;
+      asstSpeak('This is how I sound.');   // immediate feedback so the choice is auditable
+    }
     asstSetStatus();
     if (typeof toast === 'function') toast('Assistant settings saved');
     const det = document.getElementById('asst-settings'); if (det) det.open = false;
