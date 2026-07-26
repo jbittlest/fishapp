@@ -100,37 +100,101 @@ async function saveCatch() {
   renderCatchList();
 }
 
-/* Auto-capture the conditions at the moment/place of the catch */
+/* Auto-capture the conditions at the moment/place of the catch.
+
+   These records are the raw material for the bite-pattern engine (bite.js), so values are
+   stored as NUMBERS wherever they'll be compared later — the human-readable strings are kept
+   alongside purely for the popup. Anything not captured at catch time is gone forever, which
+   is why this grabs more than the UI currently displays. */
 async function captureConditions(ll) {
   const cond = {};
-  const ill = Astro.moonIllumination(new Date());
+  const now = new Date();
+  const ill = Astro.moonIllumination(now);
   cond.moon = Astro.moonPhaseName(ill.phase);
   cond.moonLit = Math.round(ill.fraction * 100);
+  cond.moonPhase = +ill.phase.toFixed(3);        // 0-1, numeric for matching
   // solunar: was it a major/minor period?
-  const per = Astro.solunar(new Date(), ll.lat, ll.lng);
+  const per = Astro.solunar(now, ll.lat, ll.lng);
   const nowMs = Date.now();
   const act = per.find((p) => nowMs >= p.start && nowMs <= p.end);
   cond.solunar = act ? act.type : 'off';
+
+  /* Light phase and minutes to the nearest sunrise/sunset — dawn/dusk proximity is one of
+     the strongest timing signals in fishing, and it can't be reconstructed after the fact. */
+  try {
+    const st = Astro.sunTimes(now, ll.lat, ll.lng);
+    const mins = (a, b) => Math.round((a - b) / 60000);
+    const dSunrise = st.sunrise ? mins(now, st.sunrise) : null;
+    const dSunset = st.sunset ? mins(now, st.sunset) : null;
+    cond.minsFromSunrise = dSunrise;
+    cond.minsFromSunset = dSunset;
+    if (dSunrise != null && dSunset != null) {
+      const nearest = Math.abs(dSunrise) <= Math.abs(dSunset) ? dSunrise : dSunset;
+      cond.minsFromLightChange = nearest;
+      cond.lightPhase = Math.abs(nearest) <= 60 ? (Math.abs(dSunrise) <= Math.abs(dSunset) ? 'dawn' : 'dusk')
+        : (dSunrise > 0 && dSunset < 0 ? 'day' : 'night');
+    }
+  } catch (e) { /* non-fatal */ }
+
   if (navigator.onLine) {
     try {
       const d = await fetch('https://marine-api.open-meteo.com/v1/marine?latitude=' + ll.lat.toFixed(3) +
         '&longitude=' + ll.lng.toFixed(3) + '&current=sea_surface_temperature,wave_height&temperature_unit=fahrenheit').then((r) => r.json());
-      if (d.current) { if (d.current.sea_surface_temperature != null) cond.sst = Math.round(d.current.sea_surface_temperature); }
+      if (d.current) {
+        if (d.current.sea_surface_temperature != null) cond.sst = Math.round(d.current.sea_surface_temperature);
+        // wave height was being fetched and thrown away — keep it, it's a bite factor
+        if (d.current.wave_height != null) cond.waveFt = +(d.current.wave_height * MS_TO_FT).toFixed(1);
+      }
     } catch (e) {}
     try {
+      /* Barometric pressure AND its trend. Trend matters more than the absolute value —
+         fish notoriously go off on a sharp rise after a front — and it needs the last few
+         hours of history, which only exists at capture time. */
       const w = await fetch('https://api.open-meteo.com/v1/forecast?latitude=' + ll.lat.toFixed(3) +
-        '&longitude=' + ll.lng.toFixed(3) + '&current=wind_speed_10m,wind_direction_10m&wind_speed_unit=kn').then((r) => r.json());
-      if (w.current) cond.wind = Math.round(w.current.wind_speed_10m) + 'kn ' + compass(w.current.wind_direction_10m);
+        '&longitude=' + ll.lng.toFixed(3) +
+        '&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m,pressure_msl,cloud_cover' +
+        '&hourly=pressure_msl&past_hours=6&forecast_hours=1' +
+        '&wind_speed_unit=kn&temperature_unit=fahrenheit').then((r) => r.json());
+      if (w.current) {
+        cond.windKn = Math.round(w.current.wind_speed_10m);
+        cond.windDir = Math.round(w.current.wind_direction_10m);
+        cond.gustKn = w.current.wind_gusts_10m != null ? Math.round(w.current.wind_gusts_10m) : null;
+        cond.airF = w.current.temperature_2m != null ? Math.round(w.current.temperature_2m) : null;
+        cond.cloudPct = w.current.cloud_cover != null ? Math.round(w.current.cloud_cover) : null;
+        cond.pressureHpa = w.current.pressure_msl != null ? +w.current.pressure_msl.toFixed(1) : null;
+        cond.wind = cond.windKn + 'kn ' + compass(cond.windDir);   // display string (unchanged)
+      }
+      const ph = w.hourly && w.hourly.pressure_msl;
+      if (ph && ph.length >= 4 && cond.pressureHpa != null) {
+        const past = ph.filter((v) => v != null);
+        const threeAgo = past[Math.max(0, past.length - 4)];
+        if (threeAgo != null) {
+          cond.pressureTrend3h = +(cond.pressureHpa - threeAgo).toFixed(1);
+          cond.pressureTrend = cond.pressureTrend3h > 1 ? 'rising'
+            : (cond.pressureTrend3h < -1 ? 'falling' : 'steady');
+        }
+      }
     } catch (e) {}
     if (Tides.stations && Tides.stations.length) {
       try {
         const st = nearestTideStation(ll);
-        const now = new Date();
         const r = await fetch('https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?application=fishapp&datum=MLLW&time_zone=lst_ldt&units=english&format=json&product=predictions&interval=hilo&station=' + st.id +
-          '&begin_date=' + ymd(new Date(now - 86400000)) + '&end_date=' + ymd(new Date(+now + 86400000))).then((x) => x.json());
-        const hl = (r.predictions || []).map((p) => ({ t: new Date(p.t.replace(' ', 'T')).getTime(), type: p.type }));
-        const next = hl.find((p) => p.t > now);
-        if (next) cond.tide = (next.type === 'H' ? 'incoming' : 'outgoing');
+          '&begin_date=' + ymd(new Date(nowMs - 86400000)) + '&end_date=' + ymd(new Date(nowMs + 86400000))).then((x) => x.json());
+        const hl = (r.predictions || []).map((p) => ({ t: new Date(p.t.replace(' ', 'T')).getTime(), type: p.type, v: parseFloat(p.v) }));
+        const next = hl.find((p) => p.t > nowMs);
+        const prev = hl.filter((p) => p.t <= nowMs).pop();
+        if (next) {
+          cond.tide = (next.type === 'H' ? 'incoming' : 'outgoing');
+          // Minutes to the turn, and how far through the cycle — slack vs mid-flow is a much
+          // sharper signal than direction alone, and it can't be recovered later.
+          cond.minsToTideChange = Math.round((next.t - nowMs) / 60000);
+          if (prev) {
+            const span = next.t - prev.t;
+            if (span > 0) cond.tidePct = Math.round(((nowMs - prev.t) / span) * 100);
+            cond.tideRangeFt = (next.v != null && prev.v != null) ? +Math.abs(next.v - prev.v).toFixed(1) : null;
+          }
+        }
+        cond.tideStation = st.id;
       } catch (e) {}
     }
   }

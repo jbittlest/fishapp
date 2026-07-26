@@ -395,6 +395,17 @@ button.primary {
 .tt-row.solunar-major span:first-child { color: #3dd464; }
 .tt-row.solunar-minor span:first-child { color: #e8c93d; }
 .tide-svg { width: 100%; height: 90px; display: block; margin: 4px 0; }
+
+/* ---- Bite windows (learned from the user's own catch log) ---- */
+.bite-win {
+  border: 1px solid rgba(255,255,255,0.12); border-radius: 10px;
+  padding: 9px 11px; margin-bottom: 7px; background: rgba(255,255,255,0.04);
+}
+.bite-win.top { border-color: rgba(61,212,100,0.5); background: rgba(61,212,100,0.1); }
+.bw-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 14px; }
+.bw-score { font-size: 13px; font-weight: 700; color: #3dd464; font-variant-numeric: tabular-nums; flex: none; }
+.bite-win.top .bw-score { font-size: 15px; }
+.bw-why { font-size: 12px; opacity: 0.75; margin-top: 3px; line-height: 1.35; }
 .tool-row { display: flex; gap: 8px; margin: 6px 0; }
 .tool-btn {
   flex: 1; padding: 9px 6px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2);

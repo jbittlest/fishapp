@@ -74,6 +74,17 @@ const VOICE_COMMANDS = [
   { re: /\b(?:close|dismiss|hide|never mind|go back|nothing)\b/,
     run: () => { if (typeof closePanels === 'function') closePanels(); return 'Closed.'; } },
 
+  // --- personal bite prediction (must precede the "tide"/"weather" panel rules, which
+  //     would otherwise swallow "when's the best tide to fish") ---
+  { re: /\bwhen (should|do|can) i (go|fish|head out)\b|\bbest (time|window|day)( to)?( go)?( fish\w*)?\b|\bwhen to go\b|\bwhen'?s the bite\b|\bshould i go fish\w*\b/,
+    run: async () => {
+      if (typeof biteWindows !== 'function') return "I can't work that out yet.";
+      try {
+        const res = await biteWindows({ days: 7, limit: 3 });
+        return biteSpokenSummary(res, {});
+      } catch (e) { return "I couldn't work out a window."; }
+    } },
+
   // --- spoken answers straight from live boat data (instant, no AI round-trip) ---
   { re: /\bwhere am i\b|\bmy position\b|\bcoordinates?\b/, run: () => voiceSayPosition() },
   { re: /\bhow fast\b|\bmy speed\b|\bspeed\b/, run: () => voiceSaySpeed() },

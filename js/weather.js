@@ -393,7 +393,9 @@ async function loadForecast10(override) {
     const [wx, marine] = await Promise.all([
       fetch('https://api.open-meteo.com/v1/forecast?' + base + '&forecast_days=10' +
         '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant,sunrise,sunset,uv_index_max' +
-        '&hourly=temperature_2m,precipitation_probability,wind_speed_10m,wind_direction_10m,wind_gusts_10m' +
+        // pressure_msl + cloud_cover are here for the bite engine (bite.js), which scores
+        // future hours on the same dimensions the catch log records.
+        '&hourly=temperature_2m,precipitation_probability,wind_speed_10m,wind_direction_10m,wind_gusts_10m,pressure_msl,cloud_cover' +
         '&wind_speed_unit=kn&temperature_unit=fahrenheit&precipitation_unit=inch').then((r) => r.ok ? r.json() : null),
       fetch('https://marine-api.open-meteo.com/v1/marine?' + base + '&forecast_days=8' +
         '&daily=wave_height_max,wave_direction_dominant,wave_period_max,swell_wave_height_max,swell_wave_period_max' +

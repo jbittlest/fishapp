@@ -3,7 +3,7 @@
 
 /* Keep in step with CACHE in sw.js. Shown in the More sheet next to the build the service
    worker is actually serving, so a device running stale cached code is visible at a glance. */
-const APP_BUILD = 'v78';
+const APP_BUILD = 'v79';
 
 (async function init() {
   let map;
@@ -246,7 +246,10 @@ const APP_BUILD = 'v78';
     if (id === 'panel-download' && wasHidden) { updateEstimate(); renderAreasList(); updateStorageInfo(); }
     if (id === 'panel-spots' && wasHidden) { renderSpotsList(); renderTracksList(); renderReefsList(); renderTripsList(); }
     if (id === 'panel-weather' && wasHidden) loadWeatherPanel();
-    if (id === 'panel-tides' && wasHidden) loadTidesTimes();
+    if (id === 'panel-tides' && wasHidden) {
+      loadTidesTimes();
+      if (typeof renderBiteWindows === 'function') renderBiteWindows();
+    }
     if (id === 'panel-tools' && wasHidden) { renderCatchList(); updateAnchorUi(); updateTripUi(); routeStats(); }
     if (id === 'panel-knots' && wasHidden) { renderKnots(); renderFishId(); }
     if (id === 'panel-emergency' && wasHidden) updateEmergency();
@@ -418,6 +421,10 @@ const APP_BUILD = 'v78';
       if (typeof loadTidesTimes === 'function') loadTidesTimes();
     }
   }, 10 * 60 * 1000);
+
+  /* Proactive conditions watch — speaks up when the wind or swell is about to build.
+     Long internal cooldown, so this interval only polls; it rarely says anything. */
+  setInterval(() => { if (typeof watchCheck === 'function') watchCheck(); }, 10 * 60 * 1000);
 
   /* ---- Online / offline badge ---- */
   function updateOnline() {

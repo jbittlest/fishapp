@@ -215,7 +215,9 @@ function asstTipsTable() {
 }
 
 /* ================= OFFLINE deterministic engine ================= */
-function asstOffline(q) {
+/* async because the bite-window intent reads cached tide predictions (and may refresh them);
+   both call sites in asstSend already await it. */
+async function asstOffline(q) {
   const t = q.toLowerCase();
   const { ll, live } = asstPos();
   const has = (...w) => w.some((x) => t.includes(x));
@@ -232,11 +234,20 @@ function asstOffline(q) {
   // Speed / heading
   if (has('how fast', 'my speed', 'speed over', ' sog', 'heading', 'which way', 'my course', 'course over'))
     return asstAnsSpeed();
-  // Multi-day "best day to fish" planner (bite + weather)
-  if (has('best day', 'which day', 'when should i go', 'plan my trip', 'plan a trip', 'should i go fishing',
-    'best day to fish', 'best morning', 'coming days to fish', 'when to go fishing') ||
-    (has('best time', 'when') && has('week', 'tomorrow', 'days', 'weekend')))
-    return asstAnsPlan();
+  /* "When should I go" — try the PERSONAL bite engine first: patterns learned from this
+     user's own catch log beat generic solunar tables whenever there's enough history.
+     asstAnsBite returns null when there isn't, and we fall through to the generic planner
+     below, so a new user still gets a useful answer from day one. */
+  const wantsWhen = has('best day', 'which day', 'when should i go', 'plan my trip', 'plan a trip',
+    'should i go fishing', 'best day to fish', 'best morning', 'coming days to fish', 'when to go fishing',
+    'best time to fish', 'best time to go', 'when to go', 'when is the bite', "when's the bite", 'when do i go') ||
+    (has('best time', 'when') && has('week', 'tomorrow', 'days', 'weekend'));
+  if (wantsWhen) {
+    const personal = await asstAnsBite(t);
+    if (personal) return personal;
+  }
+  // Multi-day "best day to fish" planner (bite + weather) — generic fallback
+  if (wantsWhen) return asstAnsPlan();
   // Bite / solunar (today)
   if (has('bite', 'solunar', 'best time', 'when to fish', 'feeding', 'best window'))
     return asstAnsSolunar(ll);
@@ -798,6 +809,32 @@ function asstAnsHelp() {
     "• Fish size/bag limits, closures, knots, Mayday info\n" +
     "• Drop & name a waypoint\n\n" +
     "(Tides, multi-day weather & fish history need the area downloaded first.) Add an API key in ⚙️ and, with signal, I'll also chat freely and take actions.";
+}
+
+/* Personal bite windows from the user's own catch log (bite.js).
+   Returns null — deliberately, not an error string — when there isn't enough history or no
+   saved forecast, so the caller falls back to the generic solunar planner. */
+async function asstAnsBite(t) {
+  if (typeof biteWindows !== 'function') return null;
+  try {
+    /* Match only species actually in the log, longest first so "calico bass" beats a bare
+       "bass". Unrecognised names just fall through to all catches. */
+    let species = null;
+    if (typeof Catch !== 'undefined' && Catch.all) {
+      const names = Array.from(new Set(Catch.all.map((c) => (c.species || '').trim())))
+        .filter((s) => s.length > 2).sort((a, b) => b.length - a.length);
+      species = names.find((n) => t.includes(n.toLowerCase())) || null;
+    }
+    const res = await biteWindows({ days: 7, limit: 3, species: species || undefined });
+    if (!res || res.error || !res.windows || !res.windows.length) return null;   // -> generic planner
+    let out = '🎣 Best windows' + (species ? ' for ' + species : '') +
+      ', scored against your ' + res.n + ' logged catches (' + res.confidence.label + '):\n';
+    res.windows.forEach((w, i) => {
+      out += '\n' + (i + 1) + '. ' + biteFmtWindow(w) + ' — ' + Math.round(w.score * 100) + '%\n   ' +
+        w.best.hits.slice(0, 3).map(biteReason).join(' · ');
+    });
+    return out;
+  } catch (e) { return null; }
 }
 
 /* ---- Local waypoint action (used offline AND by the online place_waypoint tool) ---- */
@@ -1392,7 +1429,7 @@ async function asstSend(text) {
       if (ASST.history.length > 24) ASST.history = ASST.history.slice(-24);
     } catch (e) {
       // graceful fallback to the offline engine
-      const off = asstOffline(text);
+      const off = await asstOffline(text);
       botEl.classList.remove('thinking');
       botEl.classList.add('err');
       const why = useClaude ? (e.status === 401 ? 'bad API key' : (e.message || 'network')) : (e.message || 'network');
@@ -1401,7 +1438,7 @@ async function asstSend(text) {
     }
   } else {
     const botEl = asstAddMsg('bot', '');
-    const ans = asstOffline(text);
+    const ans = await asstOffline(text);
     botEl.textContent = ans;
     asstScroll();
     asstSpeak(ans);
