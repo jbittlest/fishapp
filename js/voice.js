@@ -227,6 +227,10 @@ function voiceBuildRec() {
   r.onend = () => {
     Voice.rec = null;
     if (!Voice._wantOn) { voiceUpdateUi(); return; }
+    // Don't respin while backgrounded: the mic is dead there anyway, and a session started
+    // hidden would occupy Voice.rec and make the resume below a no-op — voice would stay
+    // silently dead after every app switch. visibilitychange owns the resume instead.
+    if (document.hidden) return;
     // The engine ends sessions constantly (silence, timeouts). Restart with a light backoff.
     const delay = Math.min(200 * Math.pow(2, Math.min(Voice._fails, 5)), 8000);
     clearTimeout(Voice._restartTimer);
@@ -297,17 +301,40 @@ function voiceToggle() {
    without this the restart loop burns battery for a mic that isn't recording. */
 document.addEventListener('visibilitychange', () => {
   if (!Voice._wantOn) return;
-  if (document.visibilityState === 'visible') { clearTimeout(Voice._restartTimer); voiceStart(); }
-  else if (Voice.rec) { try { Voice.rec.abort(); } catch (e) {} Voice.rec = null; }
+  clearTimeout(Voice._restartTimer);
+  if (document.visibilityState === 'visible') {
+    // Force a clean session: any recogniser left over from before the app was hidden is
+    // dead but still occupying Voice.rec, which would make voiceStart() a no-op.
+    if (Voice.rec) { try { Voice.rec.abort(); } catch (e) {} Voice.rec = null; }
+    Voice._fails = 0;
+    voiceStart();
+  } else if (Voice.rec) {
+    try { Voice.rec.abort(); } catch (e) {} Voice.rec = null;
+  }
 });
 
 function voiceInit() {
   voiceUpdateUi();
   const btn = document.getElementById('btn-voice');
   if (btn && !Voice.supported) btn.classList.add('unsupported');
-  // Intentionally NOT auto-started: browsers require a user gesture for the mic, and a
-  // silent permission prompt on launch is hostile. We only remember that it was on.
-  if (localStorage.getItem('fishapp.voice') === 'on' && Voice.supported) {
-    if (typeof toast === 'function') toast('🎤 Tap “Hey Fish” to resume hands-free');
+  /* Can't auto-start: browsers demand a user gesture to open the mic. But if hands-free was
+     on before this load (app relaunch, or a service-worker update reloading the page), don't
+     make the user go find the button — resume on the FIRST tap anywhere. */
+  if (Voice.supported && localStorage.getItem('fishapp.voice') === 'on') {
+    const resume = (e) => {
+      document.removeEventListener('pointerdown', resume, true);
+      // If that first tap WAS the mic button, let voiceToggle own it — otherwise we'd turn
+      // voice on here and its handler would immediately toggle it back off.
+      if (e && e.target && e.target.closest && e.target.closest('#btn-voice')) return;
+      if (Voice.on || Voice._wantOn) return;
+      Voice._wantOn = true;
+      Voice._fails = 0;
+      if (typeof unlockAudio === 'function') unlockAudio();
+      if (typeof requestWakeLock === 'function') requestWakeLock();
+      voiceStart();
+      if (typeof toast === 'function') toast('🎤 Hands-free resumed — say “Hey Fish”');
+    };
+    document.addEventListener('pointerdown', resume, true);
+    if (typeof toast === 'function') toast('🎤 Tap anywhere to resume hands-free');
   }
 }

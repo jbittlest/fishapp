@@ -462,6 +462,10 @@
         if (swReloaded || !hadController) return;
         if (typeof Goto !== 'undefined' && Goto.active) return;
         if (typeof Tracks !== 'undefined' && Tracks.recording) return;
+        // A reload tears down the microphone session, and the browser won't let us reopen it
+        // without a fresh user gesture — so an update would silently end hands-free mode.
+        // Skip it; the new version applies on the next cold start.
+        if (typeof Voice !== 'undefined' && (Voice.on || Voice._wantOn)) return;
         swReloaded = true;
         location.reload();
       });
