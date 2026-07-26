@@ -1395,16 +1395,33 @@ function asstPickVoice() {
   pick();
   window.speechSynthesis.onvoiceschanged = pick;      // fires once the list is ready
 }
-/* Populate the settings dropdown with whatever this device actually has, best first. */
+/* Populate the settings dropdown with whatever this device actually has, best first, and say
+   plainly which voice is live. The app already auto-selects the best installed voice, so the
+   only thing the user ever needs to DO is install a better one — the hint says so explicitly
+   rather than leaving them hunting through a dropdown that can't help. */
 function asstFillVoicePicker() {
   const sel = document.getElementById('asst-voice');
+  const hint = document.getElementById('asst-voice-hint');
   if (!sel) return;
   const vs = asstVoiceList().slice().sort((a, b) => asstVoiceScore(b) - asstVoiceScore(a));
-  if (!vs.length) return;
-  const current = (ASST._voice && ASST._voice.name) || '';
+  if (!vs.length) {
+    sel.innerHTML = '<option>No voices found on this device</option>';
+    if (hint) hint.textContent = 'This device reports no speech voices yet — reopen this panel in a moment.';
+    return;
+  }
+  const current = (ASST._voice && ASST._voice.name) || vs[0].name;
   sel.innerHTML = vs.map((v) =>
     '<option value="' + escapeHtml(v.name) + '"' + (v.name === current ? ' selected' : '') + '>' +
-    escapeHtml(v.name) + (/enhanced|premium|neural/i.test(v.name) ? ' ⭐' : '') + '</option>').join('');
+    escapeHtml(v.name) + (/enhanced|premium|neural/i.test(v.name) ? ' ⭐ natural' : '') + '</option>').join('');
+  if (!hint) return;
+  const good = vs.filter((v) => /enhanced|premium|neural/i.test(v.name));
+  hint.innerHTML = good.length
+    ? '🔊 Using <b>' + escapeHtml(current) + '</b>' +
+      (/enhanced|premium|neural/i.test(current) ? ' — this is a natural voice.' :
+        ' — pick one marked ⭐ above for a natural voice.')
+    : '🤖 Your phone only has basic (robotic) voices installed. To fix the sound: ' +
+      '<b>iPhone Settings → Accessibility → Spoken Content → Voices → English</b>, then download ' +
+      'one marked <b>Enhanced</b> (Ava or Allison). Reopen this panel afterwards and it will be picked automatically.';
 }
 function asstUpdateSpeakBtn() {
   const b = document.getElementById('asst-speak');
@@ -1527,6 +1544,10 @@ function asstRenderChips() {
 
 function asstOnOpen() {
   asstSetStatus();
+  /* iOS fills getVoices() asynchronously and fires voiceschanged once — often long before
+     this panel is first opened, leaving the picker empty when the user finally looks at it.
+     Refill on every open. */
+  if (typeof asstFillVoicePicker === 'function') asstFillVoicePicker();
   const box = document.getElementById('asst-messages');
   if (box && !box.children.length) {
     asstAddMsg('bot', "Ahoy! I'm First Mate 🎣\nNo signal needed for most of what you'll ask — best days to fish, is it too rough, tides, weather outlook, water temp, reefs, fish limits, knots, or dropping a waypoint. With a key + signal I'll also chat freely and take actions. Tap a suggestion to start.");
