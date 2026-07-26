@@ -130,7 +130,7 @@ function renderSpotsList() {
     item.querySelector('.go').onclick = () => {
       closePanels();
       setFollow(false);
-      window._map.setView(ll, Math.max(window._map.getZoom(), 14));
+      mapProgrammatic(() => window._map.setView(ll, Math.max(window._map.getZoom(), 14)));
       Spots.markers[s.id] && Spots.markers[s.id].openPopup();
     };
     item.querySelector('.del').onclick = async () => {

@@ -32,6 +32,7 @@ async function trackStop() {
 
   if (Tracks.points.length < 2) {
     toast('Track too short — not saved');
+    if (typeof window.applyPendingUpdate === 'function') window.applyPendingUpdate();
     return;
   }
   const track = {
@@ -44,15 +45,23 @@ async function trackStop() {
   await idb.put('tracks', track);
   renderTracksList();
   toast('Track saved (' + track.nm.toFixed(2) + ' nm)');
+  // recording is over — a deferred app update can safely apply now
+  if (typeof window.applyPendingUpdate === 'function') window.applyPendingUpdate();
 }
 
 /* Called from gps.js on every fix */
-function trackOnFix(ll, ts) {
+const TRACK_MIN_MOVE_M = 10;
+function trackOnFix(ll, ts, kn) {
   if (!Tracks.recording) return;
   // record a point at most every 5s or if moved >10 m
   if (Tracks._lastPt) {
     const moved = ll.distanceTo(Tracks._lastPt);
-    if (moved < 10 && ts - Tracks._lastTs < 5000) return;
+    /* The 5 s keepalive used to override the distance filter outright, so a boat
+       sitting still logged a point every 5 s of pure GPS noise — an 8-hour anchored
+       "track" accumulated a dozen nautical miles it never travelled. Keep the
+       keepalive, but only for a boat that's actually under way. */
+    const stationary = (kn != null && isFinite(kn)) ? kn < 0.5 : moved < 3;
+    if (moved < TRACK_MIN_MOVE_M && (stationary || ts - Tracks._lastTs < 5000)) return;
   }
   Tracks.points.push([ll.lat, ll.lng]);
   Tracks._lastPt = ll;
@@ -63,7 +72,10 @@ function trackOnFix(ll, ts) {
 function trackDistanceNm(points) {
   let m = 0;
   for (let i = 1; i < points.length; i++) {
-    m += L.latLng(points[i - 1]).distanceTo(L.latLng(points[i]));
+    const seg = L.latLng(points[i - 1]).distanceTo(L.latLng(points[i]));
+    /* Segments below the recorder's own movement threshold are jitter, not travel.
+       Summing them turned noise into distance on every saved track and voyage. */
+    if (seg >= TRACK_MIN_MOVE_M) m += seg;
   }
   return m / 1852;
 }
@@ -92,7 +104,7 @@ async function renderTracksList() {
       } else {
         Tracks.shown[t.id] = L.polyline(t.points, { color: '#ff9f43', weight: 3, opacity: 0.8 }).addTo(window._map);
         closePanels();
-        window._map.fitBounds(Tracks.shown[t.id].getBounds(), { padding: [40, 40] });
+        mapProgrammatic(() => window._map.fitBounds(Tracks.shown[t.id].getBounds(), { padding: [40, 40] }));
       }
       renderTracksList();
     };

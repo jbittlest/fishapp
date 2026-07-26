@@ -22,6 +22,12 @@ const Goto = {
 };
 
 function gotoStart(latlng, name) {
+  /* Diverting mid-run used to wipe the breadcrumb, start time and max speed with no
+     warning — the ✕ button asks before discarding a voyage, this path didn't.
+     Returns false when the user backs out, so callers don't half-apply a new run. */
+  if (Goto.active && Goto.track.length > 2) {
+    if (!confirm('You have a voyage in progress. Start a new one and discard it?')) return false;
+  }
   gotoClearLayers();
   Goto.active = true;
   Goto.route = null; Goto.legIdx = 0;   // plain single-destination run unless gotoStartRoute sets these
@@ -43,6 +49,7 @@ function gotoStart(latlng, name) {
   gotoUpdateBanner(Goto.startLL, null);
   if (typeof toast === 'function') toast('🧭 Navigating to ' + Goto.destName + (Goto.startLL ? '' : ' — waiting for GPS'));
   window._map.closePopup();
+  return true;
 }
 
 /* Follow a multi-point route: steer to waypoint 1, then auto-advance through the
@@ -53,7 +60,7 @@ function gotoStartRoute(pts) {
     return;
   }
   const route = pts.map((p) => L.latLng(p.lat, p.lng));
-  gotoStart(route[0], 'WP 1');
+  if (gotoStart(route[0], 'WP 1') === false) return;   // user kept the voyage in progress
   Goto.route = route;
   Goto.legIdx = 0;
   gotoRouteLabel();
@@ -81,7 +88,11 @@ function gotoUpdateBanner(ll, kn) {
 
   // steer hint from GPS heading, if we have one
   let steer = '';
-  const hd = (typeof GPS !== 'undefined' && GPS.last && GPS.last.coords && GPS.last.coords.heading != null && !isNaN(GPS.last.coords.heading)) ? GPS.last.coords.heading : null;
+  /* Fall back to course-over-ground. Reading coords.heading alone meant the steer
+     arrow — the one cue telling you WHICH WAY to turn — vanished on any device that
+     reports null below a speed threshold, while the status bar showed a good heading. */
+  let hd = (typeof GPS !== 'undefined' && GPS.last && GPS.last.coords && GPS.last.coords.heading != null && !isNaN(GPS.last.coords.heading)) ? GPS.last.coords.heading : null;
+  if (hd == null && typeof GPS !== 'undefined' && GPS.heading != null) hd = GPS.heading;
   if (hd != null && from) {
     const diff = ((brg - hd + 540) % 360) - 180;
     steer = Math.abs(diff) <= 5 ? ' ⬆︎' : (diff > 0 ? ' ↱' + Math.round(diff) + '°' : ' ↰' + Math.round(-diff) + '°');
@@ -123,6 +134,28 @@ function gotoUpdateBanner(ll, kn) {
   }
 }
 
+/* Arrival radius scales with speed — a boat at 25 kn crosses a fixed 148 m circle
+   in twelve seconds, which one slow fix can straddle entirely. */
+function gotoArrivalNm(kn) {
+  const base = 0.08;
+  if (kn == null || !isFinite(kn) || kn <= 6) return base;
+  return Math.min(0.25, base + (kn - 6) * 0.006);
+}
+/* Have we finished this leg? Either we're inside the arrival circle, or we've
+   crossed the plane through the waypoint — i.e. the mark is now behind the beam
+   relative to the leg we were running. */
+function gotoLegIsDone(ll, rem, kn) {
+  if (rem < gotoArrivalNm(kn)) return true;
+  const prev = Goto.legIdx > 0 ? Goto.route[Goto.legIdx - 1] : Goto.startLL;
+  if (!prev) return false;
+  const legBrg = bearingBetween(prev, Goto.dest);
+  const toDest = bearingBetween(ll, Goto.dest);
+  const off = Math.abs(((toDest - legBrg + 540) % 360) - 180);
+  /* >90° means the waypoint is behind us along the leg. Require a sane distance
+     too, so a wild fix right on top of the mark can't skip the rest of the route. */
+  return off > 90 && rem < 2;
+}
+
 /* Called every GPS fix (from navOnFix). */
 function gotoOnFix(ll, kn) {
   if (!Goto.active || !ll) return;
@@ -133,28 +166,39 @@ function gotoOnFix(ll, kn) {
   if (!Goto.startLL) { Goto.startLL = ll; Goto.planNm = nmBetween(ll, Goto.dest); }  // GPS came late
   gotoUpdateBanner(ll, kn);
 
-  const rem = nmBetween(ll, Goto.dest);
+  let rem = nmBetween(ll, Goto.dest);
   const banner = document.getElementById('goto-banner');
 
-  // Following a route: on reaching a waypoint, advance to the next leg.
-  if (rem < 0.08 && Goto.route && Goto.legIdx < Goto.route.length - 1) {
-    Goto.legIdx++;
-    Goto.dest = Goto.route[Goto.legIdx];
-    gotoRouteLabel();
-    // move the 🎯 pin (and its popup) forward to the new active waypoint — it used to
-    // stay frozen on WP 1 for the whole voyage while the banner advanced
-    if (Goto.destMarker) {
-      Goto.destMarker.setLatLng(Goto.dest);
-      Goto.destMarker.setPopupContent('🎯 ' + escapeHtml(Goto.destName));
+  /* Following a route: advance when we reach a waypoint — or when we've passed it.
+     Proximity alone wasn't enough: set wide around a headland by a current and you'd
+     never come inside the radius, so the app kept steering you BACK to a mark you'd
+     already cleared. Loop, so a GPS gap across several short legs catches up too. */
+  if (Goto.route) {
+    let advanced = 0;
+    while (Goto.legIdx < Goto.route.length - 1 &&
+           gotoLegIsDone(ll, rem, kn) && advanced < Goto.route.length) {
+      Goto.legIdx++;
+      Goto.dest = Goto.route[Goto.legIdx];
+      advanced++;
+      rem = nmBetween(ll, Goto.dest);
     }
-    Goto._arrived = false;
-    banner.classList.remove('arriving');
-    if (typeof toast === 'function') toast('✅ WP ' + Goto.legIdx + ' reached — steering to WP ' + (Goto.legIdx + 1));
-    gotoUpdateBanner(ll, kn);
-    return;
+    if (advanced) {
+      gotoRouteLabel();
+      // move the 🎯 pin (and its popup) forward to the new active waypoint — it used to
+      // stay frozen on WP 1 for the whole voyage while the banner advanced
+      if (Goto.destMarker) {
+        Goto.destMarker.setLatLng(Goto.dest);
+        Goto.destMarker.setPopupContent('🎯 ' + escapeHtml(Goto.destName));
+      }
+      Goto._arrived = false;
+      banner.classList.remove('arriving');
+      if (typeof toast === 'function') toast('✅ WP ' + Goto.legIdx + ' reached — steering to WP ' + (Goto.legIdx + 1));
+      gotoUpdateBanner(ll, kn);
+      return;
+    }
   }
 
-  if (rem < 0.08 && !Goto._arrived) {
+  if (rem < gotoArrivalNm(kn) && !Goto._arrived) {
     Goto._arrived = true; banner.classList.add('arriving');
     if (typeof toast === 'function') toast('🎯 Arriving at ' + Goto.destName + ' — tap ✓ Arrived to log it');
   } else if (rem >= 0.12 && Goto._arrived) {
@@ -169,6 +213,11 @@ function gotoCancel() {
 }
 
 async function gotoEnd(save) {
+  /* `Goto.active` isn't cleared until after the await below, so a double-tap on
+     ✓ Arrived — easy on a wet screen in a seaway — used to write the voyage twice. */
+  if (Goto._ending) return;
+  Goto._ending = true;
+  try {
   if (save) {
     if (Goto.track.length >= 2 && Goto.startLL) {
       const actualNm = trackDistanceNm(Goto.track);
@@ -192,6 +241,12 @@ async function gotoEnd(save) {
   Goto.active = false;
   gotoClearLayers();
   document.getElementById('goto-banner').classList.add('hidden');
+  } finally {
+    Goto._ending = false;
+    /* We're no longer "busy", so a held-back app update can land now. Without this
+       the toast promised "applies when you stop" and then never did. */
+    if (typeof window.applyPendingUpdate === 'function') window.applyPendingUpdate();
+  }
 }
 
 function gotoClearLayers() {
@@ -242,7 +297,7 @@ function gotoToggleTripPath(t) {
     });
     Goto.shown[t.id] = L.layerGroup([poly, pin]).addTo(window._map);
     closePanels();
-    window._map.fitBounds(poly.getBounds(), { padding: [40, 40] });
+    mapProgrammatic(() => window._map.fitBounds(poly.getBounds(), { padding: [40, 40] }));
   }
   renderTripsList();
 }

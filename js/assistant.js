@@ -221,18 +221,27 @@ async function asstOffline(q) {
   const t = q.toLowerCase();
   const { ll, live } = asstPos();
   const has = (...w) => w.some((x) => t.includes(x));
+  const word = (...w) => w.some((x) => new RegExp('\\b' + x + '\\b').test(t));
 
-  // Place a waypoint — a LOCAL action, so it works offline too
-  if (has('waypoint', 'drop a pin', 'pin it', 'mark this', 'mark here', 'mark spot', 'marker here',
-    'save this spot', 'save this location', 'save my spot', 'drop a mark') ||
+  /* Place a waypoint — a LOCAL action, so it works offline too.
+     Requires a CREATE phrase. A bare 'waypoint' used to match here first, so
+     "how far to my waypoint Rock Pile?" silently wrote a junk pin named
+     "Waypoint 7" to the database instead of answering the distance. */
+  if (has('drop a pin', 'pin it', 'mark this', 'mark here', 'mark spot', 'marker here',
+    'save this spot', 'save this location', 'save my spot', 'drop a mark',
+    'drop a waypoint', 'save a waypoint', 'mark a waypoint', 'add a waypoint', 'new waypoint',
+    'drop waypoint', 'save waypoint', 'mark waypoint') ||
     (has('name it', 'call it', 'named', 'called') && has('here', 'spot', 'pin', 'waypoint', 'mark')))
     return asstOfflinePlaceWaypoint(q);
 
   // Position
   if (has('where am i', 'my position', 'coordinate', 'my location', 'lat/long', 'lat long', 'gps'))
     return asstAnsPosition(ll, live);
-  // Speed / heading
-  if (has('how fast', 'my speed', 'speed over', ' sog', 'heading', 'which way', 'my course', 'course over'))
+  /* Speed / heading. "heading" as a verb is far more common here than as a bearing
+     ("heading to Catalina — how far?"), and a bare match sent those to the speed
+     readout instead of the distance answer. */
+  if (has('how fast', 'my speed', 'speed over', ' sog', 'which way', 'my course', 'course over') ||
+    /\b(?:my|what|current|our) heading\b|\bheading (?:is|now)\b/.test(t))
     return asstAnsSpeed();
   /* "When should I go" — try the PERSONAL bite engine first: patterns learned from this
      user's own catch log beat generic solunar tables whenever there's enough history.
@@ -241,7 +250,12 @@ async function asstOffline(q) {
   const wantsWhen = has('best day', 'which day', 'when should i go', 'plan my trip', 'plan a trip',
     'should i go fishing', 'best day to fish', 'best morning', 'coming days to fish', 'when to go fishing',
     'best time to fish', 'best time to go', 'when to go', 'when is the bite', "when's the bite", 'when do i go') ||
-    (has('best time', 'when') && has('week', 'tomorrow', 'days', 'weekend'));
+    /* Second clause must stay in the FISHING sense. A bare 'when' + a day word made
+       "when is high tide tomorrow?" answer with a bite-window planner and never
+       reach the tide intent below. */
+    ((has('best time') || /\bwhen (?:should|to|do|can)\b/.test(t)) &&
+      has('fish', 'go out', 'head out', 'bite') &&
+      has('week', 'tomorrow', 'days', 'weekend'));
   if (wantsWhen) {
     const personal = await asstAnsBite(t);
     if (personal) return personal;
@@ -291,8 +305,10 @@ async function asstOffline(q) {
   if (has('closure', 'closed to fish', 'protected area', 'marine protected', ' mpa', 'mpas',
     'can i fish here', 'legal to fish here', 'no-take', 'no take', 'reserve'))
     return asstAnsClosures();
-  // Waves / seas
-  if (has('wave', 'swell', 'seas', 'surf', 'chop'))
+  /* Waves / seas. 'seas' is a substring of 'season', so a bare match meant
+     "what's the season for lingcod?" returned a swell report and the regulations
+     intent below was unreachable. Word-boundary it, like the ' mpa' note above. */
+  if (has('wave', 'swell', 'surf', 'chop') || word('seas'))
     return asstAnsWaves();
   // Weather / wind
   if (has('weather', 'wind', 'windy', 'gust', 'forecast', 'breeze', 'conditions', 'rain', 'raining',
@@ -585,7 +601,9 @@ function asstAnsGoNoGo() {
 /* Nearest saved spot of a given type (ramp, anchorage, hazard, wreck). */
 function asstAnsNearest(t) {
   let type = null, label = '';
-  if (/ramp|launch|boat ?ramp|put.?in/.test(t)) { type = 'ramp'; label = 'ramp/dock'; }
+  // 'dock' is a trigger phrase upstream and maps to 'ramp' when placing a waypoint,
+  // so it has to resolve here too — otherwise "nearest dock" fell through to help.
+  if (/ramp|launch|boat ?ramp|put.?in|dock/.test(t)) { type = 'ramp'; label = 'ramp/dock'; }
   else if (/anchorage|anchor spot|place to anchor/.test(t)) { type = 'anchor'; label = 'anchorage'; }
   else if (/hazard|danger/.test(t)) { type = 'hazard'; label = 'hazard'; }
   else if (/wreck/.test(t)) { type = 'wreck'; label = 'wreck'; }
@@ -854,7 +872,7 @@ function asstParseWaypointName(q) {
   if (m) return m[1].trim().replace(/[.,!?]+$/, '');
   return null;
 }
-function asstOfflinePlaceWaypoint(q) {
+async function asstOfflinePlaceWaypoint(q) {
   const { ll, live } = asstPos();
   if (!ll) return "I can't drop a waypoint without a position — I need a GPS fix (or pan the map there first).";
   const t = q.toLowerCase();
@@ -864,8 +882,16 @@ function asstOfflinePlaceWaypoint(q) {
   else if (t.includes('hazard') || t.includes('danger') || t.includes('rock')) type = 'hazard';
   else if (t.includes('wreck') || t.includes('structure')) type = 'wreck';
   else if (t.includes('ramp') || t.includes('dock')) type = 'ramp';
-  asstCreateSpot({ lat: ll.lat, lng: ll.lng, name: name, type: type })
-    .then(() => { if (typeof toast === 'function') toast('📌 ' + name + ' saved'); });
+  /* Await it. This used to return "Saved and on the map" synchronously while the
+     write was still pending and swallow any rejection — so on a full or private-mode
+     store the user was told it saved, no toast fired, and nothing was in the list.
+     The online tool path already awaits; the two paths disagreed. */
+  try {
+    await asstCreateSpot({ lat: ll.lat, lng: ll.lng, name: name, type: type });
+  } catch (e) {
+    return '⚠️ Couldn\'t save "' + name + '" — storage may be full or blocked. Nothing was written.';
+  }
+  if (typeof toast === 'function') toast('📌 ' + name + ' saved');
   return '📌 Dropped "' + name + '" (' + type + ') at ' + ll.lat.toFixed(5) + ', ' + ll.lng.toFixed(5) +
     (live ? '' : ' (map center — no GPS fix yet)') + '.\nSaved and on the map. Open ☰ Spots to rename or remove it.';
 }
@@ -1046,6 +1072,7 @@ async function asstAskProxy(userText, botEl) {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ system, messages }),
+    timeoutMs: 90000,        // a model reply is slower than a data API, but not unbounded
   });
   if (!resp.ok) {
     let msg = 'HTTP ' + resp.status;
@@ -1090,6 +1117,7 @@ async function asstApiCall(messages) {
       'anthropic-dangerous-direct-browser-access': 'true',
     },
     body: JSON.stringify(body),
+    timeoutMs: 120000,       // thinking + tool rounds are slow; still bounded
   });
   if (!resp.ok) {
     let msg = 'HTTP ' + resp.status;
@@ -1213,10 +1241,14 @@ async function asstToolConditions(input) {
     const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lng +
       '&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m&wind_speed_unit=kn&temperature_unit=fahrenheit');
     const c = (await r.json()).current || {};
+    /* An error body ({error:true,reason:…}) yields {} here without throwing, and
+       Math.round(undefined) is NaN — which was handed to the model as a real
+       reading. Missing must stay missing. */
+    if (c.wind_speed_10m == null) throw new Error('no current data');
     out.wind_kn = Math.round(c.wind_speed_10m);
-    out.gust_kn = Math.round(c.wind_gusts_10m);
-    out.wind_from = asstCompass(c.wind_direction_10m) + ' (' + Math.round(c.wind_direction_10m) + '°)';
-    out.air_temp_f = Math.round(c.temperature_2m);
+    if (c.wind_gusts_10m != null) out.gust_kn = Math.round(c.wind_gusts_10m);
+    if (c.wind_direction_10m != null) out.wind_from = asstCompass(c.wind_direction_10m) + ' (' + Math.round(c.wind_direction_10m) + '°)';
+    if (c.temperature_2m != null) out.air_temp_f = Math.round(c.temperature_2m);
   } catch (e) { out.wind = 'unavailable (offline?)'; }
   try {
     const r = await fetch('https://marine-api.open-meteo.com/v1/marine?latitude=' + lat + '&longitude=' + lng +
@@ -1321,7 +1353,7 @@ function asstToolGoTo(input) {
   } else { const p = asstPos(); if (p.ll) { ll = p.ll; label = 'your position'; } }
   if (!ll) return { error: 'no target to center on' };
   if (typeof setFollow === 'function') setFollow(false);
-  window._map.setView(ll, Math.max(window._map.getZoom(), 14));
+  mapProgrammatic(() => window._map.setView(ll, Math.max(window._map.getZoom(), 14)));
   return { centered_on: label };
 }
 
@@ -1354,6 +1386,11 @@ function asstCloudVoiceOn() {
     !!asstProxyUrl() && navigator.onLine;
 }
 function asstStopSpeech() {
+  /* Clearing this is what actually cancels an in-flight cloud utterance: the /tts
+     fetch may still be running, and checking ASST.speak on arrival isn't enough
+     because hands-free legitimately speaks one reply while the button reads 🔇. */
+  ASST._speakWanted = false;
+  ASST._speakGen = (ASST._speakGen || 0) + 1;
   try { if ('speechSynthesis' in window) window.speechSynthesis.cancel(); } catch (e) {}
   if (ASST._audio) { try { ASST._audio.pause(); } catch (e) {} ASST._audio = null; }
 }
@@ -1361,7 +1398,8 @@ function asstSpeak(text) {
   if (!ASST.speak) return;
   const clean = asstStripForSpeech(text).slice(0, 700);
   if (!clean) return;
-  asstStopSpeech();
+  asstStopSpeech();          // clears _speakWanted…
+  ASST._speakWanted = true;  // …so re-arm for the utterance we're about to start
   if (asstCloudVoiceOn()) asstSpeakCloud(clean);
   else asstSpeakDevice(clean);
 }
@@ -1371,6 +1409,15 @@ function asstSpeakDevice(clean) {
     const u = new SpeechSynthesisUtterance(clean);
     u.lang = 'en-US'; u.rate = 1; u.pitch = 1;
     if (ASST._voice) u.voice = ASST._voice;
+    /* Hold the mic shut for however long this takes. Only the cloud path used to do
+       this, so on the device voice — offline, or with no TTS key — the recogniser
+       went live partway through the reply and could hear "OK, fish are…" as the
+       "hey fish" wake word and answer its own answer, in a loop. */
+    if (typeof Voice !== 'undefined') {
+      const est = 1200 + (clean.length / 14) * 1000;   // ~14 chars/sec of speech
+      Voice._muteUntil = Math.max(Voice._muteUntil || 0, Date.now() + est);
+      u.onend = u.onerror = () => { Voice._muteUntil = Date.now() + 700; };
+    }
     window.speechSynthesis.speak(u);
   } catch (e) { /* ignore */ }
 }
@@ -1388,6 +1435,7 @@ async function asstSpeakCloud(clean) {
     if (!r.ok) throw new Error('tts ' + r.status);
     const blob = await r.blob();
     if (gen !== ASST._speakGen) return;              // a newer utterance superseded this one
+    if (!ASST._speakWanted) return;                  // muted while this was in flight
     const audio = new Audio(URL.createObjectURL(blob));
     ASST._audio = audio;
     /* Hold the mic muted for the REAL audio length rather than a guess from character
@@ -1493,7 +1541,10 @@ function asstToggleSpeak() {
   ASST.speak = !ASST.speak;
   localStorage.setItem('fishapp.asst.speak', ASST.speak ? '1' : '0');
   asstUpdateSpeakBtn();
-  if (!ASST.speak) { if ('speechSynthesis' in window) window.speechSynthesis.cancel(); }
+  /* asstStopSpeech kills BOTH engines. Cancelling only speechSynthesis left a
+     45-second cloud reply playing out of the <audio> element after the user
+     deliberately silenced the boat. */
+  if (!ASST.speak) asstStopSpeech();
   else asstSpeak("Voice on. I'll read my answers aloud.");
 }
 function asstStartMic() {
@@ -1544,38 +1595,50 @@ async function asstSend(text) {
   ASST.streaming = true;
   asstSetSending(true);
 
-  if (useClaude || useProxy) {
-    const botEl = asstAddMsg('bot', '…');
-    botEl.classList.add('thinking');
-    try {
-      const reply = useClaude ? await asstAskOnline(text, botEl) : await asstAskProxy(text, botEl);
-      botEl.classList.remove('thinking');
-      botEl.textContent = reply;
+  /* Everything below runs inside try/finally. Without it a single hung fetch — one
+     bar of signal, or a captive portal where navigator.onLine is still true — left
+     ASST.streaming stuck on forever, and the guard above then silently swallowed
+     every later message, the Enter key and every suggestion chip until a reload. */
+  const gen = ASST._gen || 0;
+  try {
+    if (useClaude || useProxy) {
+      const botEl = asstAddMsg('bot', '…');
+      botEl.classList.add('thinking');
+      try {
+        const reply = useClaude ? await asstAskOnline(text, botEl) : await asstAskProxy(text, botEl);
+        if (gen !== (ASST._gen || 0)) return;      // chat was cleared while we waited
+        botEl.classList.remove('thinking');
+        botEl.textContent = reply;
+        asstScroll();
+        asstSpeak(reply);
+        ASST.history.push({ role: 'user', content: text });
+        ASST.history.push({ role: 'assistant', content: reply });
+        if (ASST.history.length > 24) ASST.history = ASST.history.slice(-24);
+      } catch (e) {
+        // graceful fallback to the offline engine
+        let off;
+        try { off = await asstOffline(text); } catch (e2) { off = 'No offline answer for that one.'; }
+        if (gen !== (ASST._gen || 0)) return;
+        botEl.classList.remove('thinking');
+        botEl.classList.add('err');
+        const why = useClaude ? (e.status === 401 ? 'bad API key' : (e.message || 'network')) : (e.message || 'network');
+        botEl.textContent = "⚠️ Couldn't reach the AI (" + why + "). Offline answer:\n\n" + off;
+        asstSpeak(off);
+      }
+    } else {
+      const botEl = asstAddMsg('bot', '');
+      let ans;
+      try { ans = await asstOffline(text); } catch (e) { ans = '⚠️ Something went wrong working that out offline.'; }
+      if (gen !== (ASST._gen || 0)) return;
+      botEl.textContent = ans;
       asstScroll();
-      asstSpeak(reply);
-      ASST.history.push({ role: 'user', content: text });
-      ASST.history.push({ role: 'assistant', content: reply });
-      if (ASST.history.length > 24) ASST.history = ASST.history.slice(-24);
-    } catch (e) {
-      // graceful fallback to the offline engine
-      const off = await asstOffline(text);
-      botEl.classList.remove('thinking');
-      botEl.classList.add('err');
-      const why = useClaude ? (e.status === 401 ? 'bad API key' : (e.message || 'network')) : (e.message || 'network');
-      botEl.textContent = "⚠️ Couldn't reach the AI (" + why + "). Offline answer:\n\n" + off;
-      asstSpeak(off);
+      asstSpeak(ans);
     }
-  } else {
-    const botEl = asstAddMsg('bot', '');
-    const ans = await asstOffline(text);
-    botEl.textContent = ans;
-    asstScroll();
-    asstSpeak(ans);
+  } finally {
+    ASST.streaming = false;
+    asstSetSending(false);
+    asstSetStatus();
   }
-
-  ASST.streaming = false;
-  asstSetSending(false);
-  asstSetStatus();
 }
 
 function asstSetSending(on) {
@@ -1645,7 +1708,13 @@ function asstInit() {
     const det = document.getElementById('asst-settings'); if (det) det.open = false;
   };
   document.getElementById('asst-clear').onclick = () => {
+    /* Bump the generation so a request still in flight can't write its reply into
+       a detached bubble and push the "cleared" exchange back onto the history —
+       which then got shipped to Claude on the next message. */
+    ASST._gen = (ASST._gen || 0) + 1;
     ASST.history = [];
+    ASST.lastLoc = null;          // "what's the swell?" must not still mean the old place
+    asstStopSpeech();
     const box = document.getElementById('asst-messages');
     if (box) box.innerHTML = '';
     asstOnOpen();

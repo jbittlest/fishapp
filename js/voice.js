@@ -41,7 +41,10 @@ function voiceNorm(s) {
    they share words with ("drop anchor" before "anchor" → Nav tools). ---- */
 const VOICE_COMMANDS = [
   // --- actions ---
-  { re: /\b(?:mark|save)(?: this)?(?: spot| pin| waypoint| location| place)?\b|\bdrop a (?:pin|waypoint|mark)\b/,
+  /* Needs an object. The noun groups used to be optional, so a bare "save" or "mark"
+     anywhere matched — and because this is the FIRST rule, "save my track" and
+     "mark the route" both dropped a waypoint and replied "Marked this spot." */
+  { re: /\b(?:mark|save)\s+(?:this|my|the)?\s*(?:spot|pin|waypoint|location|place)\b|\bmark this\b|\bdrop a (?:pin|waypoint|mark)\b/,
     run: () => voiceMarkSpot() },
   { re: /\bstart (?:the )?route\b|\bfollow (?:the )?route\b/,
     run: () => voiceCall('routeStart', 'Starting the route.') },
@@ -87,7 +90,11 @@ const VOICE_COMMANDS = [
 
   // --- spoken answers straight from live boat data (instant, no AI round-trip) ---
   { re: /\bwhere am i\b|\bmy position\b|\bcoordinates?\b/, run: () => voiceSayPosition() },
-  { re: /\bhow fast\b|\bmy speed\b|\bspeed\b/, run: () => voiceSaySpeed() },
+  /* Must be the BOAT's speed. A bare \bspeed\b matched "what's the wind speed"
+     and confidently answered with SOG — the wrong number to a safety question,
+     spoken aloud with nothing on screen to contradict it. */
+  { re: /\bhow fast\b|\bmy speed\b|\b(?:boat|our) speed\b|\bspeed over ground\b|\bsog\b/,
+    run: () => voiceSaySpeed() },
 
   // --- panels (skipped for questions — see voiceIsQuestion) ---
   { panel: 1, re: /\b(?:weather|wind|forecast|waves?|swell)\b/, run: () => voicePanel('panel-weather', 'Weather.') },
@@ -117,8 +124,13 @@ function voiceCall(fnName, say) {
 }
 
 async function voiceMarkSpot() {
-  const ll = (typeof GPS !== 'undefined' && GPS.lastLatLng) || (window._map && window._map.getCenter());
+  /* No map-centre fallback. Hands-free means nobody is looking at the screen, so
+     silently pinning wherever the map happened to be panned — and saying "Marked
+     this spot" — put a mark on the wrong water with no way to notice.
+     Every other position command already refuses without a fix. */
+  const ll = (typeof GPS !== 'undefined' && GPS.lastLatLng) || null;
   if (!ll) return 'No GPS fix yet, so I can’t mark a spot.';
+  if (typeof gpsIsStale === 'function' && gpsIsStale()) return 'My last GPS fix is too old to mark a spot.';
   const name = 'Voice mark ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   if (typeof asstCreateSpot !== 'function') return "I can't save spots right now.";
   try {
@@ -193,8 +205,13 @@ async function voiceHandleTranscript(raw) {
    actions ("mark this spot at the point") and the direct readouts still match first. */
 const VOICE_QUESTION_RE = /^(?:what|whats|when|where|why|how|is|are|was|will|should|can|could|do|does|did|any)\b/;
 const VOICE_ELSEWHERE_RE = /\b(?:in|at|near|around|off|by|over)\s+[a-z]/;   // "…in catalina", not "…in 30 feet"
+/* …but "near me" / "around here" is THIS boat's position — the one thing the panel
+   does answer. Treating it as somewhere-else meant "tides near me" never opened
+   the tides panel. */
+const VOICE_SELF_RE = /\b(?:in|at|near|around|off|by|over)\s+(?:me|here|us|my|our|the boat)\b/;
 function voiceIsQuestion(cmd) {
-  return VOICE_QUESTION_RE.test(cmd) || VOICE_ELSEWHERE_RE.test(cmd);
+  if (VOICE_QUESTION_RE.test(cmd)) return true;
+  return VOICE_ELSEWHERE_RE.test(cmd) && !VOICE_SELF_RE.test(cmd);
 }
 
 async function voiceRun(cmd) {
@@ -212,9 +229,21 @@ async function voiceRun(cmd) {
   }
   // No local match → let First Mate field it (it answers offline from boat data too).
   if (typeof asstSend === 'function') {
-    if (typeof ASST !== 'undefined') ASST.speak = true;   // hands-free: always read replies
-    Voice._muteUntil = Date.now() + 2000;                 // don't hear our own answer
+    /* Force speech for THIS reply only, then put it back. Setting it permanently
+       overrode a deliberate 🔇 for the rest of the session, and left the button
+       showing 🔇 while every typed answer was read aloud — so tapping it appeared
+       to do the opposite of what it said. */
+    const hadSpeak = (typeof ASST !== 'undefined') ? ASST.speak : null;
+    if (typeof ASST !== 'undefined') ASST.speak = true;
+    // never SHORTEN an existing guard — the cloud path sets it from real audio length
+    Voice._muteUntil = Math.max(Voice._muteUntil || 0, Date.now() + 2000);
     try { await asstSend(cmd); } catch (e) { voiceSay("Sorry, I couldn't answer that."); }
+    finally {
+      if (typeof ASST !== 'undefined' && hadSpeak !== null) {
+        ASST.speak = hadSpeak;
+        if (typeof asstUpdateSpeakBtn === 'function') asstUpdateSpeakBtn();
+      }
+    }
   } else {
     voiceSay("I didn't catch a command.");
   }
@@ -229,20 +258,29 @@ function voiceBuildRec() {
   r.interimResults = false;
   r.maxAlternatives = 1;
 
+  /* Every handler checks it is still THE current recogniser. abort() dispatches
+     `end` asynchronously, so the foreground-resume path (abort → start a new one)
+     used to let the old session's onend null out the live one — after which a
+     second recogniser was started alongside it. Two live mics meant one "drop the
+     anchor" ran twice, and voiceStop() could only abort the one it knew about. */
   r.onresult = (e) => {
-    if (!Voice.on) return;
+    if (Voice.rec !== r || !Voice.on) return;
     if (Date.now() < Voice._muteUntil || Voice.speaking) return;   // ignore our own TTS
     for (let i = e.resultIndex; i < e.results.length; i++) {
       const res = e.results[i];
       if (!res || !res.isFinal || !res[0]) continue;
+      Voice._gotResult = true;      // a session that produced speech is a healthy one
+      Voice._fails = 0;
       voiceHandleTranscript(res[0].transcript);
     }
   };
   r.onerror = (e) => {
+    if (Voice.rec !== r) return;
     const err = e && e.error;
     // Permission problems are terminal — stop rather than spin restarting forever.
     if (err === 'not-allowed' || err === 'service-not-allowed') {
       voiceStop();
+      try { localStorage.setItem('fishapp.voice', 'off'); } catch (e2) {}   // don't re-prompt every launch
       if (typeof toast === 'function') toast('🎤 Microphone blocked — enable mic access to use Hey Fish');
       return;
     }
@@ -250,6 +288,7 @@ function voiceBuildRec() {
     Voice._fails++;
   };
   r.onend = () => {
+    if (Voice.rec !== r) return;    // a newer session already took over
     Voice.rec = null;
     if (!Voice._wantOn) { voiceUpdateUi(); return; }
     // Don't respin while backgrounded: the mic is dead there anyway, and a session started
@@ -270,7 +309,11 @@ function voiceStart() {
     Voice.rec = voiceBuildRec();
     Voice.rec.start();
     Voice.on = true;
-    Voice._fails = 0;
+    /* Do NOT clear _fails here. Starting successfully proves nothing — offshore with
+       no data the engine starts fine and then errors every time, and zeroing the
+       counter on each start pinned the backoff at 400 ms forever, respinning the mic
+       ~2.5×/second for the whole trip. It's cleared in onresult instead: a session
+       that actually heard something is the only proof things are working. */
   } catch (e) {
     Voice.rec = null;
     Voice._fails++;

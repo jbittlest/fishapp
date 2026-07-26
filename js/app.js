@@ -3,7 +3,42 @@
 
 /* Keep in step with CACHE in sw.js. Shown in the More sheet next to the build the service
    worker is actually serving, so a device running stale cached code is visible at a glance. */
-const APP_BUILD = 'v84';
+const APP_BUILD = 'v85';
+
+/* ---- Every request gets a deadline ----------------------------------------
+   A boat is the worst network on earth: one bar, captive portals at the ramp,
+   half-open TCP that never resets. In those conditions `navigator.onLine` is
+   still true and a plain fetch() can hang for the rest of the trip — which is
+   how a single weather call used to leave the assistant permanently unable to
+   answer, and a download stuck mid-progress with no error.
+
+   Wrapping fetch once here covers all ~36 call sites rather than trusting each
+   to remember. Callers that need longer (an AI reply can legitimately take a
+   couple of minutes) pass `timeoutMs`; anything already carrying its own
+   `signal` is left alone. */
+(function installFetchTimeout() {
+  if (!window.fetch || !window.AbortController) return;
+  const raw = window.fetch.bind(window);
+  const DEFAULT_MS = 30000;
+  window.fetch = function (input, init) {
+    init = init || {};
+    if (init.signal) return raw(input, init);
+    const ms = init.timeoutMs || DEFAULT_MS;
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), ms);
+    const opts = Object.assign({}, init, { signal: ac.signal });
+    delete opts.timeoutMs;
+    return raw(input, opts).then(
+      (r) => { clearTimeout(timer); return r; },
+      (e) => {
+        clearTimeout(timer);
+        // Say "timed out", not "aborted" — the difference matters in the UI.
+        if (e && e.name === 'AbortError') throw new Error('timed out after ' + Math.round(ms / 1000) + 's');
+        throw e;
+      }
+    );
+  };
+})();
 
 (async function init() {
   let map;
@@ -280,7 +315,10 @@ const APP_BUILD = 'v84';
     clearTimeout(_refollowTimer);
   };
   map.on('dragstart', () => { setFollow(false); scheduleRefollow(); });
-  map.on('zoomstart', scheduleRefollow);
+  /* Only arm the timer for a zoom the user drove. Programmatic setView/fitBounds —
+     tapping ➜ on a spot, a catch, or a saved area — also fires zoomstart, so
+     studying a wreck 8 nm away used to get yanked back to the boat 45 s later. */
+  map.on('zoomstart', () => { if (!GPS._programmaticMove) scheduleRefollow(); });
 
   document.getElementById('btn-mark').onclick = () => {
     const ll = GPS.lastLatLng || map.getCenter();
@@ -317,6 +355,10 @@ const APP_BUILD = 'v84';
         ? 'build ' + APP_BUILD
         : 'build ' + APP_BUILD + ' · update ready (' + sw + ') — close and reopen';
     });
+    /* addEventListener alone leaves the client message queue blocked — the reply
+       can sit undelivered and the indicator never updates, which is exactly the
+       "stale device is invisible" problem this exists to solve. */
+    if (navigator.serviceWorker.startMessages) navigator.serviceWorker.startMessages();
     navigator.serviceWorker.ready
       .then((reg) => { if (reg.active) reg.active.postMessage('version'); })
       .catch(() => {});
@@ -452,6 +494,9 @@ const APP_BUILD = 'v84';
   document.getElementById('btn-measure').onclick = () => navSetMode('measure');
   document.getElementById('btn-anchor').onclick = anchorToggle;
   document.getElementById('aa-dismiss').onclick = anchorDismissAlarm;
+  document.getElementById('anchor-radius').addEventListener('change', anchorRadiusChanged);
+  /* Bring back a watch that survived a reload, an update or an OS kill. */
+  try { anchorRestore(); } catch (e) {}
   document.getElementById('btn-trip').onclick = tripToggle;
   document.getElementById('btn-trip-reset').onclick = tripReset;
 
@@ -494,6 +539,9 @@ const APP_BUILD = 'v84';
       const updateWouldInterrupt = () =>
         (typeof Goto !== 'undefined' && Goto.active) ||
         (typeof Tracks !== 'undefined' && Tracks.recording) ||
+        /* An anchor watch is the one thing people go to sleep trusting. Reloading
+           under it wiped the watch silently — no circle, no alarm, no warning. */
+        (typeof Nav !== 'undefined' && Nav.anchor && Nav.anchor.watching) ||
         (typeof Voice !== 'undefined' && (Voice.on || Voice._wantOn));
       let updatePending = false;
       /* DEFER, never discard. Previously this just returned, so leaving hands-free on and

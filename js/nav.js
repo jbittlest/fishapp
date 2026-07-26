@@ -6,7 +6,8 @@ const Nav = {
   mode: null,                                  // 'route' | 'measure' | null
   route: { line: null, markers: [], pts: [], legLayer: null },
   measure: { line: null, a: null, layer: null },
-  anchor: { ll: null, circle: null, marker: null, radiusFt: 150, watching: false, dragging: false, dismissed: false, audio: null, alarmTimer: null },
+  anchor: { ll: null, circle: null, marker: null, radiusFt: 150, watching: false, dragging: false,
+    snoozeUntil: 0, snoozeFt: 0, blind: false, outCount: 0, audio: null, alarmTimer: null },
   trip: { active: false, start: 0, dist: 0, maxKn: 0, sumKn: 0, nKn: 0, lastLL: null },
 };
 
@@ -62,6 +63,10 @@ function routeStart() {
   if (Nav.mode === 'route') navSetMode('route');          // leave add-points mode
   if (typeof closePanels === 'function') closePanels();   // get the panel out of the way
   if (typeof gotoStartRoute === 'function') gotoStartRoute(Nav.route.pts);
+  /* Take the planning line down. gotoStartRoute copies the points, so leaving the
+     draggable blue planner on the map let you drag a waypoint clear of a shoal,
+     watch the blue line move, and still be steered over the shoal by the green one. */
+  routeClear();
 }
 function routeRedraw() {
   // route line
@@ -151,32 +156,104 @@ function anchorRadiusM() { return Nav.anchor.radiusFt / FT_PER_M; }
 function anchorDrop() {
   const ll = GPS.lastLatLng;
   if (!ll) { toast('No GPS fix yet — wait for a fix, then drop'); return; }
+  /* Dropping the anchor on an hour-old position puts the watch circle miles from
+     the boat, so every fix reads "outside" — or worse, none ever does. */
+  if (typeof gpsIsStale === 'function' && gpsIsStale()) {
+    toast('GPS is stale — wait for a fresh fix before dropping the anchor watch'); return;
+  }
+  if (typeof GPS !== 'undefined' && GPS.coarse) {
+    toast('GPS is only ±' + Math.round(GPS.accuracy || 0) + 'm right now — wait for a tighter fix'); return;
+  }
   anchorRaise();
   Nav.anchor.ll = ll;
-  Nav.anchor.radiusFt = parseInt(document.getElementById('anchor-radius').value, 10) || 150;
+  Nav.anchor.radiusFt = anchorReadRadius();
   Nav.anchor.circle = L.circle(ll, { radius: anchorRadiusM(), color: '#e8453d', weight: 2, fillColor: '#e8453d', fillOpacity: 0.1 }).addTo(window._map);
   Nav.anchor.marker = L.marker(ll, { icon: L.divIcon({ className: '', html: '<div style="font-size:22px">⚓</div>', iconSize: [24, 24], iconAnchor: [12, 12] }) }).addTo(window._map);
-  Nav.anchor.watching = true; Nav.anchor.dragging = false; Nav.anchor.dismissed = false;
+  Nav.anchor.watching = true; Nav.anchor.dragging = false;
+  Nav.anchor.snoozeUntil = 0; Nav.anchor.snoozeFt = 0; Nav.anchor.blind = false; Nav.anchor.outCount = 0;
   unlockAudio();          // this tap is a user gesture — unlock audio so the alarm can beep later
   requestWakeLock();      // keep the screen on so GPS keeps running (iOS suspends when locked)
+  anchorPersist();
   updateAnchorUi();
   toast('⚓ Anchor watch on (' + Nav.anchor.radiusFt + ' ft) — keep the app open, screen on');
+}
+function anchorReadRadius() {
+  const el = document.getElementById('anchor-radius');
+  const v = el ? parseInt(el.value, 10) : NaN;
+  return (isFinite(v) && v > 0) ? v : 150;
 }
 function anchorRaise() {
   stopAnchorAlarm();
   if (Nav.anchor.circle) window._map.removeLayer(Nav.anchor.circle);
   if (Nav.anchor.marker) window._map.removeLayer(Nav.anchor.marker);
   Nav.anchor.circle = Nav.anchor.marker = Nav.anchor.ll = null;
-  Nav.anchor.watching = false; Nav.anchor.dragging = false; Nav.anchor.dismissed = false;
+  Nav.anchor.watching = false; Nav.anchor.dragging = false;
+  Nav.anchor.snoozeUntil = 0; Nav.anchor.snoozeFt = 0; Nav.anchor.blind = false; Nav.anchor.outCount = 0;
+  anchorPersist();
   updateAnchorUi();
 }
+
+/* The watch is the one feature people go to sleep trusting, so it must not live
+   only in memory — a reload, a tab eviction or an OS kill would silently end it
+   with the boat still swinging. */
+function anchorPersist() {
+  try {
+    if (Nav.anchor.watching && Nav.anchor.ll) {
+      localStorage.setItem('fishapp.anchor', JSON.stringify({
+        lat: Nav.anchor.ll.lat, lng: Nav.anchor.ll.lng, radiusFt: Nav.anchor.radiusFt, ts: Date.now(),
+      }));
+    } else localStorage.removeItem('fishapp.anchor');
+  } catch (e) {}
+}
+function anchorRestore() {
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem('fishapp.anchor') || 'null'); } catch (e) {}
+  if (!s || !isFinite(s.lat) || !isFinite(s.lng)) return;
+  if (Date.now() - (s.ts || 0) > 36 * 3600e3) { try { localStorage.removeItem('fishapp.anchor'); } catch (e) {} return; }
+  Nav.anchor.ll = L.latLng(s.lat, s.lng);
+  Nav.anchor.radiusFt = s.radiusFt || 150;
+  const el = document.getElementById('anchor-radius');
+  if (el) el.value = Nav.anchor.radiusFt;
+  Nav.anchor.circle = L.circle(Nav.anchor.ll, { radius: anchorRadiusM(), color: '#e8453d', weight: 2, fillColor: '#e8453d', fillOpacity: 0.1 }).addTo(window._map);
+  Nav.anchor.marker = L.marker(Nav.anchor.ll, { icon: L.divIcon({ className: '', html: '<div style="font-size:22px">⚓</div>', iconSize: [24, 24], iconAnchor: [12, 12] }) }).addTo(window._map);
+  Nav.anchor.watching = true;
+  updateAnchorUi();
+  /* Audio can't be unlocked without a gesture, so grab the first one that comes
+     along — and say so meanwhile, rather than let them believe a silent watch is armed. */
+  const prime = () => {
+    unlockAudio();
+    ['pointerdown', 'touchstart', 'keydown'].forEach((ev) => document.removeEventListener(ev, prime));
+    if (typeof toast === 'function') toast('⚓ Anchor watch alarm armed');
+  };
+  ['pointerdown', 'touchstart', 'keydown'].forEach((ev) => document.addEventListener(ev, prime, { passive: true }));
+  if (typeof toast === 'function') toast('⚓ Anchor watch restored — tap anywhere once to re-enable the alarm sound');
+}
+
 function updateAnchorUi() {
   const btn = document.getElementById('btn-anchor');
   if (btn) btn.textContent = Nav.anchor.watching ? '⚓ Raise anchor / stop watch' : '⚓ Drop anchor here';
   const s = document.getElementById('anchor-status');
-  if (s) s.textContent = Nav.anchor.watching ? 'Watching — alarms if you drift past ' + Nav.anchor.radiusFt + ' ft' : '';
+  if (!s) return;
+  if (!Nav.anchor.watching) { s.textContent = ''; return; }
+  if (Nav.anchor.blind) { s.textContent = '⚠️ NO GPS — the watch cannot see you drift'; return; }
+  const snoozed = Nav.anchor.snoozeUntil > Date.now();
+  s.textContent = 'Watching — alarms if you drift past ' + Nav.anchor.radiusFt + ' ft' +
+    (snoozed ? ' · snoozed ' + Math.ceil((Nav.anchor.snoozeUntil - Date.now()) / 60000) + ' min' : '');
 }
 function anchorToggle() { Nav.anchor.watching ? anchorRaise() : anchorDrop(); }
+
+/* Changing the radius mid-watch used to do nothing at all: the value was read
+   only when dropping. Someone whose alarm won't stop would have to raise the
+   watch entirely to widen it — leaving the boat unwatched. */
+function anchorRadiusChanged() {
+  if (!Nav.anchor.watching) return;
+  Nav.anchor.radiusFt = anchorReadRadius();
+  if (Nav.anchor.circle) Nav.anchor.circle.setRadius(anchorRadiusM());
+  Nav.anchor.snoozeUntil = 0; Nav.anchor.snoozeFt = 0; Nav.anchor.outCount = 0;
+  anchorPersist();
+  if (Nav.anchor.ll && GPS.lastLatLng) navAnchorEvaluate(GPS.lastLatLng);
+  updateAnchorUi();
+}
 
 /* Unlock the Web Audio context from a user tap (iOS blocks audio otherwise) */
 function unlockAudio() {
@@ -202,11 +279,36 @@ function stopAnchorAlarm() {
   const overlay = document.getElementById('anchor-alarm');
   if (overlay) overlay.classList.add('hidden');
 }
-function anchorDismissAlarm() {   // silence but keep watching
+/* Silence for a while — NOT forever. This used to set a `dismissed` latch that was
+   cleared only by returning inside the circle, so silencing an alarm while actually
+   dragging disabled the watch for the rest of the night no matter how far you went.
+   Now it re-arms on a timer, and immediately if the drift keeps growing. */
+const ANCHOR_SNOOZE_MS = 5 * 60000;
+const ANCHOR_REARM_GROWTH = 1.25;     // …or 25% further out, whichever comes first
+function anchorDismissAlarm() {
   stopAnchorAlarm();
   Nav.anchor.dragging = false;
-  Nav.anchor.dismissed = true;
+  Nav.anchor.outCount = 0;
+  Nav.anchor.snoozeUntil = Date.now() + ANCHOR_SNOOZE_MS;
+  Nav.anchor.snoozeFt = (Nav.anchor.ll && GPS.lastLatLng)
+    ? Math.round(GPS.lastLatLng.distanceTo(Nav.anchor.ll) * FT_PER_M)
+    : Nav.anchor.radiusFt;
+  updateAnchorUi();
+  if (typeof toast === 'function') toast('🔕 Alarm snoozed 5 min — it re-arms automatically, or sooner if you keep drifting');
 }
+/* GPS went quiet while the watch is armed. "No new fix" is indistinguishable from
+   "not moving", so the watch is blind — and staying silent about that is worse
+   than a false alarm. */
+function navOnGpsStale() {
+  if (!Nav.anchor.watching || Nav.anchor.blind) return;
+  Nav.anchor.blind = true;
+  updateAnchorUi();
+  const el = document.getElementById('aa-dist');
+  if (el) el.textContent = 'NO GPS — the anchor watch cannot see you drift';
+  startAnchorAlarm();
+  if (typeof toast === 'function') toast('⚠️ Anchor watch blind — no GPS fix for a minute');
+}
+function navOnGpsLost() { navOnGpsStale(); }
 function anchorBeep() {
   if (navigator.vibrate) navigator.vibrate([500, 200, 500, 200, 500]);   // no-op on iOS, works on Android
   const ac = Nav.anchor.audio;
@@ -256,26 +358,58 @@ function updateTripUi() {
 
 /* Fed from gps.js on every fix */
 function navOnFix(ll, kn) {
+  /* The anchor alarm goes FIRST and in its own try. It used to run last, so a throw
+     anywhere in the trip or Go To blocks above would skip the drift check entirely. */
+  try { navAnchorEvaluate(ll); } catch (e) {}
+
   // trip accumulation
   if (Nav.trip.active) {
-    if (Nav.trip.lastLL) Nav.trip.dist += nmBetween(Nav.trip.lastLL, ll);
-    Nav.trip.lastLL = ll;
+    /* Only count real movement. Adding every raw inter-fix delta meant a boat sitting
+       on a spot for three hours accumulated miles of pure GPS noise. */
+    if (Nav.trip.lastLL) {
+      const m = Nav.trip.lastLL.distanceTo(ll);
+      const moving = (kn == null) ? m >= NAV_MIN_MOVE_M : (kn > 0.5 && m >= NAV_MIN_MOVE_M);
+      if (moving && !(typeof GPS !== 'undefined' && GPS.coarse)) {
+        Nav.trip.dist += nmBetween(Nav.trip.lastLL, ll);
+        Nav.trip.lastLL = ll;
+      }
+    } else Nav.trip.lastLL = ll;
     if (kn != null) { Nav.trip.maxKn = Math.max(Nav.trip.maxKn, kn); Nav.trip.sumKn += kn; Nav.trip.nKn++; }
     if (!document.getElementById('panel-tools').classList.contains('hidden')) updateTripUi();
   }
   // live "Go To" navigation guidance
   if (typeof gotoOnFix === 'function') gotoOnFix(ll, kn);
-  // anchor drift alarm
-  if (Nav.anchor.watching && Nav.anchor.ll) {
-    const distFt = Math.round(ll.distanceTo(Nav.anchor.ll) * FT_PER_M);
-    if (distFt > Nav.anchor.radiusFt) {
-      if (!Nav.anchor.dragging && !Nav.anchor.dismissed) { Nav.anchor.dragging = true; startAnchorAlarm(); }
-      const el = document.getElementById('aa-dist');
-      if (el) el.textContent = distFt + ' ft from anchor (limit ' + Nav.anchor.radiusFt + ' ft)';
-    } else {
-      Nav.anchor.dismissed = false;
-      if (Nav.anchor.dragging) { Nav.anchor.dragging = false; stopAnchorAlarm(); }
+}
+const NAV_MIN_MOVE_M = 10;
+/* How many consecutive out-of-circle fixes before sounding. One bad fix under a
+   bridge shouldn't wake the whole boat; two in a row is a real swing. */
+const ANCHOR_CONFIRM_FIXES = 2;
+
+function navAnchorEvaluate(ll) {
+  const a = Nav.anchor;
+  if (!a.watching || !a.ll || !ll) return;
+  if (a.blind) { a.blind = false; stopAnchorAlarm(); updateAnchorUi(); }   // fixes are flowing again
+
+  const distFt = Math.round(ll.distanceTo(a.ll) * FT_PER_M);
+  /* Widen the trip line by the fix's own uncertainty so a fuzzy fix can't invent
+     a drift that isn't there. */
+  const slopFt = Math.round(((typeof GPS !== 'undefined' && GPS.accuracy) || 0) * FT_PER_M);
+  const limitFt = a.radiusFt + Math.min(slopFt, a.radiusFt);
+
+  if (distFt > limitFt) {
+    a.outCount++;
+    const el = document.getElementById('aa-dist');
+    if (el) el.textContent = distFt + ' ft from anchor (limit ' + a.radiusFt + ' ft)';
+    // A snooze expires on time OR the moment the boat keeps going — whichever first.
+    const snoozed = a.snoozeUntil > Date.now() && distFt < a.snoozeFt * ANCHOR_REARM_GROWTH;
+    if (!snoozed) { a.snoozeUntil = 0; a.snoozeFt = 0; }
+    if (!a.dragging && !snoozed && a.outCount >= ANCHOR_CONFIRM_FIXES) {
+      a.dragging = true; startAnchorAlarm(); updateAnchorUi();
     }
+  } else {
+    a.outCount = 0;
+    a.snoozeUntil = 0; a.snoozeFt = 0;
+    if (a.dragging) { a.dragging = false; stopAnchorAlarm(); updateAnchorUi(); }
   }
 }
 

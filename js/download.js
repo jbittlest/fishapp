@@ -182,7 +182,7 @@ async function renderAreasList() {
     item.querySelector('.go').onclick = () => {
       closePanels();
       setFollow(false);
-      window._map.fitBounds([[a.bounds.s, a.bounds.w], [a.bounds.n, a.bounds.e]]);
+      mapProgrammatic(() => window._map.fitBounds([[a.bounds.s, a.bounds.w], [a.bounds.n, a.bounds.e]]));
     };
     item.querySelector('.del').onclick = async () => {
       if (!confirm('Delete offline charts for "' + a.name + '"?')) return;

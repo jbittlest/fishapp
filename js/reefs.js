@@ -155,7 +155,7 @@ function renderReefsList() {
         document.getElementById('ovl-reefs').checked = true;
         reefsSetVisible('reefs', true);
       }
-      window._map.setView(ll, Math.max(window._map.getZoom(), 14));
+      mapProgrammatic(() => window._map.setView(ll, Math.max(window._map.getZoom(), 14)));
     };
     box.appendChild(item);
   });

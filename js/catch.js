@@ -273,7 +273,7 @@ function renderCatchList() {
     item.innerHTML = '<span class="ico">🎣</span><div class="info"><div class="name">' + escapeHtml(c.species) +
       (c.length ? ' ' + c.length + '"' : '') + '</div><div class="sub">' + sub + '</div></div>' +
       '<button class="go">➜</button><button class="card">📇</button><button class="del">🗑</button>';
-    item.querySelector('.go').onclick = () => { closePanels(); setFollow(false); window._map.setView([c.lat, c.lng], Math.max(window._map.getZoom(), 14)); Catch.markers[c.id] && Catch.markers[c.id].openPopup(); };
+    item.querySelector('.go').onclick = () => { closePanels(); setFollow(false); mapProgrammatic(() => window._map.setView([c.lat, c.lng], Math.max(window._map.getZoom(), 14))); Catch.markers[c.id] && Catch.markers[c.id].openPopup(); };
     item.querySelector('.card').onclick = () => makeCatchCard(c);
     item.querySelector('.del').onclick = async () => { if (confirm('Delete this catch?')) await deleteCatch(c.id); };
     box.appendChild(item);

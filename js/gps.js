@@ -5,6 +5,10 @@ const GPS = {
   watchId: null,
   last: null,          // last GeolocationPosition
   lastLatLng: null,
+  lastFixTs: 0,        // Date.now() of the last ACCEPTED fix — 0 means "never had one"
+  heading: null,       // resolved heading (device heading, else course over ground)
+  accuracy: null,      // metres, from the last accepted fix
+  coarse: false,       // true when the last fix was too fuzzy to trust for distance work
   follow: true,
   marker: null,
   accCircle: null,
@@ -13,6 +17,35 @@ const GPS = {
 };
 
 const KNOTS_PER_MS = 1.94384; // m/s -> knots
+
+/* A fix this old means we've gone blind — the OS stopped delivering, the tab was
+   frozen, or permission was pulled. Anything that keeps you safe (anchor watch)
+   has to notice, because "no new fix" looks exactly like "not moving". */
+const GPS_STALE_MS = 60000;
+/* Above this the position is a cell-tower/wifi guess, not a GPS lock. Still shown
+   (better than a blank screen) but not trusted to move a distance total. */
+const GPS_COARSE_M = 100;
+/* No boat does 200 kn. A jump faster than this is multipath or a provider glitch. */
+const GPS_MAX_MPS = 103;
+
+function gpsIsStale() { return !GPS.lastFixTs || (Date.now() - GPS.lastFixTs) > GPS_STALE_MS; }
+
+/* Reject fixes that would poison everything downstream. One bogus (0,0) used to
+   pan the map to the Atlantic, add thousands of nm to the trip and track, and set
+   off the anchor alarm — all from a single bad callback. */
+function gpsFixIsSane(c) {
+  if (!c || !isFinite(c.latitude) || !isFinite(c.longitude)) return false;
+  if (Math.abs(c.latitude) > 90 || Math.abs(c.longitude) > 180) return false;
+  if (c.latitude === 0 && c.longitude === 0) return false;             // null island
+  if (GPS.lastLatLng && GPS.lastFixTs) {
+    const dt = (Date.now() - GPS.lastFixTs) / 1000;
+    if (dt > 0 && dt < 60) {
+      const m = L.latLng(c.latitude, c.longitude).distanceTo(GPS.lastLatLng);
+      if (m / dt > GPS_MAX_MPS) return false;                          // teleport
+    }
+  }
+  return true;
+}
 
 /* Cache the status-bar element refs — gpsOnFix runs every fix, so avoid re-querying the DOM. */
 const _gpsEl = {};
@@ -30,16 +63,28 @@ function gpsStart(map) {
       const dot = document.getElementById('gps-dot');
       dot.className = 'dot';
       el.textContent = err.code === 1 ? 'GPS DENIED' : 'NO GPS';
+      /* Don't leave a stale position looking live: anything that navigates off
+         GPS needs to know the feed died, not keep trusting the last fix. */
+      if (typeof navOnGpsLost === 'function') navOnGpsLost();
     },
     { enableHighAccuracy: true, maximumAge: 1000, timeout: 30000 }
   );
   requestWakeLock();
+  /* Watchdog: watchPosition simply stops calling back when the OS suspends the
+     tab or drops the provider — no error fires. Poll for that silence. */
+  clearInterval(GPS._staleTimer);
+  GPS._staleTimer = setInterval(() => {
+    if (gpsIsStale() && typeof navOnGpsStale === 'function') navOnGpsStale();
+  }, 15000);
 }
 
 function gpsOnFix(map, pos) {
+  const c = pos && pos.coords;
+  if (!gpsFixIsSane(c)) return;          // drop it before it reaches any consumer
   GPS.last = pos;
-  const c = pos.coords;
   const ll = L.latLng(c.latitude, c.longitude);
+  GPS.accuracy = isFinite(c.accuracy) ? c.accuracy : null;
+  GPS.coarse = GPS.accuracy == null || GPS.accuracy > GPS_COARSE_M;
 
   /* Heading: device heading if moving, else bearing from previous point */
   let heading = null;
@@ -48,6 +93,10 @@ function gpsOnFix(map, pos) {
   } else if (GPS.lastLatLng && ll.distanceTo(GPS.lastLatLng) > 3) {
     heading = bearingBetween(GPS.lastLatLng, ll);
   }
+  /* Publish it. The Go To steer arrow used to read coords.heading directly, so it
+     vanished on any device that reports null below a speed threshold — even though
+     the status bar was showing a perfectly good course-over-ground right next to it. */
+  if (heading !== null) GPS.heading = heading;
 
   /* Boat marker */
   if (!GPS.marker) {
@@ -69,8 +118,8 @@ function gpsOnFix(map, pos) {
   }
 
   /* Status bar */
-  gpsEl('gps-dot').className = 'dot ' + (c.accuracy <= 20 ? 'ok' : 'warn');
-  gpsEl('gps-acc').textContent = '±' + Math.round(c.accuracy) + 'm';
+  gpsEl('gps-dot').className = 'dot ' + (GPS.accuracy != null && GPS.accuracy <= 20 ? 'ok' : 'warn');
+  gpsEl('gps-acc').textContent = GPS.accuracy != null ? '±' + Math.round(GPS.accuracy) + 'm' : '±?';
   const kn = c.speed !== null && !isNaN(c.speed) ? (c.speed * KNOTS_PER_MS) : null;
   gpsEl('stat-speed').textContent = kn !== null ? kn.toFixed(1) : '—';
   gpsEl('stat-heading').textContent = heading !== null ? Math.round(heading) : '—';
@@ -87,8 +136,9 @@ function gpsOnFix(map, pos) {
   }
   GPS._hadFirstFix = true;
   GPS.lastLatLng = ll;
+  GPS.lastFixTs = Date.now();
 
-  trackOnFix(ll, pos.timestamp); // feed track recorder
+  trackOnFix(ll, pos.timestamp, kn); // feed track recorder
   if (typeof navOnFix === 'function') navOnFix(ll, kn); // feed trip stats + anchor alarm
   if (typeof updateEmergency === 'function' && !document.getElementById('panel-emergency').classList.contains('hidden')) updateEmergency();
   refreshSpotDistances();
@@ -107,6 +157,17 @@ function boatIcon(heading) {
   return L.divIcon({ className: 'boat-icon', html: svg, iconSize: [40, 40], iconAnchor: [20, 20] });
 }
 
+/* Wrap a deliberate "take me to this place" map move. The auto-refollow timer
+   watches zoomstart, which can't otherwise tell a user pinch from setView/fitBounds
+   — so tapping ➜ on a distant mark got silently yanked back to the boat. */
+function mapProgrammatic(fn) {
+  GPS._programmaticMove = true;
+  clearTimeout(GPS._progTimer);
+  try { fn(); } finally {
+    GPS._progTimer = setTimeout(() => { GPS._programmaticMove = false; }, 800);
+  }
+}
+
 function setFollow(on) {
   GPS.follow = on;
   document.getElementById('btn-follow').classList.toggle('active', on);
@@ -120,13 +181,20 @@ const WakeLock = {
   lock: null,
   enabled: localStorage.getItem('fishapp.wake') !== 'off',
   supported: 'wakeLock' in navigator,
+  _pending: false,
   async acquire() {
     if (!this.enabled || !this.supported) return;
-    if (document.visibilityState !== 'visible' || this.lock) return;
+    if (document.visibilityState !== 'visible' || this.lock || this._pending) return;
+    /* Flag BEFORE the await. `this.lock` is only assigned after it, so one screen
+       tap (which fires pointerdown + touchstart + click) used to slip three
+       requests past the guard and strand two sentinels that release() could never
+       reach — the screen then stayed lit after the user turned the wake lock off. */
+    this._pending = true;
     try {
       this.lock = await navigator.wakeLock.request('screen');
       this.lock.addEventListener('release', () => { this.lock = null; });
     } catch (e) { this.lock = null; }
+    finally { this._pending = false; }
   },
   async release() {
     if (this.lock) { try { await this.lock.release(); } catch (e) {} this.lock = null; }
@@ -173,8 +241,12 @@ function mapBoundsClamped() {
 function formatCoord(v, axis) {
   const hemi = axis === 'lat' ? (v >= 0 ? 'N' : 'S') : (v >= 0 ? 'E' : 'W');
   const abs = Math.abs(v);
-  const deg = Math.floor(abs);
-  const min = (abs - deg) * 60;
+  /* Round to thousandths of a minute FIRST, then split. Flooring the degrees and
+     rounding the minutes independently could print 25°60.000'N — not a coordinate,
+     and this is the number you read to the Coast Guard over VHF. */
+  const t = Math.round(abs * 60000);
+  const deg = Math.floor(t / 60000);
+  const min = (t % 60000) / 1000;
   return deg + '°' + min.toFixed(3) + "'" + hemi;
 }
 
