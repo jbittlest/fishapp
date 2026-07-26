@@ -19,14 +19,25 @@
 
    Free tier is ~10,000 "neurons"/day — plenty for personal use. Swap MODEL
    below for a smarter/bigger one any time (e.g. llama-3.3-70b-instruct-fp8-fast).
+
+   ---- UPDATING (natural voice) ----
+   Re-pasting this file adds a /tts route that gives First Mate a real voice
+   instead of the phone's robotic one. It uses the SAME "AI" binding as the
+   chat, so there is nothing else to configure — just paste and Deploy, then
+   tick "Natural cloud voice" in the app's ⚙️ settings.
+
+   OPTIONAL, for better-sounding audio: Worker → Settings → Variables and
+   Secrets → add secret OPENAI_KEY = sk-... → Deploy. It's used when present
+   and costs roughly a cent per reply; without it the free voice is used.
    ============================================================================ */
 
 const ALLOWED_ORIGIN = 'https://jbittlest.github.io';   // lock the endpoint to the FishApp site
 const MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const MAX_TOKENS = 512;
 
-/* Natural speech for the /tts route (see below). Needs an OPENAI_KEY secret on the Worker;
-   without it the route 501s and the app falls back to the phone's built-in voice. */
+/* Natural speech for the /tts route (see below). Works with NO extra setup — it falls back
+   to Workers AI TTS on the same `AI` binding the chat already uses. Adding an OPENAI_KEY
+   secret is optional and buys better-sounding audio at a per-use cost. */
 const TTS_MODEL = 'gpt-4o-mini-tts';
 const TTS_VOICE = 'onyx';                                // calm, low — suits a boat
 const ALLOWED_TTS_VOICES = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
@@ -62,25 +73,45 @@ export default {
     if (new URL(request.url).pathname.replace(/\/+$/, '') === '/tts') {
       const text = String(body.text || '').trim().slice(0, 1200);
       if (!text) return json({ error: 'no text' }, 400, cors);
-      if (!env.OPENAI_KEY) return json({ error: 'tts not configured' }, 501, cors);
-      try {
-        const r = await fetch('https://api.openai.com/v1/audio/speech', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json', authorization: 'Bearer ' + env.OPENAI_KEY },
-          body: JSON.stringify({
-            model: TTS_MODEL,
-            voice: ALLOWED_TTS_VOICES.includes(body.voice) ? body.voice : TTS_VOICE,
-            input: text,
-            response_format: 'mp3',
-          }),
-        });
-        if (!r.ok) return json({ error: 'tts upstream ' + r.status }, 502, cors);
-        return new Response(r.body, {
-          headers: { ...cors, 'content-type': 'audio/mpeg', 'cache-control': 'no-store' },
-        });
-      } catch (e) {
-        return json({ error: String((e && e.message) || e) }, 502, cors);
+      const audio = { ...cors, 'content-type': 'audio/mpeg', 'cache-control': 'no-store' };
+
+      // Best quality, only if you've added an OPENAI_KEY secret (optional — costs per use).
+      if (env.OPENAI_KEY) {
+        try {
+          const r = await fetch('https://api.openai.com/v1/audio/speech', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', authorization: 'Bearer ' + env.OPENAI_KEY },
+            body: JSON.stringify({
+              model: TTS_MODEL,
+              voice: ALLOWED_TTS_VOICES.includes(body.voice) ? body.voice : TTS_VOICE,
+              input: text,
+              response_format: 'mp3',
+            }),
+          });
+          if (r.ok) return new Response(r.body, { headers: audio });
+          // fall through to the free voice rather than failing outright
+        } catch (e) { /* fall through */ }
       }
+
+      /* Free path — Workers AI TTS on the SAME `AI` binding the chat already uses, so it
+         needs no key, no extra account and costs nothing beyond the free allocation.
+         MeloTTS hands back base64, so decode it to real bytes before replying. */
+      if (env.AI) {
+        try {
+          const out = await env.AI.run('@cf/myshell-ai/melotts', { prompt: text, lang: 'en' });
+          const b64 = out && (out.audio || out.result || out.output || '');
+          if (b64 && typeof b64 === 'string') {
+            const bin = atob(b64);
+            const bytes = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+            return new Response(bytes, { headers: audio });
+          }
+          return json({ error: 'tts returned no audio' }, 502, cors);
+        } catch (e) {
+          return json({ error: String((e && e.message) || e) }, 502, cors);
+        }
+      }
+      return json({ error: 'tts not configured' }, 501, cors);
     }
 
     const messages = [];
