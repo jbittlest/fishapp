@@ -34,15 +34,28 @@ async function loadTidesTimes() {
   // instantly and still work offline; only fetch fresh when we have a connection.
   const cacheKey = 'fishapp.tides.' + st.id;
   const cached = readJSON(cacheKey, null);
-  const fresh = cached && cached.ts && (Date.now() - cached.ts) < 24 * 3600000 && cached.hl && cached.hl.length;
-  const showCached = () => { if (fresh) { renderTideGraph(cached.hl); renderHiLo(cached.hl); return true; } return false; };
+  /* Tide predictions are astronomical — a 25-hour-old payload isn't stale, it's just
+     partly used up. What matters is whether it still covers the future. Age-only
+     expiry meant day two of a trip showed "Couldn't load tide predictions" with a
+     perfectly good prediction set sitting in storage. */
+  const stillCovers = !!(cached && cached.hl && cached.hl.length &&
+    cached.hl.some((p) => new Date(p.t.replace(' ', 'T')).getTime() >= Date.now()));
+  const fresh = stillCovers && cached.ts && (Date.now() - cached.ts) < 24 * 3600000;
+  const showCached = () => {
+    if (!stillCovers) return false;
+    try { renderTideGraph(cached.hl); renderHiLo(cached.hl); return true; } catch (e) { return false; }
+  };
 
   if (!navigator.onLine) {
     if (!showCached()) box.innerHTML = stateHTML('📡', 'Connect to the internet to load tide predictions.', 'loadTidesTimes');
     return;
   }
   if (Tides._loading) return;   // dedupe rapid re-opens
-  if (!showCached()) box.innerHTML = loadingHTML('Loading tides…');
+  // Track what's actually on screen: a still-valid but >24h cache renders fine, and
+  // a failed refresh must not replace it with an error box.
+  const showedCache = showCached();
+  if (!showedCache) box.innerHTML = loadingHTML('Loading tides…');
+  if (showedCache && fresh) return;   // recent enough — no need to hit the network at all
 
   Tides._loading = true;
   try {
@@ -53,11 +66,12 @@ async function loadTidesTimes() {
       '&begin_date=' + ymd(now) + '&end_date=' + ymd(end);
     const hilo = await fetch(url).then((r) => r.json());
     const hl = hilo.predictions || [];
-    localStorage.setItem(cacheKey, JSON.stringify({ hl, ts: Date.now() }));
+    if (!hl.length) throw new Error('no predictions');
     renderTideGraph(hl);
     renderHiLo(hl);
+    localStorage.setItem(cacheKey, JSON.stringify({ hl, ts: Date.now() }));
   } catch (e) {
-    if (!fresh) box.innerHTML = stateHTML('⚠️', 'Couldn’t load tide predictions. Retry when you have signal.', 'loadTidesTimes');
+    if (!showedCache) box.innerHTML = stateHTML('⚠️', 'Couldn’t load tide predictions. Retry when you have signal.', 'loadTidesTimes');
   } finally {
     Tides._loading = false;
   }
@@ -104,11 +118,21 @@ function renderTideGraph(hilo) {
 function renderHiLo(hilo) {
   const box = document.getElementById('tide-hilo');
   const now = Date.now();
-  box.innerHTML = hilo.slice(0, 8).map((p) => {
-    const t = new Date(p.t.replace(' ', 'T'));
-    const past = t.getTime() < now;
+  /* Show the tides still to COME. The payload starts from when it was fetched, so
+     taking the first 8 unfiltered meant opening the panel at 05:00 on a cache saved
+     at 18:00 yesterday listed mostly last night's tides — greyed out and useless,
+     and on an older cache the whole list could be in the past. Keep one just-passed
+     entry for context (you often want to know what the tide just did). */
+  const withMs = hilo.map((p) => ({ p, ms: new Date(p.t.replace(' ', 'T')).getTime() }))
+    .sort((a, b) => a.ms - b.ms);
+  const firstFuture = withMs.findIndex((x) => x.ms >= now);
+  const start = firstFuture < 0 ? Math.max(0, withMs.length - 8) : Math.max(0, firstFuture - 1);
+  const rows = withMs.slice(start, start + 8);
+  if (!rows.length) { box.innerHTML = ''; return; }
+  box.innerHTML = rows.map(({ p, ms }) => {
+    const past = ms < now;
     return `<div class="tt-row${past ? ' past' : ''}"><span>${p.type === 'H' ? '⬆ High' : '⬇ Low'}</span>` +
-      `<span>${fmtTime(t)}</span><span>${parseFloat(p.v).toFixed(1)} ft</span></div>`;
+      `<span>${fmtTime(new Date(ms))}</span><span>${parseFloat(p.v).toFixed(1)} ft</span></div>`;
   }).join('');
 }
 

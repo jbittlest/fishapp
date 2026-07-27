@@ -100,10 +100,10 @@ function biteCondAt(ms, ll, fc, tideHiLo) {
   try {
     const ill = Astro.moonIllumination(when);
     cond.moonPhase = +ill.phase.toFixed(3);
-    const per = Astro.solunar(when, ll.lat, ll.lng);
+    const per = biteDayAstro('sol', when, ll);
     const act = per.find((p) => ms >= p.start && ms <= p.end);
     cond.solunar = act ? act.type : 'off';
-    const st = Astro.sunTimes(when, ll.lat, ll.lng);
+    const st = biteDayAstro('sun', when, ll);
     if (st.sunrise && st.sunset) {
       const dSr = Math.round((ms - st.sunrise) / 60000);
       const dSs = Math.round((ms - st.sunset) / 60000);
@@ -151,13 +151,48 @@ function biteCondAt(ms, ll, fc, tideHiLo) {
   }
   return cond;
 }
-/* Nearest hourly sample to a timestamp (forecast arrays are local-time ISO strings). */
+/* Solunar periods and sun times depend only on the DAY and the place, but scoring a
+   week called them once per hour — 168 runs each, of which 7 were distinct. Each
+   solunar run sweeps moon position 145 times, so this was most of the cost of opening
+   the Tides panel. Memoised per day + rounded position. */
+const _biteAstroCache = new Map();
+function biteDayAstro(kind, when, ll) {
+  const key = kind + '|' + when.getFullYear() + '-' + when.getMonth() + '-' + when.getDate() +
+    '|' + ll.lat.toFixed(2) + ',' + ll.lng.toFixed(2);
+  let v = _biteAstroCache.get(key);
+  if (v === undefined) {
+    v = kind === 'sol' ? Astro.solunar(when, ll.lat, ll.lng) : Astro.sunTimes(when, ll.lat, ll.lng);
+    if (_biteAstroCache.size > 400) _biteAstroCache.clear();   // bounded; it's a scratch cache
+    _biteAstroCache.set(key, v);
+  }
+  return v;
+}
+
+/* Nearest hourly sample to a timestamp (forecast arrays are local-time ISO strings).
+
+   Parse each time array ONCE. Scoring a week calls this twice per hour against a
+   240-entry array — about 80,000 `new Date(string)` parses per panel open, all of
+   them re-parsing the same handful of strings. The arrays are stable objects, so a
+   WeakMap keyed on the array both caches correctly and lets it be collected when
+   the forecast is replaced. */
+const _biteTimeCache = new WeakMap();
+function biteTimesMs(times) {
+  let ms = _biteTimeCache.get(times);
+  if (!ms) {
+    ms = new Float64Array(times.length);
+    for (let i = 0; i < times.length; i++) ms[i] = new Date(times[i]).getTime();
+    _biteTimeCache.set(times, ms);
+  }
+  return ms;
+}
 function biteHourIdx(times, ms) {
   if (!times || !times.length) return -1;
+  const arr = biteTimesMs(times);
   let best = -1, bestD = Infinity;
-  for (let i = 0; i < times.length; i++) {
-    const d = Math.abs(new Date(times[i]).getTime() - ms);
+  for (let i = 0; i < arr.length; i++) {
+    const d = Math.abs(arr[i] - ms);
     if (d < bestD) { bestD = d; best = i; }
+    else if (arr[i] > ms) break;   // sorted ascending: we're past the target and getting worse
   }
   return bestD <= 90 * 60000 ? best : -1;   // don't match more than 90 min away
 }
@@ -165,12 +200,24 @@ function biteHourIdx(times, ms) {
 /* ---- 3. Score a candidate condition set against the learned profile ---- */
 function biteScore(prof, cond) {
   let total = 0, weightSum = 0;
+  /* Track the weight of every dimension in the profile, not just the ones this hour
+     happened to have data for. The score is normalised over what was present, so an
+     hour missing water temperature — the strongest single signal — could still print
+     a confident 91% having never looked at it. */
+  let profileWeight = 0;
+  Object.keys(prof.num).forEach((k) => { profileWeight += prof.num[k].weight; });
+  Object.keys(prof.cat).forEach((k) => { profileWeight += prof.cat[k].weight; });
   const hits = [], misses = [];
   Object.keys(prof.num).forEach((key) => {
     const p = prof.num[key], v = cond[key];
     if (typeof v !== 'number' || isNaN(v)) return;
     const dist = biteDist(v, p.med, p.period);
-    const tol = Math.max(p.tol, p.iqr || 0);
+    /* Cap how far tolerance can widen. It was Math.max(tol, iqr), so a dimension the
+       user's catches are simply scattered across got a tolerance as wide as its own
+       spread — and then EVERY value scored a perfect 1.0. For wind direction that
+       meant every compass bearing on earth was a "hit", padding the headline
+       percentage and listing "wind from NW" as a supporting reason. */
+    const tol = Math.min(Math.max(p.tol, p.iqr || 0), p.tol * 2);
     // 1 inside tolerance, tapering to 0 at twice tolerance
     const s = dist <= tol ? 1 : Math.max(0, 1 - (dist - tol) / tol);
     total += s * p.weight; weightSum += p.weight;
@@ -186,6 +233,9 @@ function biteScore(prof, cond) {
   return {
     score: weightSum > 0 ? total / weightSum : 0,
     weightSum,
+    // 0–1: how much of the learned profile this hour could actually be scored on
+    coverage: profileWeight > 0 ? weightSum / profileWeight : 0,
+    scoredOf: [hits.length + misses.length, Object.keys(prof.num).length + Object.keys(prof.cat).length],
     hits: hits.sort((a, b) => b.weight * b.s - a.weight * a.s),
     misses: misses.sort((a, b) => b.weight - a.weight),
   };
@@ -277,7 +327,11 @@ async function biteWindows(opts) {
     const cond = biteCondAt(ms, ll, fc, tideHiLo);
     const sc = biteScore(prof, cond);
     if (sc.weightSum <= 0) continue;
-    hours.push({ ms, score: sc.score, hits: sc.hits, misses: sc.misses, cond });
+    /* Don't rank an hour we barely know anything about. Past the end of the forecast
+       only astronomy remains, which still gave a non-zero weightSum — so hours beyond
+       the data could win the ranking on moon phase alone, wearing a confident score. */
+    if (sc.coverage < 0.5) continue;
+    hours.push({ ms, score: sc.score, hits: sc.hits, misses: sc.misses, coverage: sc.coverage, scoredOf: sc.scoredOf, cond });
   }
   if (!hours.length) return { error: 'no forecast overlap', confidence: conf };
 
