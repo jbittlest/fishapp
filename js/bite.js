@@ -220,11 +220,14 @@ function biteCatches(opts) {
    tides.js only spans 2 days, which isn't enough to rank a 10-day outlook) ---- */
 async function biteTides(ll) {
   const cached = readJSON(Bite.TIDE_CACHE, null);
-  if (cached && cached.hl && cached.ts && (Date.now() - cached.ts) < 12 * 3600000 &&
-      Math.abs(cached.lat - ll.lat) < 0.5 && Math.abs(cached.lng - ll.lng) < 0.5) {
-    return cached.hl;
-  }
-  if (!navigator.onLine || typeof Tides === 'undefined' || !Tides.stations.length) return (cached && cached.hl) || [];
+  /* The fallbacks below used to return the cache with NO location check, so tides
+     from a station 250 nm away could drive three of the eleven scored dimensions —
+     and "40 min off the tide turn" was then given as a reason to fish here. */
+  const nearEnough = cached && cached.hl &&
+    Math.abs(cached.lat - ll.lat) < 0.5 && Math.abs(cached.lng - ll.lng) < 0.5;
+  const fallback = nearEnough ? cached.hl : [];
+  if (nearEnough && cached.ts && (Date.now() - cached.ts) < 12 * 3600000) return cached.hl;
+  if (!navigator.onLine || typeof Tides === 'undefined' || !Tides.stations.length) return fallback;
   try {
     const st = nearestTideStation(ll);
     const now = new Date();
@@ -236,7 +239,7 @@ async function biteTides(ll) {
     const hl = (r.predictions || []).map((p) => ({ t: new Date(p.t.replace(' ', 'T')).getTime(), type: p.type }));
     if (hl.length) localStorage.setItem(Bite.TIDE_CACHE, JSON.stringify({ hl, ts: Date.now(), lat: ll.lat, lng: ll.lng }));
     return hl;
-  } catch (e) { return (cached && cached.hl) || []; }
+  } catch (e) { return fallback; }
 }
 
 /* ---- 4. Rank upcoming windows ---- */
@@ -255,7 +258,12 @@ async function biteWindows(opts) {
     return { error: 'no usable conditions', n: catches.length, confidence: conf };
   }
 
-  const fc = readJSON('fishapp.fc10', null);
+  /* Location- and age-checked, like the weather panel does. Reading the raw key meant
+     that if you'd once tapped a distant spot on the map to peek at its forecast, that
+     payload stayed in fishapp.fc10 — and the bite windows for HERE were then scored on
+     the wind, pressure, cloud and SST of somewhere hundreds of miles away, under a
+     confident percentage. */
+  const fc = biteForecast(ll);
   const tideHiLo = await biteTides(ll);
   if (!fc) return { error: 'no forecast', confidence: conf };
 
@@ -428,11 +436,28 @@ function watchEvaluate(fc, nowMs) {
   return null;
 }
 
+/* The cached 10-day forecast, but ONLY if it was saved for near enough to here and
+   recently enough to still describe the weather. weather.js has always guarded this
+   (wxCacheFor); the bite engine and the conditions watch used to read the key raw. */
+const BITE_FC_MAX_AGE_MS = 6 * 3600000;
+const BITE_FC_MAX_DEG = 0.25;                   // ~25 km, same as the weather panel
+function biteForecast(ll) {
+  const fc = readJSON('fishapp.fc10', null);
+  if (!fc || !ll) return null;
+  if (fc.lat == null || fc.lng == null) return null;
+  if (Math.abs(fc.lat - ll.lat) > BITE_FC_MAX_DEG || Math.abs(fc.lng - ll.lng) > BITE_FC_MAX_DEG) return null;
+  if (!fc.ts || Date.now() - fc.ts > BITE_FC_MAX_AGE_MS) return null;
+  return fc;
+}
+
 function watchCheck() {
   // Only relevant if we're actually out there: no fix, nothing to warn about.
   if (typeof GPS === 'undefined' || !GPS.lastLatLng) return null;
   if (document.hidden) return null;
-  const fc = readJSON('fishapp.fc10', null);
+  /* A safety warning has to be about HERE and about NOW. Unchecked, this could
+     announce "wind is building, 22 knots by 4 PM" out loud, hands-free, from a
+     three-day-old forecast for a different part of the coast. */
+  const fc = biteForecast(GPS.lastLatLng);
   const alert = watchEvaluate(fc, Date.now());
   if (!alert) return null;
   const last = Watch._last[alert.type] || 0;

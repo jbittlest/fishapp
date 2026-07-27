@@ -532,7 +532,9 @@ function asstAnsPlan() {
     let s = 0;
     if (best) s += best.inDay ? 3 : 1;
     if (best && best.near) s += 1;
-    if (wx) {
+    /* Only score a day we actually have wind for. A day with no readings used to
+       score BEST — its -Infinity max wind passed the "<= 12 kn" test outright. */
+    if (wx && wx.wind_kn) {
       if (wx.wind_kn[1] <= 12) s += 2; else if (wx.wind_kn[1] <= 18) s += 1; else s -= 1;
       if (wx.wave_ft != null) { if (wx.wave_ft <= 2) s += 1; else if (wx.wave_ft >= 5) s -= 1; }
       if (wx.precip_pct <= 20) s += 0.5;
@@ -545,7 +547,7 @@ function asstAnsPlan() {
     let line = (idx === 0 ? '⭐ ' : '• ') + wd;
     if (d.best) line += ' — bite ' + asstTime(d.best.p.start) + '–' + asstTime(d.best.p.end) +
       (d.best.inDay ? (d.best.near ? ' (near sunrise/sunset 🔥)' : '') : ' (after dark)');
-    if (d.wx) line += '\n   wind ' + d.wx.wind_kn[0] + '–' + d.wx.wind_kn[1] + 'kn' +
+    if (d.wx && d.wx.wind_kn) line += '\n   wind ' + d.wx.wind_kn[0] + '–' + d.wx.wind_kn[1] + 'kn' +
       (d.wx.wave_ft != null ? ', seas ' + d.wx.wave_ft + 'ft' : '') + ', ' + d.wx.precip_pct + '% rain';
     return line;
   });
@@ -558,12 +560,17 @@ function asstAnsOutlook() {
   const a = asstAreaPack();
   if (!a || !a.data || !a.data.forecast) return "I don't have a multi-day forecast offline here. Download this area while online to capture a 7-day outlook.";
   const daily = areaDailyForecast(a.data);
+  // Every field is nullable now — say "no data" rather than print Infinity as fact.
   const lines = daily.slice(0, 7).map((d) => {
     const dt = new Date(d.date + 'T12:00');
     const wd = dt.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
-    return wd + ': wind ' + d.wind_kn[0] + '–' + d.wind_kn[1] + 'kn (g' + d.gust_kn + ')' +
-      (d.wave_ft != null ? ', seas ' + d.wave_ft + 'ft' : '') + ', ' + d.air_f[0] + '–' + d.air_f[1] + '°F, ' + d.precip_pct + '% rain';
+    if (!d.wind_kn) return wd + ': no data captured for this day';
+    return wd + ': wind ' + d.wind_kn[0] + '–' + d.wind_kn[1] + 'kn' +
+      (d.gust_kn != null ? ' (g' + d.gust_kn + ')' : '') +
+      (d.wave_ft != null ? ', seas ' + d.wave_ft + 'ft' : '') +
+      (d.air_f ? ', ' + d.air_f[0] + '–' + d.air_f[1] + '°F' : '') + ', ' + d.precip_pct + '% rain';
   });
+  if (!lines.length) return "That area pack's forecast has expired — re-download the area while online for a fresh outlook.";
   return '📅 ' + a.name + ' — ' + lines.length + '-day outlook (downloaded ' + asstAgo(a.data.capturedTs) + '):\n' + lines.join('\n');
 }
 

@@ -133,6 +133,10 @@ function updateWindBtn() {
 /* ---- Wind arrow overlay ---- */
 
 function windColor(kn) {
+  /* Unknown gets its own colour. Without this, null fell through to the calm blue
+     (a missing gust reading looked like a flat day) and NaN fell past every test
+     into stay-home red. */
+  if (kn == null || !isFinite(kn)) return '#8a9aa8';   // neutral grey — no data
   if (kn < 7) return '#4aa3e0';    // light air — blue
   if (kn < 14) return '#3dd464';   // nice breeze — green
   if (kn < 21) return '#e8c93d';   // getting sporty — yellow
@@ -242,8 +246,15 @@ async function loadNow24() {
 
   // Cache-first: paint the last saved forecast instantly (with its "saved X ago" badge) so
   // the panel is never blank, then refresh over it if we're online.
-  const cached = wxCacheFor('fishapp.lastwx', ll, navigator.onLine ? 12 * 3600000 : null);
-  if (cached) renderWeather(cached);
+  let cached = wxCacheFor('fishapp.lastwx', ll, navigator.onLine ? 12 * 3600000 : null);
+  /* A cache written by an older build can be missing a field this renderer reads.
+     That threw here — outside every try, before _loadingNow was even set — so the
+     refresh never ran and, offline (where the age cap is disabled), the poisoned
+     payload never expired. The panel stayed dead until storage was cleared. */
+  if (cached) {
+    try { renderWeather(cached); }
+    catch (e) { try { localStorage.removeItem('fishapp.lastwx'); } catch (e2) {} cached = null; }
+  }
 
   if (!navigator.onLine) {
     if (!cached) {
@@ -268,9 +279,10 @@ async function loadNow24() {
         '&hourly=wave_height,wave_period').then((r) => r.ok ? r.json() : null).catch(() => null),
     ]);
     if (!wx || wx.error || !wx.current) throw new Error('forecast unavailable');
+    if (!wx.hourly || !wx.hourly.time) throw new Error('forecast incomplete');
     const data = { wx, marine: marine && !marine.error ? marine : null, ts: Date.now(), lat: ll.lat, lng: ll.lng };
+    renderWeather(data);                          // render BEFORE caching, so a bad payload never sticks
     localStorage.setItem('fishapp.lastwx', JSON.stringify(data));
-    renderWeather(data);
   } catch (e) {
     // Keep the cached view if we have one; only show an error when there's nothing to show.
     if (!cached) {
@@ -282,12 +294,23 @@ async function loadNow24() {
   }
 }
 
+/* Missing marine data must read as missing. Math.round(null) is 0 and
+   windColor(null) returns the calm-air blue, so an absent gust figure used to
+   display as a confident "GUSTS 0 kn" in the same colour as a flat day — and
+   Math.round(undefined) is NaN, which windColor rendered in stay-home red.
+   On the water, "unknown" shown as a number is the dangerous default. */
+function wxNum(v, unit, digits) {
+  if (v == null || !isFinite(v)) return '—';
+  return (digits ? Number(v).toFixed(digits) : Math.round(v)) + (unit || '');
+}
 function dirArrow(deg) {
   // arrow showing where the wind blows TOWARD
+  if (deg == null || !isFinite(deg)) return '';
   const arrows = ['↓', '↙', '←', '↖', '↑', '↗', '→', '↘'];
   return arrows[Math.round(((deg % 360) / 45)) % 8];
 }
 function compass(deg) {
+  if (deg == null || !isFinite(deg)) return '—';
   const pts = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
   return pts[Math.round(((deg % 360) / 45)) % 8];
 }
@@ -300,14 +323,16 @@ function renderWeather(data) {
   const mc = data.marine && data.marine.current;
 
   let cards =
-    card('WIND', Math.round(c.wind_speed_10m) + '<small> kn</small>',
+    card('WIND', wxNum(c.wind_speed_10m) + '<small> kn</small>',
       compass(c.wind_direction_10m) + ' ' + dirArrow(c.wind_direction_10m), windColor(c.wind_speed_10m)) +
-    card('GUSTS', Math.round(c.wind_gusts_10m) + '<small> kn</small>', '', windColor(c.wind_gusts_10m));
-  if (mc && mc.wave_height !== null) {
-    cards += card('WAVES', (mc.wave_height * MS_TO_FT).toFixed(1) + '<small> ft</small>',
-      '@ ' + Math.round(mc.wave_period) + 's ' + compass(mc.wave_direction), '#4aa3e0');
+    card('GUSTS', wxNum(c.wind_gusts_10m) + '<small> kn</small>', '', windColor(c.wind_gusts_10m));
+  if (mc && mc.wave_height != null && isFinite(mc.wave_height)) {
+    // period/direction are separately nullable — don't invent "@ 0s N"
+    const detail = [mc.wave_period != null ? '@ ' + Math.round(mc.wave_period) + 's' : '',
+      mc.wave_direction != null ? compass(mc.wave_direction) : ''].filter(Boolean).join(' ');
+    cards += card('WAVES', (mc.wave_height * MS_TO_FT).toFixed(1) + '<small> ft</small>', detail, '#4aa3e0');
   }
-  cards += card('TEMP', Math.round(c.temperature_2m) + '<small>°F</small>', '', '#e8f1f8');
+  cards += card('TEMP', wxNum(c.temperature_2m) + '<small>°F</small>', '', '#e8f1f8');
   curEl.innerHTML = '<div class="wx-cards">' + cards + '</div>';
 
   /* Hourly: next 24 h from now */
@@ -319,19 +344,25 @@ function renderWeather(data) {
     const t = new Date(h.time[i]).getTime();
     if (t < now - 3600000) continue;
     const hr = new Date(t).toLocaleTimeString([], { hour: 'numeric' });
-    const kn = h.wind_speed_10m[i];
+    const kn = h.wind_speed_10m ? h.wind_speed_10m[i] : null;
     let wave = '';
-    if (mh && mh.wave_height[i] !== null && mh.wave_height[i] !== undefined) {
-      wave = (mh.wave_height[i] * MS_TO_FT).toFixed(1) + ' ft';
+    /* Match the marine reading to this row's TIME, not its array position. The two
+       APIs snap to their own grids and resolve timezone=auto independently, so a
+       shared index could pin one hour's swell to a different hour's wind — with no
+       visible symptom. fc3hStrip and renderForecast10 already do it this way. */
+    if (mh && mh.time && mh.wave_height) {
+      const mi = fcHourIdx(mh.time, h.time[i]);
+      if (mi >= 0 && mh.wave_height[mi] != null) wave = (mh.wave_height[mi] * MS_TO_FT).toFixed(1) + ' ft';
     }
     const rain = h.precipitation_probability ? h.precipitation_probability[i] : null;
+    const gust = h.wind_gusts_10m ? h.wind_gusts_10m[i] : null;
     rows += `<div class="wx-row">
       <span class="wx-t">${hr}</span>
-      <span class="wx-w" style="color:${windColor(kn)}">${dirArrow(h.wind_direction_10m[i])} ${Math.round(kn)} kn</span>
-      <span class="wx-g">G ${Math.round(h.wind_gusts_10m[i])}</span>
+      <span class="wx-w" style="color:${windColor(kn)}">${dirArrow(h.wind_direction_10m ? h.wind_direction_10m[i] : null)} ${wxNum(kn)} kn</span>
+      <span class="wx-g">${gust == null ? '' : 'G ' + wxNum(gust)}</span>
       <span class="wx-wv">${wave}</span>
       <span class="wx-r">${rain !== null && rain !== undefined ? rain + '%' : ''}</span>
-      <span class="wx-tp">${Math.round(h.temperature_2m[i])}°</span>
+      <span class="wx-tp">${wxNum(h.temperature_2m ? h.temperature_2m[i] : null)}°</span>
     </div>`;
   }
   hrEl.innerHTML = rows;
@@ -375,8 +406,12 @@ async function loadForecast10(override) {
   if (WX._loadingFc) return;   // dedupe rapid re-opens
 
   // Cache-first: show the saved 10-day instantly, then refresh over it if online.
-  const cached = wxCacheFor('fishapp.fc10', ll, navigator.onLine ? 12 * 3600000 : null);
-  if (cached) renderForecast10(cached);
+  let cached = wxCacheFor('fishapp.fc10', ll, navigator.onLine ? 12 * 3600000 : null);
+  // same poisoned-cache guard as loadNow24 — see the note there
+  if (cached) {
+    try { renderForecast10(cached); }
+    catch (e) { try { localStorage.removeItem('fishapp.fc10'); } catch (e2) {} cached = null; }
+  }
 
   if (!navigator.onLine) {
     if (!cached) {
@@ -401,11 +436,19 @@ async function loadForecast10(override) {
         '&daily=wave_height_max,wave_direction_dominant,wave_period_max,swell_wave_height_max,swell_wave_period_max' +
         '&hourly=wave_height,sea_surface_temperature&temperature_unit=fahrenheit').then((r) => r.ok ? r.json() : null).catch(() => null),
     ]);
-    if (!wx || wx.error || !wx.daily) throw new Error('forecast unavailable');
+    // Validate hourly too — the bite engine reads it, and a payload with `daily` but
+    // no usable `hourly` used to get cached and then break every later render.
+    if (!wx || wx.error || !wx.daily || !wx.daily.time) throw new Error('forecast unavailable');
+    if (!wx.hourly || !wx.hourly.time || !wx.hourly.time.length) throw new Error('forecast incomplete');
     const data = { wx, marine: marine && !marine.error ? marine : null, ts: Date.now(), lat: ll.lat, lng: ll.lng };
+    renderForecast10(data);                       // render BEFORE caching, so a bad payload never sticks
     localStorage.setItem('fishapp.fc10', JSON.stringify(data));
-    renderForecast10(data);
+    if (typeof WX !== 'undefined') WX._fc10loaded = true;
   } catch (e) {
+    /* Clear the latch so the tab keeps working. It was set optimistically before the
+       load, so one failure (offline, no cache) made the 10-Day tab inert for the rest
+       of the session — tapping between tabs did nothing until the panel was closed. */
+    if (typeof WX !== 'undefined') WX._fc10loaded = false;
     if (!cached) {
       daysEl.innerHTML = stateHTML('⚠️', 'Couldn’t load the 10-day forecast. Check your connection and retry.', 'loadForecast10');
       staleEl.textContent = '';

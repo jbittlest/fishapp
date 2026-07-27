@@ -204,31 +204,49 @@ function areaFcstIndex(fc, whenMs) {
   return best;
 }
 
-function areaDailyForecast(d) {
+function areaDailyForecast(d, fromYmd) {
   if (!d.forecast || !d.forecast.time) return [];
   const f = d.forecast, days = {};
+  const at = (arr, i) => (Array.isArray(arr) && arr[i] != null && isFinite(arr[i])) ? arr[i] : null;
   for (let i = 0; i < f.time.length; i++) {
     const day = f.time[i].slice(0, 10);
     const o = days[day] || (days[day] = { windLo: Infinity, windHi: -Infinity, gust: -Infinity, tLo: Infinity, tHi: -Infinity, precip: 0 });
-    if (f.wind[i] != null) { o.windLo = Math.min(o.windLo, f.wind[i]); o.windHi = Math.max(o.windHi, f.wind[i]); }
-    if (f.gust[i] != null) o.gust = Math.max(o.gust, f.gust[i]);
-    if (f.temp[i] != null) { o.tLo = Math.min(o.tLo, f.temp[i]); o.tHi = Math.max(o.tHi, f.temp[i]); }
-    if (f.precip[i] != null) o.precip = Math.max(o.precip, f.precip[i]);
+    /* Guard every array. `f.gust` is undefined if the API ever drops the key, and
+       indexing it threw straight out of areaPackSummary — which cost First Mate
+       every offline answer for the area, not just the wind. */
+    const w = at(f.wind, i); if (w != null) { o.windLo = Math.min(o.windLo, w); o.windHi = Math.max(o.windHi, w); }
+    const g = at(f.gust, i); if (g != null) o.gust = Math.max(o.gust, g);
+    const tp = at(f.temp, i); if (tp != null) { o.tLo = Math.min(o.tLo, tp); o.tHi = Math.max(o.tHi, tp); }
+    const pr = at(f.precip, i); if (pr != null) o.precip = Math.max(o.precip, pr);
   }
   const wave = {};
   const m = d.marine;
-  if (m && m.time) for (let i = 0; i < m.time.length; i++) {
+  if (m && m.time && Array.isArray(m.wave_m)) for (let i = 0; i < m.time.length; i++) {
     const day = m.time[i].slice(0, 10);
-    if (m.wave_m[i] != null) wave[day] = Math.max(wave[day] || 0, m.wave_m[i]);
+    const wv = at(m.wave_m, i);
+    if (wv != null) wave[day] = Math.max(wave[day] || 0, wv);
   }
-  return Object.keys(days).sort().map((day) => ({
-    date: day,
-    wind_kn: [Math.round(days[day].windLo), Math.round(days[day].windHi)],
-    gust_kn: Math.round(days[day].gust),
-    air_f: [Math.round(days[day].tLo), Math.round(days[day].tHi)],
-    wave_ft: wave[day] != null ? +(wave[day] * 3.28084).toFixed(1) : null,
-    precip_pct: days[day].precip,
-  }));
+  /* A day with no readings kept its Infinity sentinels. They were printed verbatim
+     ("wind Infinity–-Infinitykn") and, worse, -Infinity <= 12 is true — so the ONE
+     day the pack knew nothing about collected the full light-wind bonus and was
+     recommended as the best day to fish. Non-finite must become null. */
+  const fin = (v) => (isFinite(v) ? Math.round(v) : null);
+  const today = fromYmd || new Date().toISOString().slice(0, 10);
+  return Object.keys(days).sort()
+    // the pack keeps its whole captured window, so drop days that have already gone by
+    .filter((day) => day >= today)
+    .map((day) => {
+      const o = days[day];
+      const lo = fin(o.windLo), hi = fin(o.windHi);
+      return {
+        date: day,
+        wind_kn: (lo == null || hi == null) ? null : [lo, hi],
+        gust_kn: fin(o.gust),
+        air_f: (fin(o.tLo) == null || fin(o.tHi) == null) ? null : [fin(o.tLo), fin(o.tHi)],
+        wave_ft: wave[day] != null ? +(wave[day] * 3.28084).toFixed(1) : null,
+        precip_pct: o.precip,
+      };
+    });
 }
 
 function areaTidesNext(d, fromMs, n) {
