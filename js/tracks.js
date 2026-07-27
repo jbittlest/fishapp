@@ -22,12 +22,15 @@ function trackStart() {
   Tracks._lastPt = null;
   Tracks.line = L.polyline([], { color: '#ff9f43', weight: 4, opacity: 0.9 }).addTo(window._map);
   document.getElementById('btn-track').classList.add('recording');
+  // this tap is a gesture — start the keep-alive so a backgrounded app keeps recording
+  if (typeof awakeAcquire === 'function') awakeAcquire('track');
   toast('Recording track — tap ⏺ again to stop');
 }
 
 async function trackStop() {
   Tracks.recording = false;
   document.getElementById('btn-track').classList.remove('recording');
+  if (typeof awakeRelease === 'function') awakeRelease('track');
   if (Tracks.line) { window._map.removeLayer(Tracks.line); Tracks.line = null; }
 
   if (Tracks.points.length < 2) {

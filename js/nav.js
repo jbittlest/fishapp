@@ -173,6 +173,10 @@ function anchorDrop() {
   Nav.anchor.snoozeUntil = 0; Nav.anchor.snoozeFt = 0; Nav.anchor.blind = false; Nav.anchor.outCount = 0;
   unlockAudio();          // this tap is a user gesture — unlock audio so the alarm can beep later
   requestWakeLock();      // keep the screen on so GPS keeps running (iOS suspends when locked)
+  /* Same gesture starts the background keep-alive and asks for notification
+     permission, so the alarm can still reach you if the app isn't in front. */
+  if (typeof awakeAcquire === 'function') awakeAcquire('anchor');
+  if (typeof awakeAskNotify === 'function') awakeAskNotify();
   anchorPersist();
   updateAnchorUi();
   toast('⚓ Anchor watch on (' + Nav.anchor.radiusFt + ' ft) — keep the app open, screen on');
@@ -189,6 +193,7 @@ function anchorRaise() {
   Nav.anchor.circle = Nav.anchor.marker = Nav.anchor.ll = null;
   Nav.anchor.watching = false; Nav.anchor.dragging = false;
   Nav.anchor.snoozeUntil = 0; Nav.anchor.snoozeFt = 0; Nav.anchor.blind = false; Nav.anchor.outCount = 0;
+  if (typeof awakeRelease === 'function') awakeRelease('anchor');
   anchorPersist();
   updateAnchorUi();
 }
@@ -230,6 +235,8 @@ function anchorRestore() {
 }
 
 function updateAnchorUi() {
+  // keep the always-visible banner in step with the panel's own status line
+  if (typeof awakeUpdateUi === 'function') awakeUpdateUi();
   const btn = document.getElementById('btn-anchor');
   if (btn) btn.textContent = Nav.anchor.watching ? '⚓ Raise anchor / stop watch' : '⚓ Drop anchor here';
   const s = document.getElementById('anchor-status');
@@ -272,6 +279,14 @@ function startAnchorAlarm() {
   anchorBeep();
   clearInterval(Nav.anchor.alarmTimer);
   Nav.anchor.alarmTimer = setInterval(anchorBeep, 2000);   // repeat until dismissed / back in circle
+  /* Push it outside the app too. An on-screen overlay is no use if the phone is
+     face-down on the chart table with another app in front. */
+  if (typeof awakeNotify === 'function') {
+    awakeNotify(Nav.anchor.blind ? '⚠️ Anchor watch blind' : '⚠️ ANCHOR DRAGGING',
+      Nav.anchor.blind
+        ? 'No GPS fix — the watch cannot see whether you are moving. Open FishApp.'
+        : 'You have drifted past the ' + Nav.anchor.radiusFt + ' ft watch circle.');
+  }
 }
 function stopAnchorAlarm() {
   clearInterval(Nav.anchor.alarmTimer);

@@ -598,6 +598,25 @@ button.primary {
 #gb-arrive { background: #1f9d57; }
 #gb-cancel { background: rgba(255, 255, 255, 0.16); }
 .goto-pin { font-size: 26px; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7); text-align: center; line-height: 1; }
+
+/* Watch banner — sits under the Go To banner when both are up. Deliberately calm
+   when healthy and amber when not, so a glance from across the cockpit tells you
+   whether the thing you're trusting is actually working. */
+#watch-banner {
+  position: fixed; z-index: 1499;
+  top: calc(env(safe-area-inset-top, 0px) + 52px);
+  left: 8px; right: calc(env(safe-area-inset-right, 0px) + 64px);
+  background: rgba(10, 30, 46, 0.92); border: 1px solid #4aa3e0; border-radius: 12px;
+  padding: 7px 10px;
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  box-shadow: 0 3px 16px rgba(0, 0, 0, 0.4); font-variant-numeric: tabular-nums;
+}
+/* Both showing: drop below the Go To banner rather than under it. */
+#goto-banner:not(.hidden) ~ #watch-banner { top: calc(env(safe-area-inset-top, 0px) + 128px); }
+#watch-banner.warn { border-color: #e8b23d; background: rgba(58, 40, 10, 0.94); }
+#wb-what { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#wb-detail { font-size: 12px; opacity: 0.9; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#watch-banner.warn #wb-detail { opacity: 1; color: #ffd98a; }
 .ins-btns { display: flex; gap: 6px; margin-top: 8px; }
 .ins-btns button { flex: 1; }
 .ins-fc {

@@ -3,7 +3,7 @@
 
 /* Keep in step with CACHE in sw.js. Shown in the More sheet next to the build the service
    worker is actually serving, so a device running stale cached code is visible at a glance. */
-const APP_BUILD = 'v85';
+const APP_BUILD = 'v86';
 
 /* ---- Every request gets a deadline ----------------------------------------
    A boat is the worst network on earth: one bar, captive portals at the ramp,
@@ -510,6 +510,14 @@ const APP_BUILD = 'v85';
   WakeLock.setEnabled(WakeLock.enabled);   // sets status text + acquires if on
   WakeLock.acquire();
   wakeBox.addEventListener('change', (e) => WakeLock.setEnabled(e.target.checked));
+
+  /* ---- Background keep-alive toggle ---- */
+  const kaBox = document.getElementById('ovl-keepalive');
+  if (kaBox) {
+    kaBox.checked = Awake.enabled;
+    awakeSetEnabled(Awake.enabled);        // sets its status line
+    kaBox.addEventListener('change', (e) => awakeSetEnabled(e.target.checked));
+  }
 
   /* ---- Modules (background: spots + tracks fill in over the already-visible map) ---- */
   spotsInit(map).catch(() => {});

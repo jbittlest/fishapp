@@ -192,20 +192,52 @@ const WakeLock = {
     this._pending = true;
     try {
       this.lock = await navigator.wakeLock.request('screen');
-      this.lock.addEventListener('release', () => { this.lock = null; });
-    } catch (e) { this.lock = null; }
-    finally { this._pending = false; }
+      this.failed = false;
+      this.lock.addEventListener('release', () => {
+        this.lock = null;
+        // the banner and settings line must stop claiming the screen will stay on
+        this.renderStatus();
+        if (typeof awakeUpdateUi === 'function') awakeUpdateUi();
+      });
+    } catch (e) {
+      /* Record it. Failing silently meant the settings line kept saying "Screen
+         stays on while the app is open" when it demonstrably wasn't — and an
+         anchor watch was relying on that being true. */
+      this.lock = null;
+      this.failed = true;
+      this.failReason = (e && e.message) || String(e);
+    } finally {
+      this._pending = false;
+      this.renderStatus();
+      if (typeof awakeUpdateUi === 'function') awakeUpdateUi();
+    }
   },
   async release() {
     if (this.lock) { try { await this.lock.release(); } catch (e) {} this.lock = null; }
+    this.renderStatus();
   },
   setEnabled(on) {
     this.enabled = on;
     localStorage.setItem('fishapp.wake', on ? 'on' : 'off');
     if (on) this.acquire(); else this.release();
+    this.renderStatus();
+  },
+  /* Report what is ACTUALLY true right now, not what we asked for. The text used to
+     be written once, optimistically, before the async request had even resolved — so
+     it read "Screen stays on while the app is open" on devices where the lock had
+     been refused outright. An anchor watch was trusting that sentence. */
+  renderStatus() {
     const s = document.getElementById('wake-status');
-    if (s) s.textContent = !this.supported ? 'Not supported on this device/browser'
-      : (on ? 'Screen stays on while the app is open' : 'Off — phone may sleep normally');
+    if (!s) return;
+    if (!this.supported) { s.textContent = 'Not supported on this device/browser'; return; }
+    if (!this.enabled) { s.textContent = 'Off — phone may sleep normally'; return; }
+    if (this.lock) { s.textContent = '✅ Holding the screen on'; return; }
+    if (this.failed) {
+      s.textContent = '⚠️ The browser refused to hold the screen on' +
+        (this.failReason ? ' (' + this.failReason + ')' : '') + ' — it may still sleep';
+      return;
+    }
+    s.textContent = 'On — holds the screen once the app is in front';
   },
 };
 /* Re-acquire whenever the app comes back to the foreground or the user interacts

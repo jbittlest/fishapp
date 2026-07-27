@@ -53,6 +53,14 @@
   </div>
 </div>
 
+<!-- Always-visible state of anything that's actively watching for you. The anchor
+     panel's own status line is useless when the panel is closed, which is exactly
+     when you're relying on the watch. Turns amber the moment it can't do its job. -->
+<div id="watch-banner" class="hidden">
+  <div id="wb-what">Watching</div>
+  <div id="wb-detail"></div>
+</div>
+
 <!-- Right map controls: safety + map manipulation only. Everything else lives in the
      bottom tab bar, so this column can never grow long enough to overlap the zoom keys. -->
 <div id="controls">
@@ -110,6 +118,13 @@
   <h3>Device</h3>
   <label class="row"><input type="checkbox" id="ovl-wake" checked> ☀️ Keep screen awake while app is open</label>
   <div id="wake-status" class="hint"></div>
+  <label class="row"><input type="checkbox" id="ovl-keepalive" checked> 🔋 Keep running in the background during a watch</label>
+  <div id="keepalive-status" class="hint"></div>
+  <div class="hint" style="margin-top:6px">
+    On iPhone, locking the screen stops GPS entirely — Apple gives web apps no way around it.
+    With this on, the app stays awake enough to notice and sound the alarm instead of going quiet.
+    Leave the screen on for a watch you're actually depending on.
+  </div>
 </div>
 
 <!-- Spots & tracks panel -->
@@ -422,6 +437,7 @@
 <script src="./js/astro.js"></script>
 <script src="./js/tides.js"></script>
 <script src="./js/catch.js"></script>
+<script src="./js/awake.js"></script>
 <script src="./js/nav.js"></script>
 <script src="./js/goto.js"></script>
 <script src="./js/knot-diagrams.js"></script>
