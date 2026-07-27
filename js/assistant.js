@@ -1141,6 +1141,7 @@ async function asstAskOnline(userText, botEl) {
   messages.push({ role: 'user', content: userText });
 
   let finalText = '';
+  const didTools = [];      // what actually ran, so a truncated loop can still report
   for (let step = 0; step < 6; step++) {
     const data = await asstApiCall(messages);
     if (data.stop_reason === 'tool_use') {
@@ -1151,6 +1152,7 @@ async function asstAskOnline(userText, botEl) {
         botEl.textContent = '⚙️ ' + asstToolLabel(b.name) + '…';
         asstScroll();
         const out = await asstExecTool(b.name, b.input || {});
+        if (!(out && out.error)) didTools.push(asstToolLabel(b.name));
         results.push({
           type: 'tool_result',
           tool_use_id: b.id,
@@ -1164,7 +1166,16 @@ async function asstAskOnline(userText, botEl) {
     finalText = (data.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
     break;
   }
-  return finalText || '(no reply)';
+  if (finalText) return finalText;
+  /* Running out of steps mid-task used to return a bare "(no reply)" — after the
+     waypoint was created, the layer toggled and the trip started. Real, persistent
+     changes with no indication they'd happened. Say what was done. */
+  if (didTools.length) {
+    const uniq = didTools.filter((v, i) => didTools.indexOf(v) === i);
+    return "I ran out of steps before finishing that one. Here's what I did do: " +
+      uniq.join(', ') + '.\n\nAsk me again — more simply, or one part at a time.';
+  }
+  return '(no reply)';
 }
 
 function asstToolLabel(n) {

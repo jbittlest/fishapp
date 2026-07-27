@@ -57,11 +57,11 @@ async function buildAreaPack(bounds, onProgress) {
     };
   } catch (e) { pack.marineError = true; }
 
-  // Sea-surface-temp grid snapshot (to describe breaks / warmest water)
-  try { step('sea-temperature grid'); pack.sstGrid = await fetchSstGrid(bounds); } catch (e) { /* ignore */ }
-
-  // Depth grid (NOAA NCEI DEM point identify) so "how deep is it" works offline
-  try { step('depth grid'); pack.depthGrid = await fetchDepthGrid(bounds); } catch (e) { /* ignore */ }
+  /* Flag these like every other section. Swallowed silently, a partly-failed pack was
+     indistinguishable from a complete one — First Mate just omitted water temp or
+     depth, and nothing ever prompted a re-download. */
+  try { step('sea-temperature grid'); pack.sstGrid = await fetchSstGrid(bounds); } catch (e) { pack.sstError = true; }
+  try { step('depth grid'); pack.depthGrid = await fetchDepthGrid(bounds); } catch (e) { pack.depthError = true; }
 
   // A week of tide highs/lows at the nearest station
   try {
@@ -96,7 +96,11 @@ async function buildAreaPack(bounds, onProgress) {
         tally[n] = (tally[n] || 0) + 1;
         if (recent.length < 12 && o.observed_on) recent.push({ species: n, date: o.observed_on });
       });
-      pack.fish = { total: (j.results || []).length, tally, recent };
+      /* total_results is the real count. `results.length` is capped by per_page=100,
+         so this was handed to First Mate as "100 sightings" for an area with
+         thousands — which it then stated as fact. */
+      const sampled = (j.results || []).length;
+      pack.fish = { total: (j.total_results != null ? j.total_results : sampled), sampled, tally, recent };
     }
   } catch (e) { pack.fishError = true; }
 

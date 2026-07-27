@@ -367,10 +367,19 @@ function renderWeather(data) {
   }
   hrEl.innerHTML = rows;
 
-  const ageMin = Math.round((Date.now() - data.ts) / 60000);
-  staleEl.textContent = ageMin > 10
-    ? '⚠️ Saved forecast from ' + (ageMin > 120 ? Math.round(ageMin / 60) + ' hours' : ageMin + ' min') + ' ago (offline)'
-    : 'Forecast: Open-Meteo · updated just now';
+  staleEl.textContent = wxAgeLabel(data.ts, 'Forecast: Open-Meteo · updated just now');
+}
+
+/* "(offline)" was hardcoded, so an online user with a 40-minute-old cache was told
+   they were offline for the second before the refresh landed. Ages past a couple of
+   days also read as "58 hours". */
+function wxAgeLabel(ts, freshText) {
+  const ageMin = Math.round((Date.now() - ts) / 60000);
+  if (ageMin <= 10) return freshText;
+  const age = ageMin > 2880 ? Math.round(ageMin / 1440) + ' days'
+    : ageMin > 120 ? Math.round(ageMin / 60) + ' hours'
+    : ageMin + ' min';
+  return '⚠️ Saved forecast from ' + age + ' ago' + (navigator.onLine ? ' — refreshing…' : ' (offline)');
 }
 
 function card(label, big, sub, color) {
@@ -540,10 +549,8 @@ function renderForecast10(data) {
     };
   });
 
-  const ageMin = Math.round((Date.now() - data.ts) / 60000);
-  document.getElementById('fc-stale').textContent = ageMin > 10
-    ? '⚠️ Saved forecast from ' + (ageMin > 120 ? Math.round(ageMin / 60) + ' hours' : ageMin + ' min') + ' ago (offline)'
-    : 'Open-Meteo · updated just now';
+  document.getElementById('fc-stale').textContent =
+    wxAgeLabel(data.ts, 'Open-Meteo · updated just now');
 }
 
 function fc3hStrip(hh, mh, dayStr) {

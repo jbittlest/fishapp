@@ -10,8 +10,14 @@ async function tidesInit() {
 
 function nearestTideStation(ll) {
   let best = null, bd = Infinity;
+  /* Scale longitude by cos(latitude). A degree of longitude at 34°N is only ~0.83 of
+     a degree of latitude, so treating them as equal under-weighted east-west
+     separation by ~17% and could pick a station that isn't actually the closest —
+     and this choice feeds the bite engine and every catch's condition snapshot. */
+  const kx = Math.cos(ll.lat * Math.PI / 180);
   Tides.stations.forEach((s) => {
-    const d = (s.la - ll.lat) ** 2 + (s.lo - ll.lng) ** 2;
+    const dy = s.la - ll.lat, dx = (s.lo - ll.lng) * kx;
+    const d = dy * dy + dx * dx;
     if (d < bd) { bd = d; best = s; }
   });
   return best;

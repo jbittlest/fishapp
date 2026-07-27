@@ -378,8 +378,14 @@ document.addEventListener('visibilitychange', () => {
     if (Voice.rec) { try { Voice.rec.abort(); } catch (e) {} Voice.rec = null; }
     Voice._fails = 0;
     voiceStart();
-  } else if (Voice.rec) {
-    try { Voice.rec.abort(); } catch (e) {} Voice.rec = null;
+  } else {
+    if (Voice.rec) { try { Voice.rec.abort(); } catch (e) {} Voice.rec = null; }
+    /* Say so. Voice.on stayed true while backgrounded, so the toolbar kept reading
+       "listening" over a dead mic — and bite.js routes its weather alerts to SPEECH
+       whenever Voice.on, so a warning could be spoken to a mic that wasn't running
+       instead of shown as a toast. _wantOn still holds the intent to resume. */
+    Voice.on = false;
+    voiceUpdateUi();
   }
 });
 
