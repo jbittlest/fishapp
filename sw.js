@@ -44,9 +44,15 @@ const SHELL = [
 ];
 
 /* The files without which the app can't start at all. These must all land or the
-   install genuinely should fail; everything else is allowed to arrive later. */
-const CRITICAL = ['./', './index.html', './css/app.css', './libs/leaflet/leaflet.css',
-  './libs/leaflet/leaflet.js', './js/app.js', './js/db.js', './js/tiles.js', './js/gps.js'];
+   install genuinely should fail; everything else is allowed to arrive later.
+
+   Filtered against SHELL on purpose: naming a path here that isn't in SHELL (a typo,
+   or a file renamed later) would 404, reject the install, and leave the app with NO
+   service worker and no offline mode at all. Intersecting means a stale entry
+   silently drops out of the critical set instead of bricking offline support. */
+const CRITICAL = ['./', './index.html', './css/style.css', './libs/leaflet/leaflet.css',
+  './libs/leaflet/leaflet.js', './js/app.js', './js/db.js', './js/tiles.js', './js/gps.js']
+  .filter((u) => SHELL.indexOf(u) !== -1);
 
 self.addEventListener('install', (e) => {
   // cache: 'reload' forces fresh fetches from the network (bypass HTTP cache) so an
