@@ -36,6 +36,7 @@ const Motor = {
   lastActionTs: 0,          // last deliberate user touch — the deadman feeds on this
   _deadmanTimer: null,
   _logLines: [],
+  _plan: { mode: '', i: 0 },   // where the requestDevice ladder stopped, so a re-tap resumes there
 };
 
 /* How long the app may hold the motor armed with no human input before it commands stop and
@@ -79,8 +80,20 @@ function motorCandidateServices() {
     '6e400001-b5a3-f393-e0a9-e50e24dcca9e',   // Nordic UART — extremely common in vendor gear
     '0000fe59-0000-1000-8000-00805f9b34fb',   // Nordic DFU
   ];
-  if (p.service) list.unshift(p.service.toLowerCase());
-  return list;
+  if (p.service) list.unshift(p.service);
+  /* One malformed entry rejects the ENTIRE requestDevice call — and the profile's service UUID is
+     typed by hand on a phone. Canonicalise everything, drop anything that still isn't a 128-bit
+     UUID, and say which one was dropped rather than failing the whole connect over a typo. */
+  const seen = {};
+  return list.map(motorCharKey).filter((u) => {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(u)) {
+      motorLog('ignoring unusable service UUID in profile: ' + u, 'warn');
+      return false;
+    }
+    if (seen[u]) return false;
+    seen[u] = 1;
+    return true;
+  });
 }
 
 /* ---- Platform capability -------------------------------------------------- */
@@ -184,7 +197,19 @@ function motorExplainError(e) {
   /* Don't trust e.name alone. A JS-to-native bridge can surface a cancelled or empty chooser as a
      plain Error, which then reads as a hard failure and sends you hunting a bug that isn't there.
      The message text is the more reliable signal in that case. */
-  if (name === 'Error' && /cancel|no device|not found|user did not/i.test(msg)) name = 'NotFoundError';
+  /* Narrow on purpose. A looser "not found" match also swallowed genuine failures like
+     "service not found", relabelling a real GATT problem as "chooser dismissed" and sending you
+     off to hold the PAIR button forever over something that had nothing to do with pairing. */
+  if (name === 'Error' && /cancel|user did not|no device (selected|chosen)/i.test(msg)) name = 'NotFoundError';
+  /* Each requestDevice needs its own tap, and an awaited retry can outlive the activation.
+     That is a browser bookkeeping problem, not a device problem, and must not read as one. */
+  if (/user gesture|user activation|transient activation|must be handling/i.test(msg)) {
+    return {
+      name: 'NotAllowedError', msg: msg, retap: true,
+      guide: 'The browser lost the tap that authorised this — each attempt needs its own tap. ' +
+             'Tap "Connect to motor" once more; it resumes exactly where it stopped.',
+    };
+  }
   const guide = {
     NotFoundError:
       'No matching device, or the chooser was dismissed. The motor only advertises WHILE YOU HOLD ' +
@@ -202,8 +227,9 @@ function motorExplainError(e) {
     TypeError:
       'Bad request options for this browser — likely a service UUID it cannot parse.',
     AbortError: 'The request was cancelled.',
+    NotAllowedError: 'Permission refused. iOS Settings → Privacy & Security → Bluetooth → Bluefy must be ON.',
   }[name];
-  return { name: name, msg: msg, guide: guide || 'Unrecognised failure — the raw error is above.' };
+  return { name: name, msg: msg, retap: false, guide: guide || 'Unrecognised failure — the raw error is above.' };
 }
 
 /* `all` = skip the name filter and show every BLE device in range.
@@ -211,34 +237,90 @@ function motorExplainError(e) {
    but never under the Minn Kota filter, it advertises under a different name. If it appears in
    iOS Settings but NEVER here even with the filter off, it is Bluetooth Classic — and no browser
    on any platform can speak Classic, which ends the web route entirely. */
+/* Bluefy is a WKWebView shim over CoreBluetooth, not Chrome's implementation, and it rejects the
+   WHOLE call if it dislikes ANY part of the options — one UUID it can't parse, a second filter
+   entry, an optionalServices key at all. That surfaces as a single unexplained "request failed"
+   with nothing to act on, which is exactly where this got stuck once already.
+
+   So stop guessing: walk down progressively simpler option objects and print which rung the
+   browser accepted. The rung that works IS the diagnosis, readable on the phone. */
+function motorRequestPlans(opts) {
+  const svcs = motorCandidateServices();
+  const p = motorProfile();
+  const both = [{ namePrefix: 'Minn Kota' }, { namePrefix: 'MinnKota' }];
+  if (opts.all) {
+    return [
+      { why: 'every LE device + service list', options: { acceptAllDevices: true, optionalServices: svcs } },
+      { why: 'every LE device, no service list', options: { acceptAllDevices: true } },
+    ];
+  }
+  return [
+    { why: 'name filter + full service list', options: { filters: both, optionalServices: svcs } },
+    { why: 'name filter + saved/UART services only',
+      options: { filters: both,
+                 optionalServices: (p.service ? [motorCharKey(p.service)] : [])
+                   .concat(['6e400001-b5a3-f393-e0a9-e50e24dcca9e']) } },
+    { why: 'name filter, NO optionalServices key', options: { filters: both } },
+    { why: 'single filter "Minn Kota" only', options: { filters: [{ namePrefix: 'Minn Kota' }] } },
+  ];
+}
+
+async function motorRequestDevice(opts) {
+  const mode = opts.all ? 'all' : 'filter';
+  const plans = motorRequestPlans(opts);
+  if (Motor._plan.mode !== mode) Motor._plan = { mode: mode, i: 0 };
+  let last = null;
+  for (let i = Motor._plan.i; i < plans.length; i++) {
+    motorLog('try ' + (i + 1) + '/' + plans.length + ': ' + plans[i].why, 'hdr');
+    try {
+      const d = await navigator.bluetooth.requestDevice(plans[i].options);
+      if (i > 0) motorLog('this browser refused option set(s) 1–' + i + ' — worth reporting.', 'warn');
+      motorLog('options accepted on try ' + (i + 1), 'ok');
+      Motor._plan = { mode: mode, i: 0 };
+      return d;
+    } catch (e) {
+      const x = motorExplainError(e);
+      motorLog('  try ' + (i + 1) + ' → ' + x.name + ': ' + x.msg, 'err');
+      last = e;
+      /* A lost tap says nothing about the options — resume on THIS rung at the next tap. */
+      if (x.retap) { Motor._plan = { mode: mode, i: i }; throw e; }
+      /* These four mean the options were ACCEPTED and the outcome was still no device: the
+         chooser opened and found nothing, or was dismissed, or permission is denied. Simpler
+         options cannot change that, and continuing would throw four choosers at the user. */
+      if (x.name === 'NotFoundError' || x.name === 'AbortError' ||
+          x.name === 'SecurityError' || x.name === 'NotAllowedError') {
+        Motor._plan = { mode: mode, i: 0 };
+        throw e;
+      }
+    }
+  }
+  Motor._plan = { mode: mode, i: 0 };
+  throw last;
+}
+
 async function motorConnect(opts) {
   opts = opts || {};
   const sup = motorSupport();
   if (!sup.ok) { toast('Bluetooth not available here'); motorLog(sup.why.replace(/<[^>]+>/g, ''), 'err'); return; }
 
+  motorLog(opts.all ? 'scanning for ALL nearby Bluetooth LE devices…'
+                    : 'looking for a Minn Kota controller — HOLD the PAIR button now…', 'hdr');
   try {
-    if (opts.all) {
-      motorLog('scanning for ALL nearby Bluetooth LE devices…', 'hdr');
-      /* acceptAllDevices and filters are mutually exclusive per spec — this is a separate call,
-         not a relaxed one. optionalServices still applies, so a picked device stays usable. */
-      Motor.device = await navigator.bluetooth.requestDevice({
-        acceptAllDevices: true,
-        optionalServices: motorCandidateServices(),
-      });
-    } else {
-      motorLog('looking for a Minn Kota controller — HOLD the PAIR button now…', 'hdr');
-      /* namePrefix rather than a service filter: we may not know the service UUID yet, and the
-         control head advertises as "Minn Kota Controller 4.0" per the One-Boat Network manual. */
-      Motor.device = await navigator.bluetooth.requestDevice({
-        filters: [{ namePrefix: 'Minn Kota' }, { namePrefix: 'MinnKota' }],
-        optionalServices: motorCandidateServices(),
-      });
-    }
+    Motor.device = await motorRequestDevice(opts);
   } catch (e) {
     const x = motorExplainError(e);
     motorLog('requestDevice failed — ' + x.name + ': ' + x.msg, 'err');
     motorLog(x.guide, 'warn');
-    if (!opts.all) motorLog('Next: hold PAIR and retry, or tap "Show all devices" to see what is really advertising.', 'warn');
+    if (x.retap) { toast('Tap Connect once more'); return; }
+    if (!opts.all) {
+      motorLog('Next: hold PAIR and retry, or tap "Show all devices" to see what is really advertising.', 'warn');
+    } else if (x.name === 'NotFoundError') {
+      /* The whole web route hinges on this line. An unfiltered chooser is a BLE-only scan, so
+         Bluetooth Classic can only ever show up here as absence — never as an error. */
+      motorLog('Nothing at all advertised over Bluetooth LE. If "Minn Kota Controller 4.0" is ' +
+               'visible in iOS Settings → Bluetooth right now, the motor is Bluetooth CLASSIC — ' +
+               'no browser on any platform can speak Classic, and the web route ends here.', 'warn');
+    }
     toast(x.name === 'NotFoundError' ? 'No motor found — hold the PAIR button' : 'Bluetooth: ' + x.name);
     return;
   }
@@ -640,6 +722,14 @@ async function motorProbe() {
     navigator.bluetooth ? 'ok' : 'err');
   motorLog('browser        : ' + (bluefy ? 'Bluefy ✓' : (/iPhone|iPad/.test(ua) ? 'iOS, NOT Bluefy — Safari cannot do this' : 'other')),
     bluefy ? 'ok' : 'warn');
+  /* Which build is actually running. Half of a remote diagnosis is establishing that the phone
+     is even on the code being discussed — the copied log should answer that without asking. */
+  let build = '(unknown)';
+  try { build = APP_BUILD; } catch (e) {}
+  motorLog('app build      : ' + build + ' — if More says "update ready", close the browser from ' +
+           'the app switcher and reopen before trusting anything below', 'warn');
+  motorLog('page           : ' + location.protocol + '//' + location.host);
+  motorLog('ua             : ' + ua.slice(0, 120));
   if (navigator.bluetooth && navigator.bluetooth.getAvailability) {
     try {
       const avail = await navigator.bluetooth.getAvailability();
@@ -647,6 +737,17 @@ async function motorProbe() {
     } catch (e) { motorLog('adapter        : unknown (' + (e && e.name) + ')', 'warn'); }
   } else {
     motorLog('adapter        : cannot query in this browser', 'warn');
+  }
+  /* A device already granted to this origin can be reconnected without a chooser at all — worth
+     knowing before hunting through an anonymous device list again. */
+  if (navigator.bluetooth && navigator.bluetooth.getDevices) {
+    try {
+      const known = await navigator.bluetooth.getDevices();
+      motorLog('already granted: ' + (known.length ? known.map((d) => d.name || '(unnamed)').join(', ') : 'none'),
+        known.length ? 'ok' : '');
+    } catch (e) { motorLog('already granted: cannot query (' + (e && e.name) + ')', 'warn'); }
+  } else {
+    motorLog('already granted: not queryable in this browser', 'warn');
   }
 }
 
