@@ -3,7 +3,7 @@
 
 /* Keep in step with CACHE in sw.js. Shown in the More sheet next to the build the service
    worker is actually serving, so a device running stale cached code is visible at a glance. */
-const APP_BUILD = 'v87';
+const APP_BUILD = 'v88';
 
 /* ---- Every request gets a deadline ----------------------------------------
    A boat is the worst network on earth: one bar, captive portals at the ramp,
@@ -510,6 +510,10 @@ const APP_BUILD = 'v87';
      outside one, and arming should never be reachable except by a deliberate tap. */
   document.getElementById('btn-motor').onclick = () => togglePanel('panel-motor');
   document.getElementById('btn-motor-connect').onclick = () => (Motor.connected ? motorDisconnect() : motorConnect());
+  /* A separate button, not a fallback chained after the filtered attempt: requestDevice needs
+     transient activation, and a second call made after an await has already lost the gesture. */
+  document.getElementById('btn-motor-scanall').onclick = () => motorConnect({ all: true });
+  document.getElementById('btn-motor-copylog').onclick = motorCopyLog;
   document.getElementById('btn-motor-arm').onclick = () => (Motor.armed ? motorDisarm('user') : motorArm());
   document.getElementById('btn-motor-stop').onclick = () => motorStop('stop button');
   document.getElementById('btn-motor-saveuuid').onclick = motorSaveUuids;

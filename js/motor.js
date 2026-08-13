@@ -66,8 +66,16 @@ function motorSaveProfile(p) {
    is a genuinely plausible fit for a GPS-aware motor). */
 function motorCandidateServices() {
   const p = motorProfile();
+  /* Canonical 128-bit strings, not the 0x180f-style numeric aliases the spec also allows. Chrome
+     canonicalises numbers happily; partial implementations (Bluefy's included) have been known to
+     throw a TypeError on them instead — and one bad entry rejects the WHOLE requestDevice call,
+     which surfaces to the user as an unexplained "failed" with nothing to act on. */
   const list = [
-    0x1800, 0x1801, 0x180a, 0x180f, 0x1819,
+    '00001800-0000-1000-8000-00805f9b34fb',   // Generic Access
+    '00001801-0000-1000-8000-00805f9b34fb',   // Generic Attribute
+    '0000180a-0000-1000-8000-00805f9b34fb',   // Device Information
+    '0000180f-0000-1000-8000-00805f9b34fb',   // Battery
+    '00001819-0000-1000-8000-00805f9b34fb',   // Location & Navigation — plausible on a GPS motor
     '6e400001-b5a3-f393-e0a9-e50e24dcca9e',   // Nordic UART — extremely common in vendor gear
     '0000fe59-0000-1000-8000-00805f9b34fb',   // Nordic DFU
   ];
@@ -80,6 +88,16 @@ function motorCandidateServices() {
 /* Returns {ok, why} — `why` is shown to the user verbatim, so it has to be actionable. */
 function motorSupport() {
   if (navigator.bluetooth) return { ok: true, why: '' };
+  /* Check this BEFORE blaming the browser. `navigator.bluetooth` is also undefined on any
+     non-secure page, so a http:// or file:// copy used to fall through to the iOS branch and
+     tell the user to "open FishApp in Bluefy" — while they were already sitting in Bluefy. */
+  if (!window.isSecureContext) {
+    return {
+      ok: false,
+      why: 'This page isn\'t a secure context, so no browser will expose Bluetooth. Open the ' +
+           '<b>https://</b> address (not a local file or an http:// copy) and try again.',
+    };
+  }
   const ua = navigator.userAgent || '';
   const isIOS = /iPad|iPhone|iPod/.test(ua) ||
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -137,22 +155,67 @@ function motorLog(line, cls) {
 
 /* ---- Connection ----------------------------------------------------------- */
 
-async function motorConnect() {
+/* Plain English per DOMException name. Bluefy exposes no JavaScript console and no remote
+   debugging, so an error the user cannot read is an error that cannot be fixed — every failure
+   has to explain itself here, in the page, or the whole panel is undebuggable on the water. */
+function motorExplainError(e) {
+  const name = (e && e.name) || 'Error';
+  const msg = (e && e.message) || String(e);
+  const guide = {
+    NotFoundError:
+      'No matching device, or the chooser was dismissed. The motor only advertises WHILE YOU HOLD ' +
+      'the PAIR button on the control head — and it gives up after 30 seconds. Hold PAIR down, ' +
+      'then tap Connect while still holding it.',
+    SecurityError:
+      'Blocked. The page must be https, and Bluefy needs Bluetooth permission in iOS Settings.',
+    NotSupportedError:
+      'This browser refused the request options. Usually an unsupported service UUID format.',
+    InvalidStateError:
+      'The Bluetooth adapter is not ready. Toggle Bluetooth off and on, then retry.',
+    NetworkError:
+      'The device was found but the connection dropped. Something else may already be holding it — ' +
+      'force-quit the One-Boat Network app.',
+    TypeError:
+      'Bad request options for this browser — likely a service UUID it cannot parse.',
+    AbortError: 'The request was cancelled.',
+  }[name];
+  return { name: name, msg: msg, guide: guide || 'Unrecognised failure — the raw error is above.' };
+}
+
+/* `all` = skip the name filter and show every BLE device in range.
+   This is the single most diagnostic thing in the panel: if the motor appears under "show all"
+   but never under the Minn Kota filter, it advertises under a different name. If it appears in
+   iOS Settings but NEVER here even with the filter off, it is Bluetooth Classic — and no browser
+   on any platform can speak Classic, which ends the web route entirely. */
+async function motorConnect(opts) {
+  opts = opts || {};
   const sup = motorSupport();
-  if (!sup.ok) { toast('Bluetooth not available in this browser'); return; }
+  if (!sup.ok) { toast('Bluetooth not available here'); motorLog(sup.why.replace(/<[^>]+>/g, ''), 'err'); return; }
 
   try {
-    motorLog('requesting device…');
-    /* namePrefix rather than a service filter: we may not know the service UUID yet, and the
-       control head advertises as "Minn Kota Controller 4.0" per the One-Boat Network manual. */
-    Motor.device = await navigator.bluetooth.requestDevice({
-      filters: [{ namePrefix: 'Minn Kota' }, { namePrefix: 'MinnKota' }],
-      optionalServices: motorCandidateServices(),
-    });
+    if (opts.all) {
+      motorLog('scanning for ALL nearby Bluetooth LE devices…', 'hdr');
+      /* acceptAllDevices and filters are mutually exclusive per spec — this is a separate call,
+         not a relaxed one. optionalServices still applies, so a picked device stays usable. */
+      Motor.device = await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: motorCandidateServices(),
+      });
+    } else {
+      motorLog('looking for a Minn Kota controller — HOLD the PAIR button now…', 'hdr');
+      /* namePrefix rather than a service filter: we may not know the service UUID yet, and the
+         control head advertises as "Minn Kota Controller 4.0" per the One-Boat Network manual. */
+      Motor.device = await navigator.bluetooth.requestDevice({
+        filters: [{ namePrefix: 'Minn Kota' }, { namePrefix: 'MinnKota' }],
+        optionalServices: motorCandidateServices(),
+      });
+    }
   } catch (e) {
-    // Chooser dismissed is the common case and isn't an error worth shouting about.
-    if (e && e.name === 'NotFoundError') { motorLog('no device picked', 'warn'); return; }
-    motorLog('requestDevice failed: ' + (e && e.message), 'err');
+    const x = motorExplainError(e);
+    motorLog('requestDevice failed — ' + x.name + ': ' + x.msg, 'err');
+    motorLog(x.guide, 'warn');
+    if (!opts.all) motorLog('Next: hold PAIR and retry, or tap "Show all devices" to see what is really advertising.', 'warn');
+    toast(x.name === 'NotFoundError' ? 'No motor found — hold the PAIR button' : 'Bluetooth: ' + x.name);
     return;
   }
 
@@ -480,6 +543,39 @@ function motorSaveUuids() {
   motorLog('profile saved: service=' + (p.service || '(none)'), 'hdr');
 }
 
+/* Print what this browser can actually do. Without a console these five facts are otherwise
+   indistinguishable from each other — "it failed" covers a non-secure page, a browser with no
+   Bluetooth at all, a powered-off adapter and a denied permission, which need four different
+   fixes. Runs on panel open so the answer is already on screen before anything is attempted. */
+async function motorProbe() {
+  const ua = navigator.userAgent || '';
+  const bluefy = /Bluefy/i.test(ua);
+  motorLog('=== browser check ===', 'hdr');
+  motorLog('secure context : ' + (window.isSecureContext ? 'yes' : 'NO — https required'),
+    window.isSecureContext ? 'ok' : 'err');
+  motorLog('web bluetooth  : ' + (navigator.bluetooth ? 'present' : 'ABSENT'),
+    navigator.bluetooth ? 'ok' : 'err');
+  motorLog('browser        : ' + (bluefy ? 'Bluefy ✓' : (/iPhone|iPad/.test(ua) ? 'iOS, NOT Bluefy — Safari cannot do this' : 'other')),
+    bluefy ? 'ok' : 'warn');
+  if (navigator.bluetooth && navigator.bluetooth.getAvailability) {
+    try {
+      const avail = await navigator.bluetooth.getAvailability();
+      motorLog('adapter        : ' + (avail ? 'available' : 'NOT available — is Bluetooth on?'), avail ? 'ok' : 'err');
+    } catch (e) { motorLog('adapter        : unknown (' + (e && e.name) + ')', 'warn'); }
+  } else {
+    motorLog('adapter        : cannot query in this browser', 'warn');
+  }
+}
+
+/* A <pre> full of hex is not something you can usefully screenshot and read back to me, and
+   Bluefy gives no other way to get text out. */
+function motorCopyLog() {
+  const txt = Motor._logLines.map((r) => r.t + '  ' + r.line).join('\n');
+  if (!txt) { toast('Nothing logged yet'); return; }
+  if (navigator.clipboard) navigator.clipboard.writeText(txt).then(() => toast('Log copied')).catch(() => toast('Copy failed'));
+  else toast('Copy not supported here');
+}
+
 function motorInit() {
   const sup = motorSupport();
   const warn = document.getElementById('motor-unsupported');
@@ -495,5 +591,9 @@ function motorInit() {
   motorUpdateUi();
 }
 
-/* Opening the panel shouldn't silently re-arm anything; it just refreshes what's true now. */
-function motorOnOpen() { motorInit(); }
+/* Opening the panel shouldn't silently re-arm anything; it just refreshes what's true now —
+   and runs the browser check, so the capability answer is on screen before the first attempt. */
+function motorOnOpen() {
+  motorInit();
+  motorProbe();
+}
