@@ -1,7 +1,7 @@
 /* Service worker: caches the app shell so FishApp launches with zero internet */
 'use strict';
 
-const CACHE = 'fishapp-v86';
+const CACHE = 'fishapp-v87';
 const SHELL = [
   './',
   './index.html',
@@ -32,6 +32,7 @@ const SHELL = [
   './js/bite.js',
   './js/assistant.js',
   './js/voice.js',
+  './js/motor.js',
   './data/tide-stations-ca.json',
   './data/reefs-ca.json',
   './data/mpa-ca.json',

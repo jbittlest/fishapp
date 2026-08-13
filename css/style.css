@@ -652,3 +652,40 @@ button.primary {
   padding: 6px 10px; border-radius: 6px; border: none; cursor: pointer;
   background: rgba(255,255,255,0.15); color: #fff; font-size: 12px;
 }
+
+/* ---- Trolling motor link (motor.js) ----
+   The arm button is the only control in the app that can start a propeller, so it is styled to
+   look like nothing else: amber when disarmed, red and pulsing when live. It should be
+   impossible to glance at the panel and be unsure which state you are in. */
+.arm-btn {
+  width: 100%; margin: 4px 0; padding: 13px; font-size: 15px; font-weight: 700;
+  border-color: rgba(240,180,60,0.5); background: rgba(240,180,60,0.14);
+}
+.arm-btn:disabled { opacity: 0.4; }
+.arm-btn.armed {
+  background: rgba(210,50,50,0.35); border-color: #ff6b6b; color: #fff;
+  animation: armpulse 1.6s ease-in-out infinite;
+}
+@keyframes armpulse { 0%,100% { box-shadow: 0 0 0 0 rgba(255,80,80,0.5); } 50% { box-shadow: 0 0 0 7px rgba(255,80,80,0); } }
+.tool-btn.danger { background: rgba(200,50,50,0.35); border-color: rgba(255,120,120,0.6); font-weight: 600; }
+.warn-box {
+  background: rgba(240,180,60,0.12); border: 1px solid rgba(240,180,60,0.4);
+  border-radius: 8px; padding: 10px; margin: 8px 0; opacity: 1;
+}
+/* Frame log. Monospace and horizontally scrollable — hex columns only read as columns if they
+   actually line up, and wrapping a 20-byte frame destroys the one thing you are looking for. */
+.motor-log {
+  margin-top: 8px; padding: 8px; max-height: 260px; overflow: auto;
+  background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; line-height: 1.45;
+  white-space: pre; color: #cfd8e3;
+}
+.motor-log .mlog { display: block; }
+.motor-log .rx  { color: #7fd6a0; }
+.motor-log .tx  { color: #7fb8f0; }
+.motor-log .ok  { color: #3dd464; }
+.motor-log .warn{ color: #f0c04a; }
+.motor-log .err { color: #ff8080; }
+.motor-log .hdr { color: #fff; font-weight: 700; }
+#motor-cmds { flex-wrap: wrap; }
+#motor-cmds .tool-btn { flex: 1 1 45%; }

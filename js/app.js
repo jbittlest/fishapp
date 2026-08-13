@@ -3,7 +3,7 @@
 
 /* Keep in step with CACHE in sw.js. Shown in the More sheet next to the build the service
    worker is actually serving, so a device running stale cached code is visible at a glance. */
-const APP_BUILD = 'v86';
+const APP_BUILD = 'v87';
 
 /* ---- Every request gets a deadline ----------------------------------------
    A boat is the worst network on earth: one bar, captive portals at the ramp,
@@ -240,7 +240,7 @@ const APP_BUILD = 'v86';
   document.getElementById('wind-scrub').addEventListener('input', (e) => windScrub(e.target.value));
 
   /* ---- Panels ---- */
-  const panels = ['panel-layers', 'panel-spots', 'panel-download', 'panel-weather', 'panel-tides', 'panel-tools', 'panel-knots', 'panel-emergency', 'panel-assistant', 'panel-more'];
+  const panels = ['panel-layers', 'panel-spots', 'panel-download', 'panel-weather', 'panel-tides', 'panel-tools', 'panel-knots', 'panel-emergency', 'panel-assistant', 'panel-motor', 'panel-more'];
   /* Which tab-bar button corresponds to which panel, so the bar can show what's open. */
   const TAB_FOR_PANEL = { 'panel-weather': 'btn-weather', 'panel-tides': 'btn-tides', 'panel-more': 'btn-more' };
   window.syncTabs = () => {
@@ -293,6 +293,7 @@ const APP_BUILD = 'v86';
     if (id === 'panel-knots' && wasHidden) { renderKnots(); renderFishId(); }
     if (id === 'panel-emergency' && wasHidden) updateEmergency();
     if (id === 'panel-assistant' && wasHidden) asstOnOpen();
+    if (id === 'panel-motor' && wasHidden) motorOnOpen();
   }
   document.querySelectorAll('.close').forEach((b) =>
     b.addEventListener('click', () => { document.getElementById(b.dataset.close).classList.add('hidden'); syncTabs(); }));
@@ -503,6 +504,20 @@ const APP_BUILD = 'v86';
   try { anchorRestore(); } catch (e) {}
   document.getElementById('btn-trip').onclick = tripToggle;
   document.getElementById('btn-trip-reset').onclick = tripReset;
+
+  /* ---- Trolling motor link (motor.js) ----
+     Every one of these is a plain user gesture on purpose: Web Bluetooth refuses requestDevice
+     outside one, and arming should never be reachable except by a deliberate tap. */
+  document.getElementById('btn-motor').onclick = () => togglePanel('panel-motor');
+  document.getElementById('btn-motor-connect').onclick = () => (Motor.connected ? motorDisconnect() : motorConnect());
+  document.getElementById('btn-motor-arm').onclick = () => (Motor.armed ? motorDisarm('user') : motorArm());
+  document.getElementById('btn-motor-stop').onclick = () => motorStop('stop button');
+  document.getElementById('btn-motor-saveuuid').onclick = motorSaveUuids;
+  document.getElementById('btn-motor-addcmd').onclick = motorAddFrame;
+  document.getElementById('btn-motor-record').onclick = motorRecordToggle;
+  document.getElementById('btn-motor-mark').onclick = motorMarkEvent;
+  document.getElementById('btn-motor-export').onclick = motorExportSession;
+  motorInit();
 
   /* ---- Keep-screen-awake toggle ---- */
   const wakeBox = document.getElementById('ovl-wake');

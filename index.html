@@ -93,6 +93,7 @@
     <button class="more-tile" id="btn-knots"><span class="mt-ico">📖</span><b>Guides</b></button>
     <button class="more-tile" id="btn-download"><span class="mt-ico">⇩</span><b>Offline Charts</b></button>
     <button class="more-tile" id="btn-track"><span class="mt-ico">⏺</span><b>Record Track</b></button>
+    <button class="more-tile" id="btn-motor"><span class="mt-ico">⚙️</span><b>Trolling Motor</b></button>
   </div>
   <p class="hint" id="app-build" style="margin-top:12px;text-align:center">build —</p>
 </div>
@@ -297,6 +298,56 @@
   <div id="trip-stats" class="tt-list"></div>
 </div>
 
+<!-- Trolling motor panel (motor.js) -->
+<div class="panel hidden" id="panel-motor">
+  <div class="panel-head"><h2>Trolling motor link</h2><button class="close" data-close="panel-motor">✕</button></div>
+
+  <div id="motor-unsupported" class="hint warn-box hidden"></div>
+
+  <p class="hint">
+    Minn Kota publishes no protocol, so this panel ships with no commands in it. It connects,
+    shows you everything the motor says, and sends only the byte sequences <b>you</b> captured
+    and saved. See <code>MOTOR.md</code> for how to get them.
+  </p>
+
+  <h3>1 · Connection</h3>
+  <button id="btn-motor-connect" class="primary">🔗 Connect to motor</button>
+  <div id="motor-conn-status" class="hint">Not connected</div>
+
+  <h3>2 · Safety</h3>
+  <button id="btn-motor-arm" class="tool-btn arm-btn" disabled>🔒 Disarmed — tap to arm</button>
+  <div class="tool-row hidden" id="motor-deadman-row">
+    <span class="hint">Auto-stop in <b id="motor-deadman">—</b> without input</span>
+    <button id="btn-motor-stop" class="tool-btn danger">⏹ STOP</button>
+  </div>
+  <p class="hint">
+    These interlocks are software in a browser on a phone that can lock, freeze or be killed —
+    they are best-effort, not a guarantee. <b>The foot pedal and the real remote are the only
+    true kill.</b> Keep a hand near one whenever this is armed.
+  </p>
+
+  <h3>3 · Protocol profile</h3>
+  <p class="hint">UUIDs from your packet capture. Without the service UUID the browser will not
+    show you any of the motor's characteristics — that is a Web Bluetooth rule, not a bug.</p>
+  <label class="fld">Service UUID<input type="text" id="motor-svc" placeholder="0000xxxx-0000-1000-8000-00805f9b34fb" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+  <label class="fld">Write characteristic<input type="text" id="motor-tx" placeholder="commands go here" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+  <label class="fld">Notify characteristic<input type="text" id="motor-rx" placeholder="telemetry comes back here" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+  <button id="btn-motor-saveuuid" class="tool-btn">💾 Save profile</button>
+
+  <h3>4 · Commands</h3>
+  <div id="motor-cmds" class="tool-row"></div>
+  <button id="btn-motor-addcmd" class="tool-btn">➕ Add captured command</button>
+
+  <h3>5 · Recon</h3>
+  <div class="tool-row">
+    <button id="btn-motor-record" class="tool-btn">⏺ Record frames</button>
+    <button id="btn-motor-mark" class="tool-btn">★ Mark what I just did</button>
+    <button id="btn-motor-export" class="tool-btn">⇩ Export session</button>
+  </div>
+  <div id="motor-frame-count" class="hint"></div>
+  <pre id="motor-log" class="motor-log"></pre>
+</div>
+
 <!-- Weather panel -->
 <div class="panel hidden" id="panel-weather">
   <div class="panel-head"><h2>Weather &amp; waves</h2><button class="close" data-close="panel-weather">✕</button></div>
@@ -448,6 +499,7 @@
 <script src="./js/bite.js"></script>
 <script src="./js/assistant.js"></script>
 <script src="./js/voice.js"></script>
+<script src="./js/motor.js"></script>
 <script src="./js/download.js"></script>
 <script src="./js/app.js"></script>
 </body>
