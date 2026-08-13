@@ -114,6 +114,20 @@ function motorSupport() {
 
 /* ---- Logging / capture ---------------------------------------------------- */
 
+/* CoreBluetooth (which is what Bluefy sits on) hands back CBUUID.uuidString — UPPERCASE, and in
+   short form for 16-bit UUIDs, e.g. "180F" or "FFE1". The Web Bluetooth spec says lowercase
+   canonical 128-bit. Keying the characteristic map on the raw string and looking it up with a
+   lowercased profile UUID therefore missed on every write: "characteristic not found on the
+   device", for a characteristic sitting right there. Normalise both ends through this. */
+function motorCharKey(u) {
+  let s = String(u == null ? '' : u).trim().toLowerCase();
+  if (/^0x[0-9a-f]+$/.test(s)) s = s.slice(2);
+  if (/^[0-9a-f]{1,4}$/.test(s)) s = ('0000' + s).slice(-4);
+  if (/^[0-9a-f]{4}$/.test(s)) return '0000' + s + '-0000-1000-8000-00805f9b34fb';
+  if (/^[0-9a-f]{8}$/.test(s)) return s + '-0000-1000-8000-00805f9b34fb';
+  return s;
+}
+
 function motorHex(dv) {
   const out = [];
   for (let i = 0; i < dv.byteLength; i++) out.push(dv.getUint8(i).toString(16).padStart(2, '0'));
@@ -147,8 +161,14 @@ function motorLog(line, cls) {
   if (Motor._logLines.length > MOTOR_LOG_MAX) Motor._logLines.shift();
   const el = document.getElementById('motor-log');
   if (!el) return;
+  /* ESCAPED. Log lines carry device-controlled text — advertised names and raw notification
+     payloads — straight from whatever is broadcasting nearby. Interpolating that into innerHTML
+     let any BLE device in radio range inject script into a page that can arm a trolling motor.
+     Nothing logged here is ever meant to be markup; HTML in a device name is an attack, not a
+     feature. (The one string carrying real tags, motorSupport().why, is stripped before it
+     reaches this function.) */
   el.innerHTML = Motor._logLines
-    .map((r) => '<span class="mlog ' + r.cls + '">' + r.t + '  ' + r.line + '</span>')
+    .map((r) => '<span class="mlog ' + r.cls + '">' + escapeHtmlMotor(r.t + '  ' + r.line) + '</span>')
     .join('\n');
   el.scrollTop = el.scrollHeight;
 }
@@ -159,8 +179,12 @@ function motorLog(line, cls) {
    debugging, so an error the user cannot read is an error that cannot be fixed — every failure
    has to explain itself here, in the page, or the whole panel is undebuggable on the water. */
 function motorExplainError(e) {
-  const name = (e && e.name) || 'Error';
+  let name = (e && e.name) || 'Error';
   const msg = (e && e.message) || String(e);
+  /* Don't trust e.name alone. A JS-to-native bridge can surface a cancelled or empty chooser as a
+     plain Error, which then reads as a hard failure and sends you hunting a bug that isn't there.
+     The message text is the more reliable signal in that case. */
+  if (name === 'Error' && /cancel|no device|not found|user did not/i.test(msg)) name = 'NotFoundError';
   const guide = {
     NotFoundError:
       'No matching device, or the chooser was dismissed. The motor only advertises WHILE YOU HOLD ' +
@@ -219,13 +243,18 @@ async function motorConnect(opts) {
     return;
   }
 
-  Motor.device.addEventListener('gattserverdisconnected', motorOnDisconnected);
+  motorLog('picked: "' + (Motor.device.name || '(no name broadcast)') + '"', 'hdr');
+  /* Guarded: if this browser's BluetoothDevice isn't a full EventTarget, an uncaught throw here
+     abandons motorConnect with the log frozen mid-connect and nothing explaining why. */
+  try { Motor.device.addEventListener('gattserverdisconnected', motorOnDisconnected); }
+  catch (e) { motorLog('note: no disconnect event in this browser — a dropped link may go unnoticed', 'warn'); }
 
   try {
     motorLog('connecting to ' + (Motor.device.name || '(unnamed)') + '…');
     Motor.server = await Motor.device.gatt.connect();
     Motor.connected = true;
     motorLog('connected', 'ok');
+    await motorIdentify();
     await motorExplore();
   } catch (e) {
     motorLog('connect failed: ' + (e && e.message), 'err');
@@ -260,6 +289,56 @@ async function motorDisconnect() {
   motorUpdateUi();
 }
 
+/* Standard Device Information service — the manufacturer's own answer to "what am I".
+   This exists precisely because an unfiltered chooser is a wall of anonymous devices: you pick a
+   candidate, and instead of guessing, the device tells you. Nothing here is Minn Kota-specific;
+   0x180a is a Bluetooth SIG standard every conforming device may implement. */
+const MOTOR_DEVINFO = [
+  ['00002a29-0000-1000-8000-00805f9b34fb', 'manufacturer'],
+  ['00002a24-0000-1000-8000-00805f9b34fb', 'model'],
+  ['00002a25-0000-1000-8000-00805f9b34fb', 'serial'],
+  ['00002a26-0000-1000-8000-00805f9b34fb', 'firmware'],
+  ['00002a27-0000-1000-8000-00805f9b34fb', 'hardware'],
+];
+
+/* Ruled-out candidates, so working through a crowded marina list is systematic rather than a
+   memory game. Keyed by the browser's per-origin device id, with the name for readability. */
+function motorRuledOut() { return readJSON('fishapp.motor.ruledout', {}); }
+
+async function motorIdentify() {
+  motorLog('=== what did I just connect to? ===', 'hdr');
+  const name = Motor.device.name || '';
+  motorLog('advertised name: ' + (name || '(none — device broadcasts no name)'), name ? 'ok' : 'warn');
+
+  const info = {};
+  try {
+    const svc = await Motor.server.getPrimaryService('0000180a-0000-1000-8000-00805f9b34fb');
+    for (const [uuid, label] of MOTOR_DEVINFO) {
+      try {
+        const v = await (await svc.getCharacteristic(uuid)).readValue();
+        const s = motorAscii(v).replace(/\.+$/, '').trim();
+        if (s) { info[label] = s; motorLog('  ' + label.padEnd(13) + ': ' + s, 'rx'); }
+      } catch (e) { /* not every device implements every field */ }
+    }
+  } catch (e) {
+    motorLog('  no Device Information service — this device won\'t say who made it', 'warn');
+  }
+
+  /* The verdict. "Johnson Outdoors" is the parent company; the motor may report either. */
+  const hay = (name + ' ' + Object.values(info).join(' ')).toLowerCase();
+  const looksRight = /minn\s*kota|johnson|terrova|ipilot|i-pilot/.test(hay);
+  if (looksRight) {
+    motorLog('✅ THIS LOOKS LIKE THE MOTOR — save its service UUID below and carry on.', 'ok');
+  } else {
+    const ruled = motorRuledOut();
+    ruled[Motor.device.id || name || String(Object.keys(ruled).length)] = name || '(unnamed)';
+    localStorage.setItem('fishapp.motor.ruledout', JSON.stringify(ruled));
+    motorLog('❌ Nothing here identifies as Minn Kota. Noted as ruled out (' +
+      Object.keys(ruled).length + ' so far). Disconnect and try the next candidate.', 'warn');
+  }
+  return info;
+}
+
 /* Walk every granted service, log the full GATT tree, and subscribe to anything that notifies.
    This is the recon tool: with the profile's service UUID filled in from the capture, this one
    call tells you the characteristic layout and starts streaming the motor's telemetry frames. */
@@ -287,7 +366,7 @@ async function motorExplore() {
         p.notify && 'notify', p.indicate && 'indicate',
       ].filter(Boolean).join(',');
       motorLog('  char ' + ch.uuid + '  [' + flags + ']');
-      if (p.write || p.writeWithoutResponse) Motor.chars.set(ch.uuid, ch);
+      if (p.write || p.writeWithoutResponse) Motor.chars.set(motorCharKey(ch.uuid), ch);
 
       /* Read once so a static value (firmware string, serial, battery) shows up immediately —
          these are often the easiest confirmation you're talking to the right device. */
@@ -302,7 +381,7 @@ async function motorExplore() {
         try {
           await ch.startNotifications();
           ch.addEventListener('characteristicvaluechanged', (ev) => motorOnNotify(ch.uuid, ev.target.value));
-          Motor.chars.set(ch.uuid, ch);
+          Motor.chars.set(motorCharKey(ch.uuid), ch);
           motorLog('    subscribed', 'ok');
         } catch (e) { motorLog('    subscribe failed: ' + (e && e.message), 'warn'); }
       }
@@ -323,7 +402,11 @@ function motorOnNotify(uuid, dv) {
   };
   Motor.frames.push(rec);
   if (Motor.frames.length > 5000) Motor.frames.shift();
-  motorLog('◀ ' + uuid.slice(4, 8) + '  ' + rec.hex + '   "' + motorAscii(dv) + '"', 'rx');
+  /* Don't blind-slice: a short-form or uppercase UUID from CoreBluetooth would leave the frame
+     identifier column blank, which is the one thing telling frames from different characteristics
+     apart during recon. */
+  const short = motorCharKey(uuid).slice(4, 8) || String(uuid || '?');
+  motorLog('◀ ' + short + '  ' + rec.hex + '   "' + motorAscii(dv) + '"', 'rx');
 }
 
 /* ---- Safety cage ---------------------------------------------------------- */
@@ -406,7 +489,7 @@ async function motorSendHex(hex, opts) {
   const target = opts.charUuid || p.write;
   if (!target) { motorLog('no write characteristic in the profile yet', 'warn'); toast('No write characteristic set'); return; }
 
-  const ch = Motor.chars.get(target.toLowerCase());
+  const ch = Motor.chars.get(motorCharKey(target));
   if (!ch) { motorLog('write characteristic ' + target + ' not found on the device', 'err'); return; }
 
   const bytes = motorParseHex(hex);
