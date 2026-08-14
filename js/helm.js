@@ -18,7 +18,50 @@
 const Helm = {
   sim: null,            // HelmSim instance when simulating instead of talking to real hardware
   simulate: false,      // when true, rendered frames go to the simulator, never to the radio
+  commanded: {},        // what we ASKED for
+  reported: {},         // what telemetry actually said — empty until notify frames are decoded
+  limits: { maxSpeed: 4, maxHoldMs: 2500 },
 };
+
+/* ---- Transmit discipline --------------------------------------------------
+   BLE writes serialise on the connection interval. Fire a setpoint every 200 ms into a queue
+   that drains at 3 Hz and you build a backlog that lands a steer command ten seconds after the
+   thumb left the screen. Setpoints are therefore LAST-VALUE-WINS, never queued: a newer heading
+   replaces an undelivered older one, because nobody wants the stale one honoured. */
+const HelmTx = { busy: false, pending: null };
+
+async function helmTxSend(hex, opts, coalesceKey) {
+  opts = opts || {};
+  /* Aborts jump the queue entirely. STOP is never coalesced, never rate-limited, never dropped,
+     and never waits behind a heading setpoint. The asymmetry is deliberate. */
+  if (opts.force) return motorSendHex(hex, opts);
+  if (!helmBudgetTake()) return false;
+  if (HelmTx.busy) {
+    if (coalesceKey) { HelmTx.pending = { hex: hex, opts: opts, key: coalesceKey }; return false; }
+    return false;                       // one-shots are dropped, not stacked
+  }
+  HelmTx.busy = true;
+  try { return await motorSendHex(hex, opts); }
+  finally {
+    HelmTx.busy = false;
+    const p = HelmTx.pending; HelmTx.pending = null;
+    if (p) helmTxSend(p.hex, p.opts, p.key);
+  }
+}
+
+/* Token bucket over everything. A stuck pointer, a wedged autopilot tick and a runaway voice
+   command are indistinguishable from down here, and one ceiling stops all three. */
+const HELM_BUCKET = { cap: 8, refillPerSec: 5, tokens: 8, ts: 0 };
+function helmBudgetTake() {
+  const now = Date.now();
+  if (!HELM_BUCKET.ts) HELM_BUCKET.ts = now;
+  HELM_BUCKET.tokens = Math.min(HELM_BUCKET.cap,
+    HELM_BUCKET.tokens + (now - HELM_BUCKET.ts) / 1000 * HELM_BUCKET.refillPerSec);
+  HELM_BUCKET.ts = now;
+  if (HELM_BUCKET.tokens < 1) return false;
+  HELM_BUCKET.tokens -= 1;
+  return true;
+}
 
 /* ---- Checksum algorithms --------------------------------------------------
    Named exactly as they'll appear in a template: "{sum8}", "{crc16modbus}", etc.
@@ -225,3 +268,70 @@ HelmSim.prototype.apply = function (action, v) {
   else if (action === 'spotlock_on') s.spotlock = true;
   else if (action === 'spotlock_off') s.spotlock = false;
 };
+
+/* ---- Autopilot: Integral Line-of-Sight -------------------------------------
+   NOT a PID on cross-track error. Cross-track is a POSITION error driving a HEADING command, so
+   the plant already contains an integrator; wrapping a second one around it gives a double
+   integrator with delay, and you get hunting by construction — the boat scribing S-curves down
+   the track, which is the classic amateur-autopilot failure.
+
+   ILOS instead. The integrator term absorbs the steady push of wind and current, and note the
+   (e² + Δ²) in the DENOMINATOR: accumulation shrinks as the error grows, so it winds LEAST
+   exactly when saturation is most likely. That is anti-windup for free — no conditional
+   integration, no clamping, no back-calculation, none of the usual bolt-ons. */
+const AP = {
+  on: false, route: [], i: 0, startLL: null, yInt: 0, lastTick: 0,
+  humanDeadline: 0, commandedHdg: null, note: '',
+};
+
+const AP_TICK_MS      = 1000;   // paced by GPS. You cannot outrun your position source, and
+                                // commanding at 10 Hz on 1 Hz data just injects noise into a prop.
+const AP_DELTA_M      = 22;     // Δ lookahead. IS the max-correction knob: approach = atan(y/Δ).
+const AP_SIGMA        = 0.08;   // σ integral gain. Bound: σ < speed margin over the current.
+const AP_HDG_DEADBAND = 2;      // ° — don't chase wave-induced wander.
+const AP_HDG_SLEW     = 12;     // ° per tick ceiling on the COMMANDED heading, so a bad output
+                                // can't command a 170° swing; a reversal takes 15 s and every
+                                // one of those ticks re-checks the gates.
+const AP_FIX_HOLD_MS  = 3000;   // beyond this the fix isn't authoritative: freeze, hold heading.
+const AP_FIX_SAFE_MS  = 12000;  // beyond this, safe harbour.
+
+/* Signed cross-track error in metres. Positive = boat is to STARBOARD of the A→B track.
+   Done with bearings rather than a projection so it reads like the rest of this codebase. */
+function apCrossTrack(a, b, p) {
+  const rel = ((bearingBetween(a, p) - bearingBetween(a, b) + 540) % 360) - 180;
+  return a.distanceTo(p) * Math.sin(rel * Math.PI / 180);
+}
+
+/* Shortest signed angle from `from` to `to`, in degrees. */
+function apAngleDiff(from, to) { return ((to - from + 540) % 360) - 180; }
+
+/* One control step. Split out from the timer so it is unit-testable: give it a position and a
+   fix age and it returns what it would command, with no radio and no clock involved. */
+function apCompute(ll, fixAgeMs, coarse, dt) {
+  const A = AP.i > 0 ? AP.route[AP.i - 1] : AP.startLL;
+  const B = AP.route[AP.i];
+  const trackBrg = bearingBetween(A, B);
+  const y = apCrossTrack(A, B, ll);
+  const authoritative = fixAgeMs <= AP_FIX_HOLD_MS && !coarse;
+
+  if (authoritative) {
+    const e = y + AP_SIGMA * AP.yInt;
+    AP.yInt += (AP_DELTA_M * y / (e * e + AP_DELTA_M * AP_DELTA_M)) * dt;
+    AP.note = '';
+  } else {
+    /* FREEZE the integrator — not clamp, not zero. Zeroing throws away a hard-won estimate of
+       the current and causes a lurch the moment fixes return; clamping still lets it wind to
+       the clamp while blind. The current did not change while we weren't looking. */
+    AP.note = coarse ? 'GPS coarse — holding' : 'fix stale — holding';
+  }
+
+  /* The LOS law: steer toward a point Δ ahead on the track, offset by the integrated error. */
+  const want = trackBrg - Math.atan2(y + AP_SIGMA * AP.yInt, AP_DELTA_M) * 180 / Math.PI;
+  const prev = AP.commandedHdg == null ? want : AP.commandedHdg;
+  const step = Math.max(-AP_HDG_SLEW, Math.min(AP_HDG_SLEW, apAngleDiff(prev, want)));
+  const cmd = ((prev + step) % 360 + 360) % 360;
+
+  return { trackBrg: trackBrg, xte: y, authoritative: authoritative,
+           want: ((want % 360) + 360) % 360, commanded: cmd,
+           deadbanded: Math.abs(apAngleDiff(prev, want)) < AP_HDG_DEADBAND };
+}

@@ -33,7 +33,15 @@ const Motor = {
   frames: [],               // rolling capture log (recon), newest last
   recording: false,
   recStartTs: 0,
-  lastActionTs: 0,          // last deliberate user touch — the deadman feeds on this
+  /* THREE SEPARATE CLOCKS, and conflating the first two is how a deadman dies.
+       lastActionTs — "the link is alive": fed by any transmission, including automated ones.
+       lastHumanTs  — "a human is present": fed ONLY by a real gesture on a control.
+     These were one field. That was survivable while every frame came from a finger on the
+     screen, but the moment anything repeats on a timer — hold-to-steer, an autopilot tick — the
+     automated sends feed the deadman and it can never expire. A deadman that a machine can
+     satisfy on a human's behalf is not a deadman, and every interlock built on it is theatre. */
+  lastActionTs: 0,
+  lastHumanTs: 0,
   _deadmanTimer: null,
   _logLines: [],
   _plan: { mode: '', i: 0 },   // where the requestDevice ladder stopped, so a re-tap resumes there
@@ -508,7 +516,7 @@ function motorArm() {
   );
   if (!ok) return;
   Motor.armed = true;
-  Motor.lastActionTs = Date.now();
+  motorTouch();                       // arming is itself a deliberate human act
   clearInterval(Motor._deadmanTimer);
   Motor._deadmanTimer = setInterval(motorDeadmanTick, 1000);
   motorLog('ARMED', 'warn');
@@ -535,9 +543,17 @@ function motorStop(reason) {
   motorDisarm(reason || 'stop');
 }
 
+/* Feed the human-presence clock. Called from a genuine gesture on a control and from nowhere
+   else — not from motorSendHex, not from a timer, not from the autopilot. */
+function motorTouch() {
+  const t = Date.now();
+  Motor.lastHumanTs = t;
+  Motor.lastActionTs = t;
+}
+
 function motorDeadmanTick() {
   if (!Motor.armed) return;
-  const idle = Date.now() - Motor.lastActionTs;
+  const idle = Date.now() - Motor.lastHumanTs;   // human presence, NOT link traffic
   const el = document.getElementById('motor-deadman');
   if (el) el.textContent = Math.max(0, Math.ceil((MOTOR_DEADMAN_MS - idle) / 1000)) + 's';
   if (idle > MOTOR_DEADMAN_MS) {
@@ -582,7 +598,10 @@ async function motorSendHex(hex, opts) {
     if (!confirm('Send "' + (opts.label || 'command') + '"?\n\nThis can move the boat.')) return;
   }
 
-  Motor.lastActionTs = Date.now();     // any deliberate send feeds the deadman
+  /* Link liveness only. This deliberately does NOT feed the human-presence clock: an autopilot
+     tick calling in here must not be able to convince the deadman that someone is still holding
+     the phone. Gestures call motorTouch() themselves. */
+  Motor.lastActionTs = Date.now();
   try {
     /* writeValueWithoutResponse where offered: control traffic is periodic and a stalled
        ack round-trip is worse than a dropped frame. Fall back for older implementations —
@@ -680,6 +699,7 @@ function escapeHtmlMotor(s) {
 function motorSendFrame(i) {
   const f = motorProfile().frames[i];
   if (!f) return;
+  motorTouch();                       // a tap on a command button IS the human presence signal
   motorSendHex(f.hex, { danger: !!f.danger, label: f.label });
 }
 
