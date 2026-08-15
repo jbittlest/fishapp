@@ -1,3 +1,14 @@
+/* Chart rendering tokens. Which lookup table the BlueTopo base is recoloured through, and the
+   trim applied after it. Night swaps the LUT rather than inverting — see index.html for why. */
+:root, :root[data-lume="day"] { --chart-lut: url(#lut-day);   --chart-trim: contrast(1.28) saturate(1.12); }
+:root[data-lume="dusk"]       { --chart-lut: url(#lut-day);   --chart-trim: contrast(1.10) saturate(0.94) brightness(0.80); }
+:root[data-lume="night"]      { --chart-lut: url(#lut-night); --chart-trim: none; }
+
+/* Kill switch. An SVG filter on a tile pane is the one thing that cannot be tested anywhere but
+   the actual phone; if it janks on iOS, drop the filter and keep the data — BlueTopo's raw
+   resolution is most of the win on its own. Set data-relief="plain" on <html>. */
+:root[data-relief="plain"] .leaflet-tile-pane .leaflet-layer { filter: none !important; }
+
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body {
   margin: 0; padding: 0; height: 100%;

@@ -30,6 +30,55 @@
 
 <div id="map"></div>
 
+<!-- Chart colour lookup. NOAA BlueTopo ships a green→yellow ramp that reads like a landcover
+     map; this recolours it to nautical convention in the GPU, offline, with no build step.
+     Server-side styling is not an option (CloudFront 403s SLD_BODY).
+
+     The DIRECTION is the load-bearing detail: output runs pale deep water → saturated shallow
+     water, which is the INVERSE of web-map convention, because on the water shallow means
+     danger. Getting that backwards would be a safety inversion wearing a style costume. -->
+<svg width="0" height="0" aria-hidden="true" style="position:absolute" focusable="false"><defs>
+  <filter id="lut-day" color-interpolation-filters="sRGB">
+    <!-- s = (R-B)*1.05 + 0.126 : collapses the source ramp to one scalar, deep→0 shallow→1 -->
+    <feColorMatrix type="matrix" values="1.05 0 -1.05 0 0.126
+                                         1.05 0 -1.05 0 0.126
+                                         1.05 0 -1.05 0 0.126
+                                         0    0  0    1 0"/>
+    <!-- Most of a bay sits in a narrow deep band. Without this gamma the chart is a pale
+         wash — which is precisely what makes the current relief base look flat. -->
+    <feComponentTransfer>
+      <feFuncR type="gamma" exponent="0.45"/>
+      <feFuncG type="gamma" exponent="0.45"/>
+      <feFuncB type="gamma" exponent="0.45"/>
+    </feComponentTransfer>
+    <!-- deep ─────────────────────────────► shoal ► drying (last stop = S-52 land tan) -->
+    <feComponentTransfer>
+      <feFuncR type="table" tableValues="0.925 0.855 0.760 0.620 0.430 0.300 0.788"/>
+      <feFuncG type="table" tableValues="0.965 0.925 0.880 0.800 0.690 0.590 0.725"/>
+      <feFuncB type="table" tableValues="0.975 0.960 0.945 0.925 0.900 0.840 0.478"/>
+    </feComponentTransfer>
+  </filter>
+  <filter id="lut-night" color-interpolation-filters="sRGB">
+    <feColorMatrix type="matrix" values="1.05 0 -1.05 0 0.126
+                                         1.05 0 -1.05 0 0.126
+                                         1.05 0 -1.05 0 0.126
+                                         0    0  0    1 0"/>
+    <feComponentTransfer>
+      <feFuncR type="gamma" exponent="0.45"/>
+      <feFuncG type="gamma" exponent="0.45"/>
+      <feFuncB type="gamma" exponent="0.45"/>
+    </feComponentTransfer>
+    <!-- Luminance inverted deliberately: at night deep water is most of the screen and should
+         be darkest, while the SHALLOW water — the hazard — stays brightest. Never use
+         invert(), which would turn shallow-safe colours into deep-water colours. -->
+    <feComponentTransfer>
+      <feFuncR type="table" tableValues="0.055 0.062 0.070 0.080 0.092 0.105 0.150"/>
+      <feFuncG type="table" tableValues="0.085 0.100 0.118 0.138 0.162 0.185 0.130"/>
+      <feFuncB type="table" tableValues="0.125 0.148 0.175 0.205 0.240 0.275 0.075"/>
+    </feComponentTransfer>
+  </filter>
+</defs></svg>
+
 <!-- Top status bar -->
 <div id="topbar">
   <div class="stat" id="stat-gps"><span class="dot" id="gps-dot"></span><span id="gps-acc">NO GPS</span></div>
@@ -105,7 +154,8 @@
   <label class="row"><input type="radio" name="base" value="ocean" checked> Ocean / bathymetry (global)</label>
   <label class="row"><input type="radio" name="base" value="sat"> Satellite</label>
   <label class="row"><input type="radio" name="base" value="street"> Street map</label>
-  <label class="row"><input type="radio" name="base" value="gmrt"> Fishing chart — depth shading + contours 🎣</label>
+  <label class="row"><input type="radio" name="base" value="bluetint"> Fishing chart — US survey bathymetry 🎣</label>
+  <label class="row"><input type="radio" name="base" value="gmrt"> Fishing chart — global (outside US waters)</label>
   <h3>Chart overlays</h3>
   <label class="row"><input type="checkbox" id="ovl-enc" checked> NOAA nautical charts (US waters)</label>
   <label class="row"><input type="checkbox" id="ovl-seamark" checked> Seamarks — buoys &amp; beacons (worldwide)</label>

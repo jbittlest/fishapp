@@ -41,6 +41,36 @@ const LAYERS = {
       'https://tiles.arcgis.com/tiles/C8EMgrsFcRFL6LrL/arcgis/rest/services/GEBCO_basemap_NCEI/MapServer/tile/' +
       z + '/' + y + '/' + x,
   },
+  bluetint: {
+    /* NOAA BlueTopo / National Bathymetric Source — the real US survey grid, sharp to z17
+       where GEBCO gives up at z10. Public domain, no key, CORS open.
+
+       CRITICAL: this WMTS gridset is 512px with ONE tile at level 0, so the matrix level is
+       (leaflet zoom - 1). Sending {z} is not merely offset — the server returns HTTP 400.
+
+       The raw pixels are a green→yellow landcover-looking ramp at alpha 0.8. It is recoloured
+       in the browser by the #lut-day / #lut-night SVG filter (see updateChartFilter in app.js);
+       the 0.8 alpha is a feature, letting GEBCO underneath fill the coverage gaps and blend at
+       the edges rather than ending at a hard rectangle. */
+    id: 'bluetint', name: 'Seafloor relief (US)', kind: 'base',
+    tileSize: 512, maxNativeZoom: 17, minBytes: 3000,
+    attribution: 'NOAA BlueTopo / National Bathymetric Source',
+    urlFor: (z, x, y) =>
+      'https://nowcoast.noaa.gov/geoserver/gwc/service/wmts/rest/bluetopo:bathymetry/' +
+      'nbs_elevation/EPSG:3857/EPSG:3857:' + (z - 1) + '/' + y + '/' + x + '?format=image/png8',
+  },
+  blueshade: {
+    /* The matching hillshade. True grayscale but very flat — measured p5..p95 of only
+       0.68..0.74 over bay bottom — which is why a plain multiply just washes the chart grey
+       instead of showing relief. It is recentred and amplified before an `overlay` blend so it
+       carves the slopes and leaves flat bottom alone. */
+    id: 'blueshade', name: 'Seafloor relief detail (US)', kind: 'overlay',
+    tileSize: 512, minZoom: 11, maxNativeZoom: 14, minBytes: 3000,
+    attribution: 'NOAA BlueTopo',
+    urlFor: (z, x, y) =>
+      'https://nowcoast.noaa.gov/geoserver/gwc/service/wmts/rest/bluetopo:hillshade/' +
+      'nbs_hillshade/EPSG:3857/EPSG:3857:' + (z - 1) + '/' + y + '/' + x + '?format=image/png8',
+  },
   reliefhi: {
     /* Seafloor relief DETAIL — GMRT on-demand hillshade, sharp to z14. Opaque, so it
        replaces the soft GEBCO base wherever it loads. Only fetched at z>=11 (zoomed in),
@@ -126,7 +156,12 @@ const OfflineTileLayer = L.TileLayer.extend({
         fetch(url)
           .then((r) => (r.ok ? r.blob() : null))
           .then((b) => {
-            if (b && b.type.indexOf('image') === 0 && b.size > 0) {
+            /* `size > 0` is not enough for every source. BlueTopo serves TWO different
+               fully-transparent blanks outside its survey coverage — 256 bytes and 2266 bytes,
+               byte-identical at every zoom — so a naive small-file threshold lets the second
+               one through and an area download quietly fills IndexedDB with nothing. Layers
+               that have a known blank size declare minBytes. */
+            if (b && b.type.indexOf('image') === 0 && b.size > (def.minBytes || 0)) {
               putTileBlob(key, b);
               img._objUrl = URL.createObjectURL(b);
               img.src = img._objUrl;

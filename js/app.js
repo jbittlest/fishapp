@@ -3,7 +3,7 @@
 
 /* Keep in step with CACHE in sw.js. Shown in the More sheet next to the build the service
    worker is actually serving, so a device running stale cached code is visible at a glance. */
-const APP_BUILD = 'v92';
+const APP_BUILD = 'v93';
 
 /* ---- Every request gets a deadline ----------------------------------------
    A boat is the worst network on earth: one bar, captive portals at the ramp,
@@ -83,7 +83,12 @@ const APP_BUILD = 'v92';
   });
 
   /* ---- Layers ---- */
-  const live = { base: null, enc: null, seamark: null, labels: null, reliefhi: null };
+  const live = { base: null, enc: null, seamark: null, labels: null, reliefhi: null, blueshade: null };
+  /* The two relief bases and the detail overlay each pairs with. Both want the NOAA vector
+     chart on top, because the multiply blend in updateEncBlend() is the other half of the
+     look: it drops the chart's white deep water to transparent while keeping contours and
+     soundings razor sharp. */
+  const RELIEF_DETAIL = { gmrt: 'reliefhi', bluetint: 'blueshade' };
 
   /* Layers used to pop out the instant a checkbox changed, which reads as a flicker. Fade
      them out on removal, and show a small spinner in the status bar while any layer's tiles
@@ -120,32 +125,63 @@ const APP_BUILD = 'v92';
     live.base.setZIndex(0);
     if (prevBase) fadeOutRemove(prevBase);   // cross-fade rather than a hard swap
     /* relief & satellite have no place names — add a labels overlay so you can find things */
-    const needsLabels = id === 'gmrt' || id === 'sat';
+    const needsLabels = id === 'gmrt' || id === 'bluetint' || id === 'sat';
     if (needsLabels && !live.labels) { live.labels = trackLayer(makeLayer('labels')).addTo(map); live.labels.setZIndex(3); }
     if (!needsLabels && live.labels) { fadeOutRemove(live.labels); live.labels = null; }
     /* Bottom STRUCTURE: GMRT high-res multibeam hillshade (z11+), multiply-blended so its
        3D shading darkens the blue base with real relief — canyon walls, banks, ledges — while
        keeping the depth colour. GEBCO shows major structure instantly; GMRT sharpens the fine
        detail over a couple seconds, then caches (instant on revisit / offline downloads). */
-    if (id === 'gmrt' && !live.reliefhi) {
-      live.reliefhi = trackLayer(makeLayer('reliefhi')).addTo(map);
-      live.reliefhi.setZIndex(1);
-      live.reliefhi._container.style.mixBlendMode = 'multiply';
+    /* Bring up the detail overlay that belongs to this base, and drop the other one. */
+    const want = RELIEF_DETAIL[id] || null;
+    ['reliefhi', 'blueshade'].forEach((slot) => {
+      if (slot !== want && live[slot]) { fadeOutRemove(live[slot]); live[slot] = null; }
+    });
+    if (want && !live[want]) {
+      live[want] = trackLayer(makeLayer(want)).addTo(map);
+      live[want].setZIndex(1);
+      /* GMRT's hillshade is dark and contrasty, so multiply is right for it. BlueTopo's is
+         flat grayscale centred near 0.71 — multiply would just wash the whole chart grey, so
+         it is recentred and amplified in updateChartFilter() and composited with overlay,
+         which leaves flat bottom alone and only carves the slopes. */
+      live[want]._container.style.mixBlendMode = (want === 'reliefhi') ? 'multiply' : 'overlay';
     }
-    if (id !== 'gmrt' && live.reliefhi) { fadeOutRemove(live.reliefhi); live.reliefhi = null; }
     prefs.base = id;
     savePrefs();
     /* NAVIONICS-STYLE relief: the base is GEBCO blue depth-shading, and the NOAA vector
        chart is drawn on top with 'multiply' blend — that turns the chart's white deep-water
        transparent (so the blue depth colour shows through) while keeping contours & soundings
        fully dark and razor-sharp at any zoom. So the relief base always wants the chart on. */
-    if (id === 'gmrt') {
+    if (RELIEF_DETAIL[id]) {
       document.getElementById('ovl-enc').checked = true;
       if (!live.enc) setOverlay('enc', true);
       else { prefs.enc = true; savePrefs(); }
     }
     updateEncBlend();
+    updateChartFilter();
   }
+
+  /* Recolour the BlueTopo base through the SVG lookup table, and sharpen its hillshade.
+     Set on the Leaflet tile container, matching how updateEncBlend() already sets blend mode.
+
+     NOTE: `filter` makes an element a containing block for position:fixed descendants. The
+     tile container is not an ancestor of the top bar, tab bar, panels or the anchor alarm, so
+     this is safe here — but it must never be moved up the tree onto a #map wrapper, which
+     would silently break every fixed element in the app at once. */
+  function updateChartFilter() {
+    if (live.base && live.base._container) {
+      const cs = getComputedStyle(document.documentElement);
+      const lut = (cs.getPropertyValue('--chart-lut') || 'url(#lut-day)').trim();
+      const trim = (cs.getPropertyValue('--chart-trim') || 'contrast(1.28) saturate(1.12)').trim();
+      live.base._container.style.filter = (prefs.base === 'bluetint') ? (lut + ' ' + trim) : '';
+    }
+    if (live.blueshade && live.blueshade._container) {
+      /* Measured p5..p95 of only 0.68..0.74, so recentre to neutral then amplify hard.
+         contrast(3) is visibly flat; contrast(9) starts amplifying survey-track striping. */
+      live.blueshade._container.style.filter = 'brightness(0.70) contrast(6)';
+    }
+  }
+  window.updateChartFilter = updateChartFilter;
   function setOverlay(id, on) {
     if (on && !live[id]) { live[id] = trackLayer(makeLayer(id)).addTo(map); live[id].setZIndex(id === 'enc' ? 5 : 6); }
     if (!on && live[id]) { fadeOutRemove(live[id]); live[id] = null; }
