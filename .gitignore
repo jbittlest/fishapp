@@ -1,2 +1,6 @@
-# nothing to ignore — this is a static site
+node_modules/
+dist/
+tools/out/
+test-results/
+playwright-report/
 .claude/

@@ -1,0 +1,423 @@
+import { GPS, formatCoord, gpsIsStale, requestWakeLock, setFollow } from './gps.js';
+import { Tracks, trackToggle } from './tracks.js';
+import { Nav, anchorDrop, unlockAudio } from './nav.js';
+import { biteSpokenSummary, biteWindows } from './bite.js';
+import { ASST, asstCreateSpot, asstSend, asstSpeak, asstUpdateSpeakBtn } from './assistant.js';
+import { toast } from './app.js';
+
+/* Hands-free voice control — "Hey Fish".
+
+   Continuously listens for the wake word, then runs a spoken command against the app
+   (open panels, toggle layers, mark spots, anchor, zoom…). Anything it doesn't recognise
+   is handed to First Mate, so "hey fish, what's the tide doing tonight" still works.
+
+   Deliberate design notes:
+   - Recognition stops itself constantly (silence timeouts, engine hiccups). We restart it
+     from onend with a backoff instead of assuming a single session stays alive.
+   - Our own text-to-speech is loud enough to be re-heard as a command, so results are
+     ignored while speaking plus a short tail.
+   - Everything degrades: no SpeechRecognition (notably iOS Safari) → we say so once and
+     leave the tap-to-talk mic in First Mate as the fallback. */
+'use strict';
+
+export const Voice = {
+  on: false,             // user has enabled hands-free
+  awake: false,          // wake word heard; a command is expected
+  rec: null,
+  speaking: false,
+  _awakeTimer: null,
+  _restartTimer: null,
+  _muteUntil: 0,         // ignore recognition results until this timestamp (echo guard)
+  _fails: 0,             // consecutive start failures, for backoff
+  _wantOn: false,        // desired state, so onend knows whether to restart
+  supported: !!(window.SpeechRecognition || window.webkitSpeechRecognition),
+};
+
+export const VOICE_AWAKE_MS = 9000;    // how long we listen for a command after the wake word
+
+/* "hey fish" survives a lot of mishearing — accept the common ones rather than making the
+   user enunciate perfectly over engine noise. A bare "a fish" is deliberately NOT accepted:
+   on a fishing boat "I caught a fish" would wake it constantly. */
+export const WAKE_RE = /\b(?:hey|hay|hi|high|ok|okay)\s*(?:fish|fisch|fist|phish|vish|fresh|finch)\b/;
+
+export function voiceNorm(s) {
+  return String(s || '').toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/* ---- Command table. First match wins, so specific actions precede the panel keywords
+   they share words with ("drop anchor" before "anchor" → Nav tools). ---- */
+export const VOICE_COMMANDS = [
+  // --- actions ---
+  /* Needs an object. The noun groups used to be optional, so a bare "save" or "mark"
+     anywhere matched — and because this is the FIRST rule, "save my track" and
+     "mark the route" both dropped a waypoint and replied "Marked this spot." */
+  { re: /\b(?:mark|save)\s+(?:this|my|the)?\s*(?:spot|pin|waypoint|location|place)\b|\bmark this\b|\bdrop a (?:pin|waypoint|mark)\b/,
+    run: () => voiceMarkSpot() },
+  { re: /\bstart (?:the )?route\b|\bfollow (?:the )?route\b/,
+    run: () => voiceCall('routeStart', 'Starting the route.') },
+  { re: /\b(?:stop|cancel|end) (?:the )?(?:navigation|navigating|route|nav)\b/,
+    run: () => voiceCall('gotoCancel', 'Navigation stopped.') },
+  // Anchor/track report their real resulting state — hands-free means the user can't read
+  // the toast these actions normally rely on.
+  { re: /\bdrop (?:the )?anchor\b|\banchor watch on\b/, run: () => {
+      if (typeof anchorDrop !== 'function') return "I can't do that right now.";
+      anchorDrop();
+      return (typeof Nav !== 'undefined' && Nav.anchor.watching)
+        ? 'Anchor watch on, ' + Nav.anchor.radiusFt + ' feet.'
+        : 'No GPS fix yet, so I could not set the anchor watch.';
+    } },
+  { re: /\braise (?:the )?anchor\b|\banchor watch off\b/,
+    run: () => voiceCall('anchorRaise', 'Anchor up.') },
+  { re: /\b(?:start|stop|record)(?: a| the)? track(?:ing)?\b/, run: () => {
+      if (typeof trackToggle !== 'function') return "I can't do that right now.";
+      trackToggle();
+      return (typeof Tracks !== 'undefined' && Tracks.recording) ? 'Recording your track.' : 'Track saved.';
+    } },
+  // animate:false — a zoom that depends on an animation completing can silently do nothing
+  // if the compositor is stalled, and by voice there's no visual cue to retry.
+  { re: /\bzoom in\b|\bcloser\b/,
+    run: () => { window._map.setZoom(window._map.getZoom() + 1, { animate: false }); return 'Zooming in.'; } },
+  { re: /\bzoom out\b|\bwider\b/,
+    run: () => { window._map.setZoom(window._map.getZoom() - 1, { animate: false }); return 'Zooming out.'; } },
+  { re: /\b(?:follow me|center|centre|recenter|recentre|find me)\b/,
+    run: () => { if (typeof setFollow === 'function') setFollow(true); return 'Following you.'; } },
+  { re: /\b(?:close|dismiss|hide|never mind|go back|nothing)\b/,
+    run: () => { if (typeof closePanels === 'function') closePanels(); return 'Closed.'; } },
+
+  // --- personal bite prediction (must precede the "tide"/"weather" panel rules, which
+  //     would otherwise swallow "when's the best tide to fish") ---
+  { re: /\bwhen (should|do|can) i (go|fish|head out)\b|\bbest (time|window|day)( to)?( go)?( fish\w*)?\b|\bwhen to go\b|\bwhen'?s the bite\b|\bshould i go fish\w*\b/,
+    run: async () => {
+      if (typeof biteWindows !== 'function') return "I can't work that out yet.";
+      try {
+        const res = await biteWindows({ days: 7, limit: 3 });
+        return biteSpokenSummary(res, {});
+      } catch (e) { return "I couldn't work out a window."; }
+    } },
+
+  // --- spoken answers straight from live boat data (instant, no AI round-trip) ---
+  { re: /\bwhere am i\b|\bmy position\b|\bcoordinates?\b/, run: () => voiceSayPosition() },
+  /* Must be the BOAT's speed. A bare \bspeed\b matched "what's the wind speed"
+     and confidently answered with SOG — the wrong number to a safety question,
+     spoken aloud with nothing on screen to contradict it. */
+  { re: /\bhow fast\b|\bmy speed\b|\b(?:boat|our) speed\b|\bspeed over ground\b|\bsog\b/,
+    run: () => voiceSaySpeed() },
+
+  // --- panels (skipped for questions — see voiceIsQuestion) ---
+  { panel: 1, re: /\b(?:weather|wind|forecast|waves?|swell)\b/, run: () => voicePanel('panel-weather', 'Weather.') },
+  { panel: 1, re: /\b(?:tide|tides|bite time|solunar|moon)\b/, run: () => voicePanel('panel-tides', 'Tides and bite times.') },
+  { panel: 1, re: /\b(?:spots?|waypoints?|tracks?|voyages?)\b/, run: () => voicePanel('panel-spots', 'Your spots.') },
+  { panel: 1, re: /\b(?:nav tools?|tools?|catch log|trip)\b/, run: () => voicePanel('panel-tools', 'Nav tools.') },
+  // Download must precede the layers rule — "offline charts" also contains "charts".
+  { panel: 1, re: /\b(?:download|offline)\b/, run: () => voicePanel('panel-download', 'Offline charts.') },
+  { panel: 1, re: /\b(?:layers?|chart|charts|map)\b/, run: () => voicePanel('panel-layers', 'Map layers.') },
+  { panel: 1, re: /\b(?:guides?|knots?|fish id|regulations?|limits?)\b/, run: () => voicePanel('panel-knots', 'Guides.') },
+  { panel: 1, re: /\b(?:emergency|mayday|sos|distress)\b/, run: () => voicePanel('panel-emergency', 'Emergency.') },
+  { panel: 1, re: /\b(?:more|menu)\b/, run: () => voicePanel('panel-more', 'More.') },
+];
+
+export function voicePanel(id, say) {
+  if (typeof togglePanel === 'function') {
+    const el = document.getElementById(id);
+    if (el && el.classList.contains('hidden')) togglePanel(id);
+  }
+  return say;
+}
+/* Call a global action if it exists; returns what to say back. */
+export function voiceCall(fnName, say) {
+  if (typeof window[fnName] !== 'function') return "I can't do that right now.";
+  try { window[fnName](); } catch (e) { return 'That did not work.'; }
+  return say;   // null → stay silent (the action toasts/speaks for itself)
+}
+
+export async function voiceMarkSpot() {
+  /* No map-centre fallback. Hands-free means nobody is looking at the screen, so
+     silently pinning wherever the map happened to be panned — and saying "Marked
+     this spot" — put a mark on the wrong water with no way to notice.
+     Every other position command already refuses without a fix. */
+  const ll = (typeof GPS !== 'undefined' && GPS.lastLatLng) || null;
+  if (!ll) return 'No GPS fix yet, so I can’t mark a spot.';
+  if (typeof gpsIsStale === 'function' && gpsIsStale()) return 'My last GPS fix is too old to mark a spot.';
+  const name = 'Voice mark ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  if (typeof asstCreateSpot !== 'function') return "I can't save spots right now.";
+  try {
+    await asstCreateSpot({ lat: ll.lat, lng: ll.lng, name: name, type: 'fish' });
+    return 'Marked this spot.';
+  } catch (e) { return 'I could not save that spot.'; }
+}
+export function voiceSayPosition() {
+  const ll = typeof GPS !== 'undefined' ? GPS.lastLatLng : null;
+  if (!ll) return 'No GPS fix yet.';
+  if (typeof formatCoord === 'function') {
+    return 'You are at ' + formatCoord(ll.lat, 'lat') + ', ' + formatCoord(ll.lng, 'lon');
+  }
+  return 'You are at ' + ll.lat.toFixed(4) + ', ' + ll.lng.toFixed(4);
+}
+export function voiceSaySpeed() {
+  const c = (typeof GPS !== 'undefined' && GPS.last) ? GPS.last.coords : null;
+  if (!c || c.speed == null || isNaN(c.speed)) return 'No speed reading yet.';
+  return Math.round(c.speed * 1.94384) + ' knots.';
+}
+
+/* ---- Speaking (reuses First Mate's voice picker when present) ---- */
+export function voiceSay(text) {
+  if (!text) return;
+  Voice.speaking = true;
+  // Mute recognition for the utterance plus a tail, so we don't hear ourselves.
+  Voice._muteUntil = Date.now() + 1200 + text.length * 60;
+  try {
+    if (typeof asstSpeak === 'function') { asstSpeak(text); }
+    else if ('speechSynthesis' in window) {
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'en-US';
+      window.speechSynthesis.speak(u);
+    }
+  } catch (e) { /* non-fatal */ }
+  setTimeout(() => { Voice.speaking = false; }, 600);
+}
+
+/* ---- Wake / command handling ---- */
+export function voiceSetAwake(on) {
+  Voice.awake = on;
+  clearTimeout(Voice._awakeTimer);
+  const btn = document.getElementById('btn-voice');
+  if (btn) btn.classList.toggle('awake', on);
+  if (on) Voice._awakeTimer = setTimeout(() => voiceSetAwake(false), VOICE_AWAKE_MS);
+}
+
+export async function voiceHandleTranscript(raw) {
+  const t = voiceNorm(raw);
+  if (!t) return;
+
+  // Not awake yet: only react to the wake word. If the same breath carried a command
+  // ("hey fish show me the weather"), run it immediately rather than asking again.
+  if (!Voice.awake) {
+    const m = t.match(WAKE_RE);
+    if (!m) return;
+    const rest = t.slice(m.index + m[0].length).trim();
+    if (rest) { voiceSetAwake(false); await voiceRun(rest); return; }
+    voiceSetAwake(true);
+    voiceSay('Aye?');
+    return;
+  }
+  // Awake: treat this utterance as the command (strip a repeated wake word).
+  await voiceRun(t.replace(WAKE_RE, '').trim());
+}
+
+/* Is this a QUESTION rather than a command to open something?
+   "show me the weather" wants the panel. "what's the weather in Catalina" wants an ANSWER —
+   and the panel can only ever show the boat's own position, so routing a question there is
+   guaranteed to answer the wrong thing. Questions are handed to First Mate instead, which
+   can geocode a named place and speak the result back. Only the panel rules are skipped;
+   actions ("mark this spot at the point") and the direct readouts still match first. */
+export const VOICE_QUESTION_RE = /^(?:what|whats|when|where|why|how|is|are|was|will|should|can|could|do|does|did|any)\b/;
+export const VOICE_ELSEWHERE_RE = /\b(?:in|at|near|around|off|by|over)\s+[a-z]/;   // "…in catalina", not "…in 30 feet"
+/* …but "near me" / "around here" is THIS boat's position — the one thing the panel
+   does answer. Treating it as somewhere-else meant "tides near me" never opened
+   the tides panel. */
+export const VOICE_SELF_RE = /\b(?:in|at|near|around|off|by|over)\s+(?:me|here|us|my|our|the boat)\b/;
+export function voiceIsQuestion(cmd) {
+  if (VOICE_QUESTION_RE.test(cmd)) return true;
+  return VOICE_ELSEWHERE_RE.test(cmd) && !VOICE_SELF_RE.test(cmd);
+}
+
+export async function voiceRun(cmd) {
+  if (!cmd) return;
+  voiceSetAwake(false);
+  const asking = voiceIsQuestion(cmd);
+  for (const c of VOICE_COMMANDS) {
+    if (c.panel && asking) continue;   // a question isn't a request to open a screen
+    if (c.re.test(cmd)) {
+      let say;
+      try { say = await c.run(); } catch (e) { say = 'That did not work.'; }
+      if (say) voiceSay(say);
+      return;
+    }
+  }
+  // No local match → let First Mate field it (it answers offline from boat data too).
+  if (typeof asstSend === 'function') {
+    /* Force speech for THIS reply only, then put it back. Setting it permanently
+       overrode a deliberate 🔇 for the rest of the session, and left the button
+       showing 🔇 while every typed answer was read aloud — so tapping it appeared
+       to do the opposite of what it said. */
+    const hadSpeak = (typeof ASST !== 'undefined') ? ASST.speak : null;
+    if (typeof ASST !== 'undefined') ASST.speak = true;
+    // never SHORTEN an existing guard — the cloud path sets it from real audio length
+    Voice._muteUntil = Math.max(Voice._muteUntil || 0, Date.now() + 2000);
+    try { await asstSend(cmd); } catch (e) { voiceSay("Sorry, I couldn't answer that."); }
+    finally {
+      if (typeof ASST !== 'undefined' && hadSpeak !== null) {
+        ASST.speak = hadSpeak;
+        if (typeof asstUpdateSpeakBtn === 'function') asstUpdateSpeakBtn();
+      }
+    }
+  } else {
+    voiceSay("I didn't catch a command.");
+  }
+}
+
+/* ---- Recognition lifecycle ---- */
+export function voiceBuildRec() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const r = new SR();
+  r.lang = 'en-US';
+  r.continuous = true;
+  r.interimResults = false;
+  r.maxAlternatives = 1;
+
+  /* Every handler checks it is still THE current recogniser. abort() dispatches
+     `end` asynchronously, so the foreground-resume path (abort → start a new one)
+     used to let the old session's onend null out the live one — after which a
+     second recogniser was started alongside it. Two live mics meant one "drop the
+     anchor" ran twice, and voiceStop() could only abort the one it knew about. */
+  r.onresult = (e) => {
+    if (Voice.rec !== r || !Voice.on) return;
+    if (Date.now() < Voice._muteUntil || Voice.speaking) return;   // ignore our own TTS
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const res = e.results[i];
+      if (!res || !res.isFinal || !res[0]) continue;
+      Voice._gotResult = true;      // a session that produced speech is a healthy one
+      Voice._fails = 0;
+      voiceHandleTranscript(res[0].transcript);
+    }
+  };
+  r.onerror = (e) => {
+    if (Voice.rec !== r) return;
+    const err = e && e.error;
+    // Permission problems are terminal — stop rather than spin restarting forever.
+    if (err === 'not-allowed' || err === 'service-not-allowed') {
+      voiceStop();
+      try { localStorage.setItem('fishapp.voice', 'off'); } catch (e2) {}   // don't re-prompt every launch
+      if (typeof toast === 'function') toast('🎤 Microphone blocked — enable mic access to use Hey Fish');
+      return;
+    }
+    if (err === 'aborted') return;
+    Voice._fails++;
+  };
+  r.onend = () => {
+    if (Voice.rec !== r) return;    // a newer session already took over
+    Voice.rec = null;
+    if (!Voice._wantOn) { voiceUpdateUi(); return; }
+    // Don't respin while backgrounded: the mic is dead there anyway, and a session started
+    // hidden would occupy Voice.rec and make the resume below a no-op — voice would stay
+    // silently dead after every app switch. visibilitychange owns the resume instead.
+    if (document.hidden) return;
+    // The engine ends sessions constantly (silence, timeouts). Restart with a light backoff.
+    const delay = Math.min(200 * Math.pow(2, Math.min(Voice._fails, 5)), 8000);
+    clearTimeout(Voice._restartTimer);
+    Voice._restartTimer = setTimeout(voiceStart, delay);
+  };
+  return r;
+}
+
+export function voiceStart() {
+  if (!Voice.supported || !Voice._wantOn || Voice.rec) return;
+  try {
+    Voice.rec = voiceBuildRec();
+    Voice.rec.start();
+    Voice.on = true;
+    /* Do NOT clear _fails here. Starting successfully proves nothing — offshore with
+       no data the engine starts fine and then errors every time, and zeroing the
+       counter on each start pinned the backoff at 400 ms forever, respinning the mic
+       ~2.5×/second for the whole trip. It's cleared in onresult instead: a session
+       that actually heard something is the only proof things are working. */
+  } catch (e) {
+    Voice.rec = null;
+    Voice._fails++;
+    clearTimeout(Voice._restartTimer);
+    Voice._restartTimer = setTimeout(voiceStart, Math.min(500 * Voice._fails, 8000));
+  }
+  voiceUpdateUi();
+}
+
+export function voiceStop() {
+  Voice._wantOn = false;
+  Voice.on = false;
+  clearTimeout(Voice._restartTimer);
+  voiceSetAwake(false);
+  if (Voice.rec) { try { Voice.rec.abort(); } catch (e) {} Voice.rec = null; }
+  voiceUpdateUi();
+  // Hands-free was the last thing holding back a pending app update — apply it now.
+  if (typeof applyPendingUpdate === 'function') applyPendingUpdate();
+}
+
+export function voiceUpdateUi() {
+  const btn = document.getElementById('btn-voice');
+  if (!btn) return;
+  btn.classList.toggle('listening', !!Voice.on);
+  const lbl = btn.querySelector('.tb-lbl');
+  if (lbl) lbl.textContent = Voice.on ? 'Listening' : 'Hey Fish';
+}
+
+/* Toggled from the 🎤 tab. The first tap is the user gesture that unlocks mic + audio. */
+export function voiceToggle() {
+  if (!Voice.supported) {
+    if (typeof toast === 'function') {
+      toast("🎤 This browser can't do always-on voice — use the mic in First Mate to talk");
+    }
+    if (typeof togglePanel === 'function') togglePanel('panel-assistant');
+    return;
+  }
+  if (Voice.on || Voice._wantOn) {
+    voiceStop();
+    localStorage.setItem('fishapp.voice', 'off');
+    if (typeof toast === 'function') toast('🎤 Hands-free off');
+    return;
+  }
+  Voice._wantOn = true;
+  Voice._fails = 0;
+  localStorage.setItem('fishapp.voice', 'on');
+  if (typeof unlockAudio === 'function') unlockAudio();      // let us speak back later (iOS)
+  if (typeof requestWakeLock === 'function') requestWakeLock();
+  voiceStart();
+  if (typeof toast === 'function') toast('🎤 Listening — say “Hey Fish” then your command');
+  voiceSay('Hands free on. Say hey fish when you need me.');
+}
+
+/* Pause while hidden (the engine dies in the background anyway) and resume on return —
+   without this the restart loop burns battery for a mic that isn't recording. */
+document.addEventListener('visibilitychange', () => {
+  if (!Voice._wantOn) return;
+  clearTimeout(Voice._restartTimer);
+  if (document.visibilityState === 'visible') {
+    // Force a clean session: any recogniser left over from before the app was hidden is
+    // dead but still occupying Voice.rec, which would make voiceStart() a no-op.
+    if (Voice.rec) { try { Voice.rec.abort(); } catch (e) {} Voice.rec = null; }
+    Voice._fails = 0;
+    voiceStart();
+  } else {
+    if (Voice.rec) { try { Voice.rec.abort(); } catch (e) {} Voice.rec = null; }
+    /* Say so. Voice.on stayed true while backgrounded, so the toolbar kept reading
+       "listening" over a dead mic — and bite.js routes its weather alerts to SPEECH
+       whenever Voice.on, so a warning could be spoken to a mic that wasn't running
+       instead of shown as a toast. _wantOn still holds the intent to resume. */
+    Voice.on = false;
+    voiceUpdateUi();
+  }
+});
+
+export function voiceInit() {
+  voiceUpdateUi();
+  const btn = document.getElementById('btn-voice');
+  if (btn && !Voice.supported) btn.classList.add('unsupported');
+  /* Can't auto-start: browsers demand a user gesture to open the mic. But if hands-free was
+     on before this load (app relaunch, or a service-worker update reloading the page), don't
+     make the user go find the button — resume on the FIRST tap anywhere. */
+  if (Voice.supported && localStorage.getItem('fishapp.voice') === 'on') {
+    const resume = (e) => {
+      document.removeEventListener('pointerdown', resume, true);
+      // If that first tap WAS the mic button, let voiceToggle own it — otherwise we'd turn
+      // voice on here and its handler would immediately toggle it back off.
+      if (e && e.target && e.target.closest && e.target.closest('#btn-voice')) return;
+      if (Voice.on || Voice._wantOn) return;
+      Voice._wantOn = true;
+      Voice._fails = 0;
+      if (typeof unlockAudio === 'function') unlockAudio();
+      if (typeof requestWakeLock === 'function') requestWakeLock();
+      voiceStart();
+      if (typeof toast === 'function') toast('🎤 Hands-free resumed — say “Hey Fish”');
+    };
+    document.addEventListener('pointerdown', resume, true);
+    if (typeof toast === 'function') toast('🎤 Tap anywhere to resume hands-free');
+  }
+}
