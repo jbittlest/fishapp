@@ -3,11 +3,18 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { swManifest } from './tools/sw-plugin';
 
+/* Human-readable build id, compiled into the page and into the service worker's cache name.
+   The More sheet compares the two: different = this device is running an older cached build. */
+const now = new Date();
+const pad = (n: number) => String(n).padStart(2, '0');
+const BUILD = `${now.getFullYear()}.${pad(now.getMonth() + 1)}.${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+
 // Relative base: the same build runs at https://jbittlest.github.io/fishapp/, on localhost,
 // and inside the iOS shell's fishapp:// scheme.
 export default defineConfig({
   base: './',
-  plugins: [react(), swManifest()],
+  plugins: [react(), swManifest(BUILD)],
+  define: { __APP_BUILD__: JSON.stringify(BUILD) },
   build: {
     outDir: 'dist',
     emptyOutDir: true,
@@ -16,6 +23,7 @@ export default defineConfig({
     assetsInlineLimit: 0,
     sourcemap: false,
     chunkSizeWarningLimit: 900,
+    rollupOptions: { input: 'index.html' },
   },
   server: { host: '127.0.0.1', port: 5181 },
   preview: { host: '127.0.0.1', port: 5182 },

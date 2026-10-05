@@ -1,9 +1,10 @@
 import L from 'leaflet';
+import { createStore } from 'zustand/vanilla';
 import { refreshSpotDistances } from './spots.js';
 import { trackOnFix } from './tracks.js';
 import { awakeUpdateUi } from './awake.js';
 import { navOnFix, navOnGpsLost, navOnGpsStale } from './nav.js';
-import { toast } from './app.js';
+import { toast } from '../services/ui';
 
 /* GPS position, boat marker, follow mode, wake lock */
 'use strict';
@@ -22,6 +23,21 @@ export const GPS = {
   wakeLock: null,
   _hadFirstFix: false,
 };
+
+/* What the HUD, the Emergency sheet and everything else on screen read. Plain data only.
+   status: 'searching' (no fix yet) | 'fix' | 'denied' (permission refused) | 'lost' (error)
+   quality: 'ok' (≤20 m) | 'warn' (coarser) | 'none' — the legacy dot colours. */
+export const gpsStore = createStore(() => ({
+  status: 'searching',
+  quality: 'none',
+  accM: null,
+  sogKn: null,
+  cogDeg: null,
+  lat: null,
+  lng: null,
+  fixAt: 0,
+  follow: true,
+}));
 
 export const KNOTS_PER_MS = 1.94384; // m/s -> knots
 
@@ -54,22 +70,16 @@ export function gpsFixIsSane(c) {
   return true;
 }
 
-/* Cache the status-bar element refs — gpsOnFix runs every fix, so avoid re-querying the DOM. */
-export const _gpsEl = {};
-export function gpsEl(id) { return _gpsEl[id] || (_gpsEl[id] = document.getElementById(id)); }
-
 export function gpsStart(map) {
   if (!('geolocation' in navigator)) {
     toast('GPS not available on this device');
+    gpsStore.setState({ status: 'lost', quality: 'none' });
     return;
   }
   GPS.watchId = navigator.geolocation.watchPosition(
     (pos) => gpsOnFix(map, pos),
     (err) => {
-      const el = document.getElementById('gps-acc');
-      const dot = document.getElementById('gps-dot');
-      dot.className = 'dot';
-      el.textContent = err.code === 1 ? 'GPS DENIED' : 'NO GPS';
+      gpsStore.setState({ status: err.code === 1 ? 'denied' : 'lost', quality: 'none' });
       /* Don't leave a stale position looking live: anything that navigates off
          GPS needs to know the feed died, not keep trusting the last fix. */
       if (typeof navOnGpsLost === 'function') navOnGpsLost();
@@ -110,8 +120,7 @@ export function gpsOnFix(map, pos) {
     GPS.marker = L.marker(ll, { icon: boatIcon(heading), zIndexOffset: 1000, interactive: false }).addTo(map);
     GPS._renderedHeading = heading;
     GPS.accCircle = L.circle(ll, {
-      radius: c.accuracy || 0, weight: 1, color: '#4aa3e0',
-      fillColor: '#4aa3e0', fillOpacity: 0.12, interactive: false,
+      radius: c.accuracy || 0, weight: 1, className: 'gps-acc-circle', interactive: false,
     }).addTo(map);
   } else {
     GPS.marker.setLatLng(ll);
@@ -124,14 +133,19 @@ export function gpsOnFix(map, pos) {
     GPS.accCircle.setLatLng(ll).setRadius(c.accuracy || 0);
   }
 
-  /* Status bar */
-  gpsEl('gps-dot').className = 'dot ' + (GPS.accuracy != null && GPS.accuracy <= 20 ? 'ok' : 'warn');
-  gpsEl('gps-acc').textContent = GPS.accuracy != null ? '±' + Math.round(GPS.accuracy) + 'm' : '±?';
+  /* Instruments */
   const kn = c.speed !== null && !isNaN(c.speed) ? (c.speed * KNOTS_PER_MS) : null;
-  gpsEl('stat-speed').textContent = kn !== null ? kn.toFixed(1) : '—';
-  gpsEl('stat-heading').textContent = heading !== null ? Math.round(heading) : '—';
-  gpsEl('stat-coords').innerHTML =
-    formatCoord(c.latitude, 'lat') + '<br>' + formatCoord(c.longitude, 'lon');
+  const now = Date.now();
+  gpsStore.setState({
+    status: 'fix',
+    quality: GPS.accuracy != null && GPS.accuracy <= 20 ? 'ok' : 'warn',
+    accM: GPS.accuracy,
+    sogKn: kn,
+    cogDeg: heading,
+    lat: c.latitude,
+    lng: c.longitude,
+    fixAt: now,
+  });
 
   /* Follow */
   if (GPS.follow) {
@@ -143,25 +157,26 @@ export function gpsOnFix(map, pos) {
   }
   GPS._hadFirstFix = true;
   GPS.lastLatLng = ll;
-  GPS.lastFixTs = Date.now();
+  GPS.lastFixTs = now;
 
   trackOnFix(ll, pos.timestamp, kn); // feed track recorder
   if (typeof navOnFix === 'function') navOnFix(ll, kn); // feed trip stats + anchor alarm
-  if (typeof updateEmergency === 'function' && !document.getElementById('panel-emergency').classList.contains('hidden')) updateEmergency();
   refreshSpotDistances();
 }
 
+/* Own-ship: a hull silhouette (pointed bow, square stern) rotated to course — never a generic
+   nav arrow, which read backwards once a route line touched its tip. Before any heading is
+   known it is a plain disc (direction unknown, said honestly). Colours come from the theme. */
 export function boatIcon(heading) {
-  const rot = heading !== null ? heading : 0;
-  const showArrow = heading !== null;
-  const svg = showArrow
-    ? `<svg width="40" height="40" viewBox="0 0 40 40" style="transform:rotate(${rot}deg)">
-         <path d="M20 4 L30 32 L20 26 L10 32 Z" fill="#2ecc71" stroke="#fff" stroke-width="2" stroke-linejoin="round"/>
+  const svg = heading !== null
+    ? `<svg width="44" height="44" viewBox="0 0 44 44" style="transform:rotate(${heading}deg)" aria-hidden="true">
+         <path d="M22 4.5c3.6 3.7 5.6 8.6 5.6 14.2V39.5H16.4V18.7c0-5.6 2-10.5 5.6-14.2z" class="own-keyline"/>
+         <path d="M22 4.5c3.6 3.7 5.6 8.6 5.6 14.2V39.5H16.4V18.7c0-5.6 2-10.5 5.6-14.2z" class="own-hull"/>
        </svg>`
-    : `<svg width="40" height="40" viewBox="0 0 40 40">
-         <circle cx="20" cy="20" r="9" fill="#2ecc71" stroke="#fff" stroke-width="3"/>
+    : `<svg width="44" height="44" viewBox="0 0 44 44" aria-hidden="true">
+         <circle cx="22" cy="22" r="9" class="own-keyline"/><circle cx="22" cy="22" r="9" class="own-hull"/>
        </svg>`;
-  return L.divIcon({ className: 'boat-icon', html: svg, iconSize: [40, 40], iconAnchor: [20, 20] });
+  return L.divIcon({ className: 'boat-icon', html: svg, iconSize: [44, 44], iconAnchor: [22, 22] });
 }
 
 /* Wrap a deliberate "take me to this place" map move. The auto-refollow timer
@@ -177,16 +192,20 @@ export function mapProgrammatic(fn) {
 
 export function setFollow(on) {
   GPS.follow = on;
-  document.getElementById('btn-follow').classList.toggle('active', on);
+  gpsStore.setState({ follow: on });
   if (on && GPS.lastLatLng) window._map.panTo(GPS.lastLatLng);
 }
+
+/* What the Device section shows about the screen lock. kind: ok | off | warn | unsupported.
+   Report what is ACTUALLY true right now, not what we asked for (see renderStatus). */
+export const wakeStore = createStore(() => ({ kind: 'off', text: '' }));
 
 /* Keep the screen awake the whole time the app is open (iOS 16.4+, Android).
    The OS drops the lock whenever the app is hidden, so we re-acquire on every
    return-to-visible and after any interaction. Toggleable; on by default. */
 export const WakeLock = {
   lock: null,
-  enabled: localStorage.getItem('fishapp.wake') !== 'off',
+  enabled: safeGet('fishapp.wake') !== 'off',
   supported: 'wakeLock' in navigator,
   _pending: false,
   async acquire() {
@@ -225,7 +244,7 @@ export const WakeLock = {
   },
   setEnabled(on) {
     this.enabled = on;
-    localStorage.setItem('fishapp.wake', on ? 'on' : 'off');
+    try { localStorage.setItem('fishapp.wake', on ? 'on' : 'off'); } catch (e) {}
     if (on) this.acquire(); else this.release();
     this.renderStatus();
   },
@@ -234,19 +253,20 @@ export const WakeLock = {
      it read "Screen stays on while the app is open" on devices where the lock had
      been refused outright. An anchor watch was trusting that sentence. */
   renderStatus() {
-    const s = document.getElementById('wake-status');
-    if (!s) return;
-    if (!this.supported) { s.textContent = 'Not supported on this device/browser'; return; }
-    if (!this.enabled) { s.textContent = 'Off — phone may sleep normally'; return; }
-    if (this.lock) { s.textContent = '✅ Holding the screen on'; return; }
+    if (!this.supported) { wakeStore.setState({ kind: 'unsupported', text: 'Not supported on this device/browser' }); return; }
+    if (!this.enabled) { wakeStore.setState({ kind: 'off', text: 'Off — phone may sleep normally' }); return; }
+    if (this.lock) { wakeStore.setState({ kind: 'ok', text: 'Holding the screen on' }); return; }
     if (this.failed) {
-      s.textContent = '⚠️ The browser refused to hold the screen on' +
-        (this.failReason ? ' (' + this.failReason + ')' : '') + ' — it may still sleep';
+      wakeStore.setState({
+        kind: 'warn',
+        text: 'The browser refused to hold the screen on' + (this.failReason ? ' (' + this.failReason + ')' : '') + ' — it may still sleep',
+      });
       return;
     }
-    s.textContent = 'On — holds the screen once the app is in front';
+    wakeStore.setState({ kind: 'off', text: 'On — holds the screen once the app is in front' });
   },
 };
+function safeGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
 /* Re-acquire whenever the app comes back to the foreground or the user interacts
    (some browsers only grant the lock right after a gesture). */
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') WakeLock.acquire(); });

@@ -1,0 +1,143 @@
+/* FishApp design tokens — "Glass Helm" (see DESIGN.md).
+ *
+ * Tokens are ROLE-named. Components never use colour literals; they use these.
+ * Three themes on <html data-theme>:
+ *   day   — ink-navy chrome and sheets, one amber signal colour (default by day)
+ *   sun   — high-glare: the HUD, SOS and map chrome stay ink, but reading surfaces
+ *           (sheets, modals, cards) switch to paper. Scoped via .surface-paper below.
+ *   night — red-safe monochrome for dark adaptation. Alarms deliberately override it.
+ * The chart's own colour lookup follows the theme through --chart-lut / --chart-trim
+ * (the SVG filters #lut-day / #lut-night in index.html; see engine/layers.js).
+ */
+
+:root {
+  /* ---- type ---- */
+  --font-ui: 'Barlow', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-inst: 'Barlow Semi Condensed', 'Barlow', system-ui, sans-serif;
+
+  /* ---- spacing (4-pt grid) ---- */
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 20px; --sp-6: 24px; --sp-8: 32px; --sp-10: 40px;
+  --gutter: 16px;
+
+  /* ---- radii ---- */
+  --r-xs: 6px; --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-xl: 20px; --r-sheet: 28px; --r-pill: 999px;
+
+  /* ---- z scale: one scale, no ad-hoc values ---- */
+  --z-chart: 0; --z-overlay: 10; --z-scrim: 20; --z-chrome: 100; --z-backdrop: 200; --z-sheet: 300;
+  --z-persist: 400; --z-modal: 500; --z-toast: 600; --z-alarm: 900; --z-boot: 1000;
+
+  /* ---- motion ---- */
+  --t-fast: 120ms; --t-base: 220ms; --t-sheet: 380ms;
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+  --ease-sheet: cubic-bezier(.32, .72, 0, 1);
+
+  /* ---- elevation ---- */
+  --e1: 0 1px 2px rgba(0, 0, 0, .30), 0 8px 20px rgba(2, 6, 10, .30);
+  --e2: 0 -12px 40px rgba(0, 0, 0, .45);
+  --e3: 0 20px 48px rgba(0, 0, 0, .5);
+
+  /* ---- layout measurements published by the shell (px) ---- */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --persist-bottom: 140px;   /* measured: bottom edge of HUD + nav pill/watch band (Shell) */
+  --chrome-bottom: 96px;     /* measured: top edge of the bottom chrome stack (Shell) */
+  --rail-w: 0px;             /* 76px on desktop */
+  --panel-w: 0px;            /* side-panel width on desktop when one is open */
+}
+
+/* ===================================================================== DAY */
+:root,
+:root[data-theme="day"],
+:root[data-theme="sun"] {
+  color-scheme: dark;
+  --ink-950: #060B11;
+  --chrome: rgba(11, 19, 28, .94);   /* anything floating over the chart — ≥94%: legibility never depends on the chart */
+  --chrome-solid: #0B131C;
+  --sheet: #0F1A25;
+  --raised: #152230;
+  --control: #1D2C3C;                 /* icon buttons, user bubble, pressed rows */
+  --selected: #2A3B4D;
+  --text-1: #F3F6F9;
+  --text-2: #B4C0CC;
+  --text-3: #8493A3;
+  --line: rgba(196, 214, 232, .10);
+  --line-2: rgba(196, 214, 232, .18);
+  --signal: #FFB547;                  /* the one accent: live / selected / you / where you're going */
+  --signal-fg: #FFB547;               /* signal used as text or a glyph */
+  --signal-ink: #231503;              /* glyphs and text on a signal fill */
+  --signal-soft: rgba(255, 181, 71, .16);
+  --signal-press: #FFC266;
+  --alert: #D92D20;                   /* SOS + destructive fills only */
+  --alert-text: #FF7A6E;
+  --alarm: #C81E14;
+  --ok: #3FD08A;                      /* only ever a dot or glyph, never text */
+  --chart-ink: #0B131C;               /* casing under route lines, marker discs */
+  --series: #4A5D72;                  /* single neutral data series */
+  --scrim-top: linear-gradient(rgba(6, 11, 17, .72), rgba(6, 11, 17, 0));
+  --backdrop: rgba(4, 8, 12, .55);
+  --grabber: rgba(255, 255, 255, .22);
+  --sheet-highlight: inset 0 1px 0 rgba(255, 255, 255, .06);
+  --chart-lut: url(#lut-day);
+  --chart-trim: contrast(1.28) saturate(1.12);
+}
+
+/* ======================================== SUN: paper reading surfaces */
+:root[data-theme="sun"] .surface-paper {
+  color-scheme: light;
+  --sheet: #F4F4F1;
+  --raised: #FFFFFF;
+  --control: #E6E6E1;
+  --selected: #D6D8D3;
+  --text-1: #15171A;
+  --text-2: #464B53;
+  --text-3: #63686F;
+  --line: rgba(21, 23, 26, .10);
+  --line-2: rgba(21, 23, 26, .20);
+  --signal-fg: #8A5200;               /* amber text on paper must be darkened to stay ≥4.5:1 */
+  --signal-soft: rgba(255, 181, 71, .26);
+  --alert-text: #B42318;
+  --ok: #148A50;
+  --series: #9AA3AD;
+  --grabber: rgba(21, 23, 26, .22);
+  --sheet-highlight: inset 0 1px 0 rgba(255, 255, 255, .7);
+}
+
+/* =================================================== NIGHT (red-safe) */
+:root[data-theme="night"] {
+  color-scheme: dark;
+  --ink-950: #000000;
+  --chrome: rgba(7, 2, 2, .95);
+  --chrome-solid: #070202;
+  --sheet: #0B0303;
+  --raised: #140605;
+  --control: #1E0907;
+  --selected: #2C0E0B;
+  --text-1: #F2664A;
+  --text-2: #D0583F;
+  --text-3: #D0583F;                  /* two text levels only at night; hierarchy is size and weight */
+  --line: rgba(255, 90, 60, .14);
+  --line-2: rgba(255, 90, 60, .24);
+  --signal: #FF6A3D;
+  --signal-fg: #FF6A3D;
+  --signal-ink: #000000;
+  --signal-soft: rgba(255, 106, 61, .18);
+  --signal-press: #FF7F57;
+  --alert: #FF2A1A;
+  --alert-text: #FF5A44;
+  --alarm: #C81E14;                   /* alarms override night mode on purpose — a dragging anchor must wake you */
+  --ok: #D0583F;                      /* status is carried by SHAPE at night (filled / hollow / ✕) */
+  --chart-ink: #070202;
+  --series: #5A1E14;
+  --scrim-top: linear-gradient(rgba(0, 0, 0, .85), rgba(0, 0, 0, 0));
+  --backdrop: rgba(0, 0, 0, .6);
+  --grabber: rgba(255, 90, 60, .3);
+  --sheet-highlight: inset 0 1px 0 rgba(255, 90, 60, .08);
+  --chart-lut: url(#lut-night);
+  --chart-trim: brightness(1);        /* legacy used `none`, which made the composed filter invalid */
+}
+
+@media (min-width: 900px) {
+  :root { --gutter: 24px; }
+}

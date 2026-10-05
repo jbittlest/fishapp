@@ -1,0 +1,90 @@
+/* Global base: reset, type, Leaflet overrides, keyframes.
+ * Imported AFTER leaflet/dist/leaflet.css — several overrides here only win on source order
+ * (same specificity as Leaflet's own rules). */
+
+/* ---- chart rendering (functional — see engine/layers.js) ---- */
+:root[data-lume="dusk"] { --chart-lut: url(#lut-day); --chart-trim: contrast(1.10) saturate(0.94) brightness(0.80); }
+/* Kill switch. An SVG filter on a tile pane is the one thing that cannot be tested anywhere but
+   the actual phone; if it janks on iOS, drop the filter and keep the data. Set data-relief="plain"
+   on <html>. !important is required to beat the inline style.filter. */
+:root[data-relief="plain"] .leaflet-tile-pane .leaflet-layer { filter: none !important; }
+
+*, *::before, *::after { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  background: var(--ink-950);
+  color: var(--text-1);
+  font-family: var(--font-ui);
+  font-size: 16px;
+  line-height: 1.4;
+  overscroll-behavior: none;
+  /* No text selection anywhere — the emergency coordinates and motor log have Copy buttons. */
+  -webkit-user-select: none; user-select: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+body { overflow: hidden; }
+#root { position: fixed; inset: 0; }   /* never transform/filter this: it would re-anchor every fixed element */
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; touch-action: manipulation; -webkit-appearance: none; appearance: none; background: none; border: 0; padding: 0; margin: 0; }
+button:disabled { cursor: default; }
+input, textarea, select { -webkit-user-select: text; user-select: text; }
+a { color: var(--signal-fg); }
+:focus { outline: none; }
+:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+[hidden] { display: none !important; }
+svg { flex-shrink: 0; }
+
+.num, .tnum { font-variant-numeric: tabular-nums; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* ---- the map ---- */
+#map {
+  position: absolute; inset: 0; z-index: var(--z-chart);
+  /* A missing tile must look dark, never bright grey glare at night. */
+  background: #0e2a40;
+}
+:root[data-theme="night"] #map { background: #050101; }
+/* Smoothly upscale tiles past their native zoom so relief reads as soft shading, not blocks. */
+.leaflet-tile-pane img { image-rendering: auto; }
+.leaflet-container { font: inherit; background: transparent; }
+.leaflet-control-container .leaflet-top { top: calc(var(--persist-bottom) + 8px); }
+/* Attribution is a licence requirement (OSM, Esri, CARTO, OpenSeaMap): keep it visible, just
+   above the bottom chrome, small and quiet. (The old tab bar covered it entirely.) */
+.leaflet-container .leaflet-control-attribution {
+  background: color-mix(in srgb, var(--chrome-solid) 70%, transparent) !important;
+  color: var(--text-3) !important;
+  font-size: 9px !important; line-height: 1.3 !important;
+  padding: 1px 6px !important; border-radius: var(--r-xs) 0 0 0;
+  max-width: 62vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.leaflet-container .leaflet-control-attribution a { color: var(--text-2) !important; }
+.leaflet-bottom.leaflet-right { bottom: var(--chrome-bottom); right: calc(var(--rail-w) * 0); }
+.leaflet-bottom .leaflet-control { margin-bottom: 0; }
+
+/* Leaflet popups (a few engine surfaces still use them, e.g. route points) */
+.leaflet-popup-content-wrapper, .leaflet-popup-tip {
+  background: var(--sheet); color: var(--text-1); box-shadow: var(--e3);
+}
+.leaflet-popup-content-wrapper { border-radius: var(--r-lg); border: 1px solid var(--line); }
+.leaflet-popup-content { margin: 12px 14px; font-size: 14px; line-height: 1.4; }
+.leaflet-container a.leaflet-popup-close-button { color: var(--text-2); width: 32px; height: 32px; font-size: 20px; line-height: 30px; }
+
+/* ---- keyframes ---- */
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+/* Alarm: hard on/off (steps), deliberately NOT disabled by prefers-reduced-motion — a safety signal. */
+@keyframes alarm-flash { 0%, 49.9% { background-color: var(--alarm); } 50%, 100% { background-color: #7A0F09; } }
+@keyframes ring-out { from { transform: scale(1); opacity: .7; } to { transform: scale(1.45); opacity: 0; } }
+@keyframes live-dot { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+/* .keep-motion marks safety signals that must animate for everyone: the anchor alarm flash, the
+   motor ARMED pulse and the Go-To arriving pulse (legacy kept all three under reduced motion). */
+@media (prefers-reduced-motion: reduce) {
+  *:not(.keep-motion):not(.keep-motion *) {
+    animation-duration: 0.001ms !important; animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .spin { animation: spin 1.4s linear infinite !important; } /* a spinner that stops reads as "hung" */
+}

@@ -17,7 +17,9 @@ function walk(dir: string, base = dir): string[] {
   });
 }
 
-export function swManifest(): Plugin {
+/** `build` is the human build id also compiled into the page (__APP_BUILD__). The cache name
+ *  carries it, so the page can tell "this worker serves a different build" (update ready). */
+export function swManifest(build: string): Plugin {
   let config: ResolvedConfig;
   return {
     name: 'fishapp-sw-manifest',
@@ -47,7 +49,7 @@ export function swManifest(): Plugin {
 
       const template = fs.readFileSync(path.resolve(config.root, 'src/sw/sw.template.js'), 'utf8');
       const source = template
-        .replace("'__CACHE__'", JSON.stringify('fishapp-' + hash.digest('hex').slice(0, 12)))
+        .replace("'__CACHE__'", JSON.stringify('fishapp-' + build + '-' + hash.digest('hex').slice(0, 8)))
         .replace('__SHELL__', JSON.stringify(shell, null, 2))
         .replace('__CRITICAL__', JSON.stringify(critical));
       if (/__(CACHE|SHELL|CRITICAL)__/.test(source)) this.error('sw.template.js placeholders were not all replaced');

@@ -1,0 +1,83 @@
+/* ---------------------------------------------------------------- sheet */
+.ui-sheet {
+  position: fixed; z-index: var(--z-sheet);
+  display: flex; flex-direction: column;
+  background: var(--sheet); color: var(--text-1);
+  box-shadow: var(--e2), var(--sheet-highlight);
+  contain: layout paint;
+  overscroll-behavior: contain;
+  transition: top var(--t-sheet) var(--ease-sheet), transform var(--t-sheet) var(--ease-sheet);
+  animation: sheet-rise var(--t-sheet) var(--ease-sheet);
+}
+@keyframes sheet-rise { from { transform: translateY(16px); } to { transform: none; } }
+
+/* phone: anchored to the bottom (above the keyboard when it is up) */
+.ui-sheet--full, .ui-sheet--medium {
+  left: 0; right: 0; bottom: var(--kb, 0px);
+  border-radius: var(--r-sheet) var(--r-sheet) 0 0;
+}
+.ui-sheet--full { top: calc(var(--persist-bottom) + 12px); }
+.ui-sheet--medium { top: max(calc(var(--persist-bottom) + 12px), 46dvh); }
+
+/* desktop: docked side panel beside the rail, non-modal */
+.ui-sheet--panel {
+  top: calc(var(--safe-top) + 12px); bottom: 12px; left: calc(var(--rail-w) + 12px); width: 400px;
+  border-radius: var(--r-xl); box-shadow: var(--e3), var(--sheet-highlight), inset 0 0 0 1px var(--line);
+  animation: panel-in var(--t-base) var(--ease-out);
+}
+@keyframes panel-in { from { transform: translateX(-10px); } to { transform: none; } }
+
+.ui-sheet__head {
+  position: relative; display: flex; align-items: flex-start; gap: 12px;
+  padding: 22px 16px 12px 20px; flex-shrink: 0; touch-action: none; cursor: grab;
+}
+.ui-sheet--panel .ui-sheet__head { cursor: default; touch-action: auto; padding-top: 18px; }
+.ui-sheet__grabber { position: absolute; top: 7px; left: 50%; width: 36px; height: 5px; margin-left: -18px; border-radius: 3px; background: var(--grabber); }
+.ui-sheet__titles { flex: 1; min-width: 0; padding-top: 2px; }
+.ui-sheet__titles .ui-title-1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ui-sheet__subtitle { margin-top: 2px; font: 500 13px/18px var(--font-ui); color: var(--text-2); }
+.ui-sheet__actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.ui-sheet__body {
+  flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain; padding: 4px 16px calc(var(--tab-clear, 0px) + 24px);
+}
+.ui-sheet--panel .ui-sheet__body { padding: 4px 20px 24px; }
+.ui-sheet__foot { flex-shrink: 0; padding: 8px 16px calc(var(--tab-clear, 0px) + 10px); background: var(--sheet); box-shadow: 0 -1px 0 var(--line); }
+.ui-sheet--panel .ui-sheet__foot { padding-bottom: 14px; }
+/* when a footer exists, the body no longer needs to clear the tab bar */
+.ui-sheet:has(.ui-sheet__foot) .ui-sheet__body { padding-bottom: 16px; }
+
+/* ----------------------------------------------------------- modal/dialog */
+.ui-modal-wrap {
+  position: fixed; inset: 0; z-index: var(--z-modal); display: flex; align-items: center; justify-content: center;
+  padding: calc(var(--safe-top) + 16px) 16px calc(var(--safe-bottom) + var(--kb, 0px) + 16px);
+  background: var(--backdrop); animation: fade-in var(--t-base) var(--ease-out);
+  overflow-y: auto; overscroll-behavior: contain;
+}
+.ui-modal {
+  width: 100%; max-width: 440px; margin: auto; background: var(--sheet); color: var(--text-1);
+  border-radius: var(--r-xl); box-shadow: var(--e3), inset 0 0 0 1px var(--line); padding: 20px 18px 18px;
+  animation: modal-in var(--t-base) var(--ease-out);
+}
+@keyframes modal-in { from { transform: translateY(8px) scale(.985); } to { transform: none; } }
+.ui-modal__title { margin: 0 0 4px; }
+.ui-modal__msg { margin: 0 0 16px; font: 400 15px/21px var(--font-ui); color: var(--text-2); white-space: pre-wrap; }
+.ui-modal__body { margin-top: 14px; }
+.ui-modal__btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
+.ui-modal__btns--one { grid-template-columns: 1fr; }
+
+/* ------------------------------------------------------------------ toast */
+.ui-toast {
+  position: fixed; z-index: var(--z-toast); left: 50%; transform: translateX(-50%);
+  bottom: calc(var(--chrome-bottom) + var(--kb, 0px) + 12px);
+  max-width: min(420px, calc(100vw - 32px)); min-height: 44px; padding: 10px 8px 10px 16px;
+  display: flex; align-items: center; gap: 12px;
+  background: var(--chrome-solid); color: var(--text-1); border-radius: 22px;
+  box-shadow: var(--e3), inset 0 0 0 1px var(--line);
+  font: 500 14px/19px var(--font-ui);
+  animation: toast-in var(--t-base) var(--ease-out);
+}
+@keyframes toast-in { from { transform: translate(-50%, 8px); opacity: .6; } to { transform: translateX(-50%); opacity: 1; } }
+.ui-toast__msg { flex: 1; padding-right: 8px; }
+.ui-toast__action { flex-shrink: 0; height: 32px; padding: 0 12px; border-radius: var(--r-pill); color: var(--signal-fg); font: 600 14px/1 var(--font-ui); }
+.ui-toast__action:active { background: var(--control); }
