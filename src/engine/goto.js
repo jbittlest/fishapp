@@ -310,3 +310,8 @@ export function gotoToggleTripPath(t) {
   }
   renderTripsList();
 }
+
+/* CONTRACT STUB (shell layout reads it) — the navigation port fills this in. */
+import { createStore as __createStore } from 'zustand/vanilla';
+/** @type {import('zustand/vanilla').StoreApi<{active: boolean, arriving: boolean, name: string, distNm: number|null, brgDeg: number|null, steerDeg: number|null, etaText: string}>} */
+export const gotoStore = __createStore(() => ({ active: false, arriving: false, name: '', distNm: /** @type {number|null} */ (null), brgDeg: /** @type {number|null} */ (null), steerDeg: /** @type {number|null} */ (null), etaText: '' }));

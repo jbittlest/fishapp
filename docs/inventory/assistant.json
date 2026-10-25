@@ -1,0 +1,301 @@
+﻿{
+    "key":  "assistant",
+    "specFile":  "C:/Users/jbitt/AppData/Local/Temp/claude/C--Users-jbitt-OneDrive-Desktop-Carrots/089709da-890a-4c8f-9bbf-0a347ea15c9c/scratchpad/fishapp-concepts/inventory/assistant.md",
+    "surfaces":  [
+                     {
+                         "name":  "First Mate chat sheet",
+                         "kind":  "panel",
+                         "domIds":  [
+                                        "panel-assistant",
+                                        "btn-assistant"
+                                    ],
+                         "ownerModule":  "js/assistant.js (opened by app.js togglePanel; also voice.js:351)",
+                         "summary":  "Fixed-height bottom sheet holding the header speak toggle, status line, transcript, chips, input bar and settings. On open, togglePanel calls asstOnOpen, which refreshes the status and voice list and shows the greeting and chips if the transcript is empty."
+                     },
+                     {
+                         "name":  "Speak-answers toggle",
+                         "kind":  "panel-section",
+                         "domIds":  [
+                                        "asst-speak"
+                                    ],
+                         "ownerModule":  "js/assistant.js",
+                         "summary":  "Shows ðŸ”‡ \u0027Read answers aloud\u0027 or ðŸ”Š \u0027Voice on â€” tap to mute\u0027 (class on). Persisted in fishapp.asst.speak. Turning it on says \u0027Voice on. I\u0027ll read my answers aloud.\u0027; turning it off stops both the device and cloud voices. voice.js forces it on for one reply, then restores it."
+                     },
+                     {
+                         "name":  "Status line",
+                         "kind":  "panel-section",
+                         "domIds":  [
+                                        "asst-status"
+                                    ],
+                         "ownerModule":  "js/assistant.js",
+                         "summary":  "Green dot plus one of: \u0027Full AI chat Â· \u003cmodel\u003e\u0027, \u0027Free AI chat â€” no key needed ðŸŸ¢\u0027, \u0027Offline â€” answering from your boat data ðŸ§­\u0027, or \u0027Data mode â€” answering from your boat data\u0027 (unreachable today). Updates on window online/offline."
+                     },
+                     {
+                         "name":  "Transcript / message bubbles",
+                         "kind":  "panel-section",
+                         "domIds":  [
+                                        "asst-messages"
+                                    ],
+                         "ownerModule":  "js/assistant.js",
+                         "summary":  "Plain-text bubbles (textContent, pre-wrap): .asst-msg.user and .asst-msg.bot. Pending replies show \u0027â€¦\u0027 with class thinking, then progress text such as \u0027âš™ï¸ checking conditionsâ€¦\u0027. Errors get class err and the text \"âš ï¸ Couldn\u0027t reach the AI (why). Offline answer:\" followed by the offline answer. The transcript lives only in the DOM and is lost on reload."
+                     },
+                     {
+                         "name":  "Greeting",
+                         "kind":  "panel-section",
+                         "domIds":  [
+                                        "asst-messages"
+                                    ],
+                         "ownerModule":  "js/assistant.js",
+                         "summary":  "\"Ahoy! I\u0027m First Mate ðŸŽ£â€¦\" bot bubble. Shown only when the transcript is empty at panel open or after Clear chat."
+                     },
+                     {
+                         "name":  "Suggestion chips",
+                         "kind":  "panel-section",
+                         "domIds":  [
+                                        "asst-suggest"
+                                    ],
+                         "ownerModule":  "js/assistant.js",
+                         "summary":  "9 fixed chips (ASST_CHIPS). Tapping one calls asstSend(text). They stay visible once rendered and are rebuilt on Clear chat."
+                     },
+                     {
+                         "name":  "Input bar (mic, textarea, send)",
+                         "kind":  "panel-section",
+                         "domIds":  [
+                                        "asst-mic",
+                                        "asst-input",
+                                        "asst-send"
+                                    ],
+                         "ownerModule":  "js/assistant.js",
+                         "summary":  "The mic is hidden where SpeechRecognition is missing and gets class listening during capture. The textarea auto-grows to 120px; Enter sends and Shift+Enter adds a newline. Send is disabled while busy. Every send clears the textarea, and sends made while busy are silently dropped."
+                     },
+                     {
+                         "name":  "Assistant settings",
+                         "kind":  "panel-section",
+                         "domIds":  [
+                                        "asst-settings",
+                                        "asst-key",
+                                        "asst-model",
+                                        "asst-cloudvoice",
+                                        "asst-voice",
+                                        "asst-voice-hint",
+                                        "asst-proxy",
+                                        "asst-save",
+                                        "asst-clear"
+                                    ],
+                         "ownerModule":  "js/assistant.js",
+                         "summary":  "Fields: API key (password type), model select (Opus 4.8 / Sonnet 5 / Haiku 4.5), natural cloud voice checkbox, phone voice picker with an honest platform hint (iOS \u0027Enhanced\u0027 voice caveat), and the Free-AI endpoint. Save persists, speaks \u0027This is how I sound.\u0027 (only if speak is on), toasts \u0027Assistant settings saved\u0027 and collapses the panel. Clear chat resets the conversation."
+                     },
+                     {
+                         "name":  "Toasts from First Mate",
+                         "kind":  "toast",
+                         "domIds":  [
+                                        "toast"
+                                    ],
+                         "ownerModule":  "js/app.js toast() called by assistant.js",
+                         "summary":  "\u0027ðŸ“Œ NAME saved\u0027, \u0027ðŸ—‘ NAME deleted\u0027, \u0027Assistant settings saved\u0027, \"Voice input isn\u0027t supported here â€” tap the mic on your keyboard to talk\", \u0027Voice: \u003cerror\u003e\u0027, \u0027Voice input failed\u0027."
+                     },
+                     {
+                         "name":  "Spot markers created by First Mate",
+                         "kind":  "map-layer",
+                         "domIds":  [
+                                        "spots-list"
+                                    ],
+                         "ownerModule":  "js/spots.js (addSpotMarker/deleteSpot called by assistant.js)",
+                         "summary":  "The offline \u0027drop a pin\u0027 command, the Claude place_waypoint/delete_waypoint tools and voice.js voiceMarkSpot all add or remove Leaflet spot markers and refresh the Spots list through asstCreateSpot and deleteSpot."
+                     },
+                     {
+                         "name":  "Free-AI Cloudflare Worker",
+                         "kind":  "other",
+                         "domIds":  [
+
+                                    ],
+                         "ownerModule":  "proxy/first-mate-worker.js",
+                         "summary":  "Separately deployed endpoint, origin-locked to https://jbittlest.github.io. Chat: POST {system,messages} returns {reply} (llama-3.3-70b, 512 tokens; system truncated to 8000 chars; last 12 messages kept). /tts: POST {text,voice} returns audio/mpeg (OpenAI when OPENAI_KEY is set, otherwise MeloTTS). Error replies are JSON {error}."
+                     }
+                 ],
+    "engineApi":  [
+                      {
+                          "module":  "firstMate/engine",
+                          "name":  "messages",
+                          "kind":  "state",
+                          "description":  "Transcript array [{id, role:\u0027user\u0027|\u0027bot\u0027, text, thinking, error}]. Must live in a store outside the panel component, because voice.js sends messages while the panel is closed."
+                      },
+                      {
+                          "module":  "firstMate/engine",
+                          "name":  "busy",
+                          "kind":  "state",
+                          "description":  "True while a reply is in flight (ASST.streaming). Disables Send; new sends are dropped silently."
+                      },
+                      {
+                          "module":  "firstMate/engine",
+                          "name":  "statusText / brain",
+                          "kind":  "state",
+                          "description":  "Derived from navigator.onLine, whether a key exists, the effective proxy URL and the model label (Â§4b copy). Recomputed on online/offline, Save, send end and panel open."
+                      },
+                      {
+                          "module":  "firstMate/engine",
+                          "name":  "showGreeting / chipsVisible / chips",
+                          "kind":  "state",
+                          "description":  "Greeting and 9 chips appear when the transcript is empty at open or after clear. Chips then stay visible."
+                      },
+                      {
+                          "module":  "firstMate/engine",
+                          "name":  "speak",
+                          "kind":  "state",
+                          "description":  "Speak-answers toggle (persisted fishapp.asst.speak). voice.js temporarily overrides it."
+                      },
+                      {
+                          "module":  "firstMate/engine",
+                          "name":  "settings",
+                          "kind":  "state",
+                          "description":  "{key, model, proxyOverride, cloudVoice, voiceName} from localStorage fishapp.asst.*. The effective proxy is the override or the ASST_PROXY default."
+                      },
+                      {
+                          "module":  "firstMate/speech",
+                          "name":  "voices / currentVoiceName / voiceHint",
+                          "kind":  "state",
+                          "description":  "English voices sorted by asstVoiceScore, with a natural flag. Hint kind is none, natural, pick-natural, ios or no-natural (verbatim copy in spec Â§4f). Refreshed on panel open and on voiceschanged."
+                      },
+                      {
+                          "module":  "firstMate/engine",
+                          "name":  "micSupported / micListening",
+                          "kind":  "state",
+                          "description":  "Hide the mic when unsupported; set the listening class while one-shot recognition runs."
+                      },
+                      {
+                          "module":  "firstMate/engine",
+                          "name":  "send(text)",
+                          "kind":  "action",
+                          "description":  "Main entry, replacing asstSend. Picks the brain (Claude key, proxy, or offline), adds bubbles, reports progress, falls back to the offline answer on error, speaks the reply and records history. Guarded by try/finally and a generation counter. Awaitable for voice.js."
+                      },
+                      {
+                          "module":  "firstMate/engine",
+                          "name":  "clear()",
+                          "kind":  "action",
+                          "description":  "Bumps the generation, empties history and lastLoc, stops speech, empties the transcript and shows the greeting and chips again."
+                      },
+                      {
+                          "module":  "firstMate/engine",
+                          "name":  "onOpen()",
+                          "kind":  "action",
+                          "description":  "Called on the panel\u0027s hidden-to-visible transition. Refreshes status and voices; greets if the transcript is empty."
+                      },
+                      {
+                          "module":  "firstMate/engine",
+                          "name":  "saveSettings(partial)",
+                          "kind":  "action",
+                          "description":  "Persists key, model, proxy, cloud voice and voice name; sets the active voice; speaks the \u0027This is how I sound.\u0027 sample (only if speak is on); refreshes status; toasts \u0027Assistant settings saved\u0027."
+                      },
+                      {
+                          "module":  "firstMate/engine",
+                          "name":  "toggleSpeak() / setSpeak(on,{persist})",
+                          "kind":  "action",
+                          "description":  "Toggle is persisted, speaks a confirmation or stops speech. The non-persisting setSpeak is for voice.js\u0027s one-reply override."
+                      },
+                      {
+                          "module":  "firstMate/engine",
+                          "name":  "startMic()",
+                          "kind":  "action",
+                          "description":  "One-shot SpeechRecognition (en-US, no interim results). The transcript goes to send(). Shows mic toasts on failure."
+                      },
+                      {
+                          "module":  "firstMate/speech",
+                          "name":  "speak(text) / stopSpeech()",
+                          "kind":  "action",
+                          "description":  "Speaks text with emoji and markdown stripped, max 700 chars, using the cloud /tts voice or the device voice; any cloud failure falls back to the device voice. stopSpeech cancels both. Both maintain the Voice mute window. Used by voice.js voiceSay."
+                      },
+                      {
+                          "module":  "firstMate/waypoints",
+                          "name":  "createSpot({lat,lng,name,type,notes})",
+                          "kind":  "action",
+                          "description":  "Awaits the IDB commit, then updates Spots.all, the map marker and the spots list. Throws on storage failure. Shared with voice.js voiceMarkSpot."
+                      },
+                      {
+                          "module":  "firstMate/offline",
+                          "name":  "answerOffline(q)",
+                          "kind":  "query",
+                          "description":  "Deterministic ~30-intent router (asstOffline) over injected app data. Order is load-bearing."
+                      },
+                      {
+                          "module":  "firstMate/engine",
+                          "name":  "message:added / message:updated / reply:done / speech:start / speech:end",
+                          "kind":  "event",
+                          "description":  "Lets the UI auto-scroll on append and progress changes, and lets voice.js know when a reply finished and speech started or ended (mute window)."
+                      }
+                  ],
+    "crossDeps":  [
+                      "assistant.js uses GPS.lastLatLng / GPS.last.coords (gps.js)",
+                      "assistant.js uses nmBetween, bearingBetween, formatCoord, setFollow, mapProgrammatic (gps.js)",
+                      "assistant.js uses window._map (app.js:73)",
+                      "assistant.js uses compass (weather.js:312, 8-point; preferred over the local 16-point fallback)",
+                      "assistant.js reads localStorage fishapp.lastwx written by weather.js:285 (no location/age check)",
+                      "assistant.js uses Astro.sunTimes/moonTimes/moonIllumination/moonPhaseName/solunar (astro.js)",
+                      "assistant.js uses areaPackFor, areaFcstIndex, areaDailyForecast, areaTidesNext, areaSstStats, areaDepthAt, areaPackSummary (areadata.js)",
+                      "assistant.js uses Reefs.reefs (reefs.js)",
+                      "assistant.js uses Spots.all, addSpotMarker, renderSpotsList, deleteSpot, escapeHtml (spots.js)",
+                      "assistant.js uses Catch.all (catch.js)",
+                      "assistant.js uses Nav.trip, Nav.anchor, tripToggle, tripReset (nav.js)",
+                      "assistant.js reads DOM #route-speed and #route-gph from the Nav tools panel (index.html:328-329)",
+                      "assistant.js sets #ovl-sst/rain/wind/reefs/mpa/fish .checked and dispatches change, handled by app.js:220-270, sst.js:44 and rain.js:19",
+                      "assistant.js uses FISH_ID (fish-id.js), KNOTS (knots.js), FISH_TIPS/AREA_TIPS/TECHNIQUE_TIPS/fishTipsFor/areaTipsFor/techniqueTipsFor (fish-tips.js)",
+                      "assistant.js uses SST.range (sst.js)",
+                      "assistant.js uses biteWindows, biteFmtWindow, biteReason (bite.js)",
+                      "assistant.js uses nearestTideStation / Tides.stations (tides.js)",
+                      "assistant.js uses idb.put (db.js) through asstCreateSpot",
+                      "assistant.js uses toast (app.js:676)",
+                      "assistant.js WRITES Voice._muteUntil (voice.js:23) as the TTS echo guard",
+                      "assistant.js relies on the app.js:19-41 global fetch wrapper that honours init.timeoutMs (Claude 120s, proxy 90s, default 30s)",
+                      "app.js:408 calls asstInit(); app.js:331 calls asstOnOpen() from togglePanel(\u0027panel-assistant\u0027)",
+                      "voice.js:231-246 calls asstSend and reads, sets and restores ASST.speak, then calls asstUpdateSpeakBtn",
+                      "voice.js:162 voiceSay calls asstSpeak (silent if ASST.speak is false)",
+                      "voice.js:135-137 voiceMarkSpot calls asstCreateSpot",
+                      "voice.js:351 opens panel-assistant when hands-free is unsupported",
+                      "sw.js:33 precaches ./js/assistant.js; sw.js:96-98 skips non-GET so a same-origin proxy POST works",
+                      "assistant.js -\u003e proxy/first-mate-worker.js over HTTPS (chat at \u0027/\u0027, speech at \u0027/tts\u0027); the Worker is origin-locked to https://jbittlest.github.io"
+                  ],
+    "safetyCritical":  [
+                           "Offline intent router order (assistant.js:230-368) is load-bearing: create-waypoint needs an explicit create phrase; \u0027 mpa\u0027 has a leading space; word(\u0027seas\u0027) avoids \u0027season\u0027; distance comes before knots (\u002725 knots\u0027); a bare \u0027heading\u0027 is excluded. Emergency is evaluated late (#26), which is pre-existing; do not reorder without an owner decision.",
+                           "asstSend try/finally always resets ASST.streaming and re-enables Send (1616-1659), and the app.js fetch timeout wrapper bounds every request. Losing either leaves the assistant dead until reload.",
+                           "Generation guard: Clear chat bumps ASST._gen; in-flight replies must not write bubbles, speak, or push history (1627, 1639, 1650, 1729-1732).",
+                           "Error fallback shows the offline answer in a red err bubble and speaks only the offline answer (1635-1645); a 401 on the Claude path is labelled \u0027bad API key\u0027.",
+                           "Agent loop: max 6 steps; after side-effecting tools it must never return a bare \u0027(no reply)\u0027 and instead lists what was done (1170-1177).",
+                           "asstCreateSpot awaits the IDB commit and propagates rejection; the offline path reports \u0027Nothing was written\u0027 and never claims success early (892-900). voice.js relies on the throw.",
+                           "get_conditions must not turn missing data into NaN or 0: throw when wind_speed_10m is null and leave absent marine fields absent (1262-1286).",
+                           "TTS echo guard: device speech sets Voice._muteUntil = max(existing, now+1200+len/14*1000), and onend sets it to now+700. Cloud speech sets now+duration*1000+700 on loadedmetadata. Without these, \u0027Hey Fish\u0027 answers itself in a loop (1430-1465).",
+                           "asstStopSpeech must cancel BOTH speechSynthesis and the cloud \u003caudio\u003e, and invalidate in-flight /tts fetches via _speakWanted and _speakGen (1406-1414, 1562-1565).",
+                           "The cloud voice never fails silent: any /tts failure while still current falls back to the device voice (1471-1473).",
+                           "Go/no-go always appends \u0027âš ï¸ Rough read only â€” always get an official marine forecast (VHF WX / NOAA) before you head out.\u0027 (605).",
+                           "CDFW caveats on species/regs (791) and bait answers (658), and the MPA \u0027Boundaries are approximate\u0027 caveat (504) must be preserved verbatim.",
+                           "Emergency answer text (815-818): VHF 16, 911/Coast Guard, decimal position, MAYDAY script, satellite SOS, ðŸ†˜ button.",
+                           "Position answers distinguish live GPS from map centre and give DM coordinates for the Coast Guard (372-376). The offline waypoint flags \u0027(map center â€” no GPS fix yet)\u0027.",
+                           "asstAnsPlan must not give the light-wind bonus to days with no wind data (535-541).",
+                           "Status line claims \u0027Full AI chat\u0027 only when navigator.onLine and a key is present (1589).",
+                           "Messages render as plain text (textContent + pre-wrap). AI output, geocoded labels and spot names must not be injected as HTML (XSS).",
+                           "The API key stays in localStorage, is sent only to api.anthropic.com, and is never sent to the proxy or logged.",
+                           "Thinking is enabled only for models matching asstSupportsThinking (Haiku 4.5 returns 400 otherwise) (1097-1116).",
+                           "delete_waypoint (Claude tool) deletes the first substring match with NO confirmation, unlike the UI\u0027s confirm(). Preserve knowingly (1332-1342)."
+                       ],
+    "risks":  [
+                  "Worker truncates the system prompt to 8000 chars (first-mate-worker.js:118), but the proxy system prompt is ~9.5k+ chars before the LIVE CONDITIONS/TIDES block is appended at the end, so the free proxy likely never sees the pre-fetched live data. Verify against the deployed Worker before deciding to fix by reordering or raising the cap.",
+                  "Worker ALLOWED_ORIGIN is \u0027https://jbittlest.github.io\u0027. A Vite dev server (localhost), any other host, or the iOS WKWebView fishapp:// origin gets 403/CORS failure. Chat then always falls back to \"Couldn\u0027t reach the AI\" while the status still says \u0027Free AI chat\u0027, and cloud TTS silently uses the device voice.",
+                  "The transcript lives only in the DOM today. In React it must live in an engine store that survives the panel unmounting, because voice.js calls asstSend while the panel is closed and expects the reply to be spoken.",
+                  "Cross-module DOM coupling to replace with store APIs: #route-speed/#route-gph (Nav panel) and #ovl-* checkboxes plus \u0027change\u0027 events. toggle_layer must go through the same handler so the SST/rain offline refusal still applies.",
+                  "The global fetch wrapper with timeoutMs (app.js:19-41) is implicit infrastructure. If it is not ported (or replaced by fetchWithTimeout), Claude and proxy calls can hang forever and lock the busy guard.",
+                  "asstCachedWx ignores the location and age of fishapp.lastwx, unlike weather.js wxCacheFor (0.25Â°/12h). Offline weather, go/no-go and the snapshot can quote another place\u0027s weather (the age is shown).",
+                  "Area-pack forecast lookups (areaFcstIndex) return the nearest hour even when the pack has expired; only the \u0027downloaded AGO\u0027 label signals staleness.",
+                  "place_waypoint tool and the offline waypoint fall back to map centre without a GPS fix (the tool does not say so). voice.js refuses instead, so the policies differ.",
+                  "Offline create-waypoint trigger (\u0027named\u0027/\u0027called\u0027 plus \u0027spot\u0027/\u0027here\u0027/â€¦) can create a junk \u0027Waypoint N\u0027 pin for questions like \"what\u0027s this spot called?\".",
+                  "An empty proxy setting silently falls back to ASST_PROXY, so the user cannot disable the free proxy, the settings field shows blank while it is active, and \u0027Data mode\u0027 status is unreachable.",
+                  "asstPickVoice overwrites window.speechSynthesis.onvoiceschanged globally; React code must not install a competing handler, or must multiplex it.",
+                  "Settings \u0027This is how I sound.\u0027 sample only plays if the speak toggle is on (asstSpeak no-ops otherwise), and voice.js voiceSay is also silent when speak is off.",
+                  "If the first message came via hands-free voice before the panel was opened, the greeting and chips never appear (box already non-empty).",
+                  "History only records successful AI exchanges (not offline or fallback answers), keeps the last 24 entries, and holds no tool turns; the Worker keeps only the last 12. Preserve this when building the React store.",
+                  "asstModelLabel hard-codes version labels (any \u0027opus\u0027 shows \u0027Opus 4.8\u0027), and model ids are duplicated in index.html options and asstSupportsThinking.",
+                  "Dead or legacy bits not to resurrect accidentally: .ctl.asst CSS, .asst-msg b/strong and .cursor styles, the cached sea_surface_temperature branch (weather.js never requests it), and the \u0027warn\u0027 status dot."
+              ],
+    "topLevelSideEffects":  [
+                                "None at script load: assistant.js only declares const ASST, ASST_PROXY, ASST_CHIPS and functions.",
+                                "asstInit() (called from app.js:408) assigns onclick handlers on #asst-save, #asst-clear, #asst-speak, #asst-mic and #asst-send; adds keydown and input listeners on #asst-input; hides #asst-mic when unsupported; sets window.speechSynthesis.onvoiceschanged globally; adds window \u0027online\u0027/\u0027offline\u0027 listeners (never removed).",
+                                "The Worker module has no load-time side effects; it exports a fetch handler."
+                            ]
+}

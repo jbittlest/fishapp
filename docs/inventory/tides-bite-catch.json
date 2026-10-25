@@ -1,0 +1,350 @@
+﻿{
+    "key":  "tides-bite-catch",
+    "specFile":  "C:/Users/jbitt/AppData/Local/Temp/claude/C--Users-jbitt-OneDrive-Desktop-Carrots/089709da-890a-4c8f-9bbf-0a347ea15c9c/scratchpad/fishapp-concepts/inventory/tides-bite-catch.md",
+    "surfaces":  [
+                     {
+                         "name":  "Tides \u0026 Bite Times panel",
+                         "kind":  "panel",
+                         "domIds":  [
+                                        "panel-tides",
+                                        "btn-tides"
+                                    ],
+                         "ownerModule":  "tides.js + bite.js (opened by app.js togglePanel)",
+                         "summary":  "Bottom-sheet panel opened by the ðŸŒ™ Tides tab or a voice command. Sections in order: personal bite windows, solunar periods for today, sun and moon, then the tide for the nearest station. On open it calls loadTidesTimes() and renderBiteWindows(). While open, a 10-min tick re-runs loadTidesTimes when online and visible (bite windows are not refreshed)."
+                     },
+                     {
+                         "name":  "Bite windows section",
+                         "kind":  "panel-section",
+                         "domIds":  [
+                                        "bite-windows"
+                                    ],
+                         "ownerModule":  "bite.js",
+                         "summary":  "States: loading \u0027Reading your catch historyâ€¦\u0027; too-few (needs 4 catches); no-forecast (\u0027Open the 10-day tab once with signalâ€¦\u0027); everything else collapses to \u0027Nothing in the next week closely matches your logged catches.\u0027; results show a confidence header FIRST, then up to 4 .bite-win cards (top card gets .top) with date range, score % and up to 3 reasons. Cards are ranked by score, not time."
+                     },
+                     {
+                         "name":  "Solunar list",
+                         "kind":  "panel-section",
+                         "domIds":  [
+                                        "solunar"
+                                    ],
+                         "ownerModule":  "tides.js",
+                         "summary":  "Offline rows: .tt-row solunar-major|minor, plus .active (labelled \u0027â€¢ NOW\u0027) or .past. Labels \u0027ðŸŽ£ Major\u0027 / \u0027ðŸŸ Minor\u0027, time range \u0027start â€“ end\u0027. Computed only at render time."
+                     },
+                     {
+                         "name":  "Sun \u0026 Moon list",
+                         "kind":  "panel-section",
+                         "domIds":  [
+                                        "sun-moon"
+                                    ],
+                         "ownerModule":  "tides.js",
+                         "summary":  "Offline rows: ðŸŒ… Sunrise, ðŸŒ‡ Sunset, moon phase name with emoji and \u0027% lit\u0027, plus ðŸŒ™ Moonrise / ðŸŒ™ Moonset when they occur today."
+                     },
+                     {
+                         "name":  "Tide station, curve and hi/lo",
+                         "kind":  "panel-section",
+                         "domIds":  [
+                                        "tide-station",
+                                        "tide-body",
+                                        "tide-hilo"
+                                    ],
+                         "ownerModule":  "tides.js",
+                         "summary":  "Shows the nearest NOAA station name, a 320x90 cosine-interpolated SVG tide curve with a dashed now-line and hi/lo dots, and up to 8 hi/lo rows (one just-passed tide plus upcoming ones; past rows dimmed). States: no-stations (no retry); offline-no-cache (ðŸ“¡ with Retry); loading; error (âš ï¸ with Retry, never replaces a cache already on screen); \u0027No tide data.\u0027. Cache is per station and counts as valid while it still covers the future."
+                     },
+                     {
+                         "name":  "Catch log section (Nav Tools panel)",
+                         "kind":  "panel-section",
+                         "domIds":  [
+                                        "panel-tools",
+                                        "catch-stats",
+                                        "btn-log-catch",
+                                        "catch-list",
+                                        "btn-tools"
+                                    ],
+                         "ownerModule":  "catch.js",
+                         "summary":  "Stats line \u0027\u003cb\u003eN\u003c/b\u003e catches Â· species Ã—n\u0027 (top 4), a \u0027ðŸŽ£ Log a Catch\u0027 button, and the list newest-first. Each row: ðŸŽ£, species plus length, date Â· sstÂ°F Â· tide, and buttons âžœ (fly to the catch and open its popup), ðŸ“‡ (make card), ðŸ—‘ (confirm then delete). Empty: \u0027No catches logged yet. Land one and tap ðŸŽ£ Log Catch.\u0027"
+                     },
+                     {
+                         "name":  "Log a Catch modal",
+                         "kind":  "modal",
+                         "domIds":  [
+                                        "modal-catch",
+                                        "catch-species",
+                                        "catch-length",
+                                        "catch-weight",
+                                        "catch-bait",
+                                        "catch-notes",
+                                        "catch-photo",
+                                        "catch-photo-preview",
+                                        "catch-cancel",
+                                        "catch-save"
+                                    ],
+                         "ownerModule":  "catch.js (wired in app.js:524-528)",
+                         "summary":  "Position is fixed when the modal opens (GPS, else map centre). The form resets on open, including the file input, and species gets focus. Photo is downscaled to 900px JPEG q0.75 with a preview. Save is re-entry guarded, the button shows \u0027Savingâ€¦\u0027, conditions are auto-captured and the catch is saved even if capture fails. Backdrop click or Cancel closes it. Hint: \u0027Conditions (water temp, tide, moon, wind) are captured automatically.\u0027 (tide is currently not captured, see risks)."
+                     },
+                     {
+                         "name":  "Catch markers layer",
+                         "kind":  "map-layer",
+                         "domIds":  [
+
+                                    ],
+                         "ownerModule":  "catch.js",
+                         "summary":  "Catch.layer is an L.layerGroup that is always on. Each catch gets an L.marker with a divIcon: \u0027\u003cdiv class=\"catch-icon\"\u003eðŸŽ£\u003c/div\u003e\u003cdiv class=\"spot-label\"\u003especies\u003c/div\u003e\u0027, iconSize [90,44], anchor [45,26]. Rebuilt by backup import in spots.js."
+                     },
+                     {
+                         "name":  "Catch popup",
+                         "kind":  "popup",
+                         "domIds":  [
+
+                                    ],
+                         "ownerModule":  "catch.js",
+                         "summary":  "Lazy popup (.catch-pop) with the photo, \u0027ðŸŽ£ species\u0027, length/weight/bait, toLocaleString date, conditions line (ðŸŒ¡ï¸ sstÂ°F, ðŸŒŠ tide, moon emoji), notes, and buttons .c-card \u0027ðŸ“‡ Card\u0027 and .c-del \u0027Delete\u0027 (confirm \u0027Delete this catch?\u0027). Buttons are wired on popupopen."
+                     },
+                     {
+                         "name":  "Catch card share image",
+                         "kind":  "other",
+                         "domIds":  [
+
+                                    ],
+                         "ownerModule":  "catch.js",
+                         "summary":  "1080x1080 canvas PNG: photo cover or navy gradient with ðŸŽ£, scrim, species / size / conditions / date and DM coordinates, \u0027ðŸŽ£ FishApp\u0027 brand. Shared via the Web Share API with files (\u0027My catch\u0027). If sharing is unavailable or cancelled it downloads {species}.png and toasts \u0027ðŸ“‡ Catch card saved\u0027. On failure: \u0027Could not make card\u0027."
+                     },
+                     {
+                         "name":  "Conditions-watch alert",
+                         "kind":  "toast",
+                         "domIds":  [
+                                        "toast"
+                                    ],
+                         "ownerModule":  "bite.js",
+                         "summary":  "Every 10 min (app.js:510). Alerts on wind building to â‰¥18 kn (+6) or swell to â‰¥6 ft (+2) within 3 h. Requires a live GPS fix, a visible page, and a forecast within 0.25Â° and 6 h old. Spoken via voiceSay when Voice.on, otherwise toast \u0027âš ï¸ \u0027 + msg. 2h cooldown per type."
+                     },
+                     {
+                         "name":  "Catch save/delete toasts",
+                         "kind":  "toast",
+                         "domIds":  [
+                                        "toast"
+                                    ],
+                         "ownerModule":  "catch.js",
+                         "summary":  "\u0027ðŸŽ£ Catch logged\u0027; \u0027âš ï¸ Couldn\u0027t save that catch: {msg}\u0027. No toast when a delete fails."
+                     }
+                 ],
+    "engineApi":  [
+                      {
+                          "module":  "tides",
+                          "name":  "stations / stationsStatus",
+                          "kind":  "state",
+                          "description":  "Bundled CA tide station list (192 items: {id,n,la,lo}) loaded once from ./data/tide-stations-ca.json; status loading|ready|failed."
+                      },
+                      {
+                          "module":  "tides",
+                          "name":  "panel",
+                          "kind":  "state",
+                          "description":  "{station, status: no-stations|offline-no-cache|loading|ready|error|no-data, hilo (raw NOAA preds), fromCache, refreshing}. Drives TideSection, TideChart and HiLoList."
+                      },
+                      {
+                          "module":  "tides",
+                          "name":  "initTides",
+                          "kind":  "action",
+                          "description":  "Fetch the station JSON once at boot (was tidesInit, app.js:521)."
+                      },
+                      {
+                          "module":  "tides",
+                          "name":  "loadTidesTimes",
+                          "kind":  "action",
+                          "description":  "Cache-first tide loader: cache key fishapp.tides.{id}, valid while it covers the future, network skipped if \u003c24h old, offline shows cache or offline state, de-duped while in flight, a failed refresh never replaces a cache on screen. Also re-derives sun/moon/solunar. Called on panel open, by the 10-min online tick, and by Retry."
+                      },
+                      {
+                          "module":  "tides",
+                          "name":  "nearestTideStation",
+                          "kind":  "query",
+                          "description":  "(ll) â†’ nearest station using cos(lat)-scaled distance. Also used by First Mate get_tides and the area download."
+                      },
+                      {
+                          "module":  "tides",
+                          "name":  "buildTideCurve / selectHiLoRows",
+                          "kind":  "query",
+                          "description":  "Pure: curve path/area/now-line/marks from hi/lo (cosine interpolation, 320x90, pad 4), and the 8 hi/lo rows starting one before the next future tide."
+                      },
+                      {
+                          "module":  "astro",
+                          "name":  "sunTimes / moonTimes / moonIllumination / moonPhaseName / solunar",
+                          "kind":  "query",
+                          "description":  "Pure offline astronomy (SunCalc port) plus solunar periods (majors Â±60min at lunar transits, minors Â±45min at moonrise/set) for the device-local day."
+                      },
+                      {
+                          "module":  "astro",
+                          "name":  "sunMoonSolunar / now",
+                          "kind":  "state",
+                          "description":  "Derived sunrise, sunset, phase name, % lit, moonrise/set, and periods with active/past flags. Re-derive on a clock tick (the existing build only refreshes on the 10-min online tick)."
+                      },
+                      {
+                          "module":  "bite",
+                          "name":  "panel",
+                          "kind":  "state",
+                          "description":  "{status: idle|loading|too-few|no-forecast|nothing|ready, n, need, confidence:{level,label}, windows[]} for the BiteWindowsSection."
+                      },
+                      {
+                          "module":  "bite",
+                          "name":  "refreshBiteWindows",
+                          "kind":  "action",
+                          "description":  "Runs biteWindows({days:7, limit:4, species?}) and maps errors to panel states (too few / no forecast / everything else â†’ \u0027nothing\u0027). Needs a request token to drop stale results."
+                      },
+                      {
+                          "module":  "bite",
+                          "name":  "biteWindows",
+                          "kind":  "query",
+                          "description":  "async (opts {at, species, days=7, limit=5}) â†’ {n, confidence, profile, windows[{startMs,endMs,best,score,hours}], scoredHours} or {error: \u0027no position\u0027|\u0027too few\u0027|\u0027no usable conditions\u0027|\u0027no forecast\u0027|\u0027no forecast overlap\u0027}. Consumed by the panel, First Mate (limit 3) and voice (limit 3)."
+                      },
+                      {
+                          "module":  "bite",
+                          "name":  "biteReason / biteFmtWindow / biteSpokenSummary / biteConfidence",
+                          "kind":  "query",
+                          "description":  "Exact-copy formatters for reasons, the window date range, the spoken one-paragraph answer, and the honest confidence labels."
+                      },
+                      {
+                          "module":  "bite",
+                          "name":  "watchCheck",
+                          "kind":  "action",
+                          "description":  "10-min conditions watch with the here-and-now guards (live GPS, visible page, fc10 within 0.25Â° and 6h old), a 2h per-type cooldown, and wind checked before swell. Emits conditions-alert."
+                      },
+                      {
+                          "module":  "bite",
+                          "name":  "conditions-alert",
+                          "kind":  "event",
+                          "description":  "{type:\u0027wind\u0027|\u0027wave\u0027, msg}. The shell speaks it via voiceSay when Voice.on, otherwise shows toast(\u0027âš ï¸ \u0027+msg). Never both."
+                      },
+                      {
+                          "module":  "bite",
+                          "name":  "watchEvaluate",
+                          "kind":  "query",
+                          "description":  "Pure (fc, nowMs) â†’ alert or null. Thresholds: 18kn/+6kn, 6ft/+2ft, 3h lookahead."
+                      },
+                      {
+                          "module":  "catches",
+                          "name":  "all / loaded",
+                          "kind":  "state",
+                          "description":  "CatchRecord[] from IndexedDB \u0027fishapp\u0027 v3, store \u0027catches\u0027 (keyPath id, autoIncrement). Source of truth for markers, list, stats, the bite engine and First Mate."
+                      },
+                      {
+                          "module":  "catches",
+                          "name":  "stats",
+                          "kind":  "query",
+                          "description":  "Derived {total, top4:[species,count]} grouped by exact (case-sensitive) species."
+                      },
+                      {
+                          "module":  "catches",
+                          "name":  "modal",
+                          "kind":  "state",
+                          "description":  "{open, at:{lat,lng} fixed at open, photo dataURL|null, photoBusy, saving}."
+                      },
+                      {
+                          "module":  "catches",
+                          "name":  "initCatches",
+                          "kind":  "action",
+                          "description":  "Create the Leaflet layer, load IDB records, build markers, mark loaded. Was catchInit(map)."
+                      },
+                      {
+                          "module":  "catches",
+                          "name":  "reloadCatchesFromDb",
+                          "kind":  "action",
+                          "description":  "Re-read the store and rebuild markers and list. Needed after backup import (spots.js:243-249)."
+                      },
+                      {
+                          "module":  "catches",
+                          "name":  "openCatchModal / closeCatchModal",
+                          "kind":  "action",
+                          "description":  "Open: capture position (GPS, else map centre), reset fields, photo and file input, focus species. Close: clear the editing position."
+                      },
+                      {
+                          "module":  "catches",
+                          "name":  "setCatchPhoto",
+                          "kind":  "action",
+                          "description":  "FileReader â†’ Image â†’ canvas downscale to 900px long edge â†’ JPEG q0.75 data URL, with preview."
+                      },
+                      {
+                          "module":  "catches",
+                          "name":  "saveCatch",
+                          "kind":  "action",
+                          "description":  "Re-entry guarded. Read the form before any await; species defaults to \u0027Catch\u0027; length/weight stay strings. Capture conditions best-effort (cond {} on failure). idb.put resolves on commit. Then add the marker, close, toast \u0027ðŸŽ£ Catch logged\u0027. On IDB error toast and keep the modal open."
+                      },
+                      {
+                          "module":  "catches",
+                          "name":  "captureConditions",
+                          "kind":  "query",
+                          "description":  "async (ll) â†’ cond. Offline: moon/solunar/light. Online: Open-Meteo marine sst/waves, Open-Meteo wind/gust/air/cloud/pressure and 3h trend, NOAA tide state (currently dead due to the nowMs scope bug; fix decision required)."
+                      },
+                      {
+                          "module":  "catches",
+                          "name":  "deleteCatch",
+                          "kind":  "action",
+                          "description":  "After confirm(\u0027Delete this catch?\u0027): IDB delete, remove marker, update list."
+                      },
+                      {
+                          "module":  "catches",
+                          "name":  "makeCatchCard",
+                          "kind":  "action",
+                          "description":  "Render the 1080Â² PNG, share via Web Share with files or fall back to download; toasts per spec."
+                      },
+                      {
+                          "module":  "catches",
+                          "name":  "goToCatch",
+                          "kind":  "action",
+                          "description":  "closePanels â†’ setFollow(false) â†’ mapProgrammatic(setView([lat,lng], max(zoom,14))) â†’ open the marker popup."
+                      },
+                      {
+                          "module":  "catches",
+                          "name":  "catches:changed",
+                          "kind":  "event",
+                          "description":  "Fired on save, delete or reload so markers, list, stats and the assistant snapshot update."
+                      }
+                  ],
+    "crossDeps":  [
+                      "tides.js/bite.js/catch.js use GPS.lastLatLng (gps.js:4) and window._map.getCenter() (app.js:73) as the position fallback",
+                      "bite.js biteForecast/watchCheck read localStorage \u0027fishapp.fc10\u0027 written by weather.js:454 (shape {wx.hourly, marine.hourly, ts, lat, lng}; hourly times are location-local ISO strings)",
+                      "tides.js/bite.js use readJSON (app.js:643); tides.js uses loadingHTML/stateHTML (app.js:651/656), and the stateHTML Retry calls global loadTidesTimes via inline onclick",
+                      "catch.js/bite.js use toast (app.js:676), escapeHtml (spots.js:256), compass and MS_TO_FT (weather.js:312/11)",
+                      "catch.js uses idb.getAll/put/del (db.js:56), formatCoord/setFollow/mapProgrammatic (gps.js:273/171/163), closePanels (app.js:287), Leaflet L",
+                      "bite.js uses nmBetween (gps.js:285), Voice.on and voiceSay (voice.js:16/156; loaded after bite.js, used at runtime only)",
+                      "all network calls rely on the global 30s fetch timeout wrapper (app.js:19-41)",
+                      "bite.js uses Catch.all (catch.js), Tides/nearestTideStation/ymd (tides.js), Astro (astro.js); catch.js uses Astro, Tides, nearestTideStation, ymd",
+                      "app.js calls tidesInit (521), catchInit (522), wires the catch modal (524-528), calls loadTidesTimes and renderBiteWindows on panel-tides open (325-326), renderCatchList on panel-tools open (328), loadTidesTimes on the 10-min tick (504), watchCheck every 10 min (510)",
+                      "assistant.js uses biteWindows/biteFmtWindow/biteReason (842-863), Astro.* (94-108, 386-411, 512-554), nearestTideStation (1295), Catch.all (178-188, 648-657, 763-773, 848-852)",
+                      "voice.js uses biteWindows and biteSpokenSummary (82-89) and opens panel-tides (101)",
+                      "areadata.js uses nearestTideStation (69-70) for area-pack tides",
+                      "spots.js export/import reads and writes the IDB \u0027catches\u0027 store and rebuilds Catch.all, Catch.layer, Catch.markers via addCatchMarker and renderCatchList (163-254)",
+                      "sw.js precaches ./data/tide-stations-ca.json (sw.js:37)"
+                  ],
+    "safetyCritical":  [
+                           "Conditions watch (bite.js:507-524): alert only with a live GPS fix (no map-centre fallback), page not hidden, and a forecast within 0.25Â° on both axes and no more than 6h old (biteForecast bite.js:496-505). Never warn from another place\u0027s or an old forecast.",
+                           "Watch thresholds (bite.js:437-491): wind peak â‰¥18kn AND rise â‰¥6kn, swell â‰¥6ft AND rise â‰¥2ft, within the nearest hour (â‰¤90min match) plus 3 samples; wind is checked before swell; 2h cooldown per type stamped before speaking; speak if Voice.on, otherwise toast \u0027âš ï¸ \u0027+msg. watchEvaluate must stay pure.",
+                           "Bite engine honesty: refuse below 4 catches (bite.js:303); confidence caveat rendered BEFORE the windows (bite.js:418-421); hours with profile coverage \u003c0.5 are never ranked (bite.js:330-333); tolerance capped at 2x (bite.js:215-220); coverage counted against the full profile weight (bite.js:203-209).",
+                           "Bite engine location guards: fc10 within 0.25Â° and 6h (bite.js:311-318, 496-505); bite tide cache within 0.5Â° (bite.js:273-279); biteHourIdx never matches more than 90 min away (bite.js:197).",
+                           "Capture and scoring semantics must stay identical (catch.js:141-230 â†” bite.js:100-151): tide \u0027H\u0027 next â†’ \u0027incoming\u0027; light phase dawn/dusk within 60 min; wave mÃ—3.28084; units kn/Â°F.",
+                           "Tide display: a cache counts as valid while it covers the future, not by age (tides.js:43-49); a failed refresh never replaces a cache already shown (tides.js:60-62, 80); hi/lo list shows upcoming tides plus one just-passed (tides.js:127-136); station choice uses cos(lat) scaling (tides.js:13-17).",
+                           "NOAA time parsing: p.t.replace(\u0027 \u0027,\u0027T\u0027) then device-local Date (iOS Safari cannot parse the space form). Do not convert to UTC (tides.js:48,91,112,132; bite.js:289; catch.js:214).",
+                           "Catch save data-loss guards (catch.js:89-127): re-entry guard with disabled button; read the form before awaits; save the fish even if captureConditions throws; IDB write resolves on commit with toast and modal kept open on failure; finally restores the button.",
+                           "Reset the file input on modal open so re-picking the same photo fires change (catch.js:60-63); catchInit renders the list on load (catch.js:17-20).",
+                           "Catch delete always requires confirm(\u0027Delete this catch?\u0027) (catch.js:30, 309). The âžœ jump uses mapProgrammatic plus setFollow(false) so auto-refollow doesn\u0027t yank the map back (catch.js:307)."
+                       ],
+    "risks":  [
+                  "LATENT BUG (needs a decision): catch.js:148 declares const nowMs inside a try block, but the tide block at 213-228 uses it. Verified ReferenceError, silently swallowed at catch.js:229, introduced by commit 0d79399. Since then no catch records tide/minsToTideChange/tidePct/tideRangeFt/tideStation, the bite engine\u0027s tide dimensions never train from new catches, and the modal hint claiming tide is captured is false. Porting verbatim keeps it broken; fixing it changes scoring, popup/list/card output and save duration.",
+                  "Unescaped interpolation of c.photo (img src), c.length, c.weight and cond.* in the popup (catch.js:40-48) and list (303-305) allows HTML injection from a crafted backup import. React escaping fixes this; also validate that photo is a data:image URL.",
+                  "Timezone assumption: NOAA lst_ldt times and Open-Meteo timezone=auto times are parsed as device-local. This only works when the phone is in the location\u0027s time zone. Keep it as-is; don\u0027t \u0027fix\u0027 to UTC.",
+                  "localStorage quota: a tides.js:78 setItem failure overwrites a freshly rendered graph with the error box (when no cache was shown); a bite.js:290 failure returns stale or empty tides instead of the fetched ones. Per-station keys fishapp.tides.{id} are never pruned.",
+                  "#tide-hilo is not cleared on loading, offline or error states, so a previous station\u0027s rows can appear under a new station name.",
+                  "The solunar NOW/past highlight only refreshes on panel open or the 10-min tick, and that tick runs only when online, so offline it goes stale while the panel stays open.",
+                  "Tide station list fetch failure (tidesInit swallows errors) gives a permanent \u0027No tide station data available.\u0027 with no Retry until reload; Tides.loaded is never read.",
+                  "renderBiteWindows has no request token, so overlapping calls race; biteWindows fetches 11 days of NOAA tides before checking that a forecast exists.",
+                  "captureConditions makes 3 sequential fetches under a 30s global timeout, so Save can show \u0027Savingâ€¦\u0027 for up to ~90s (4 fetches if the tide bug is fixed). If the user closes and reopens the modal mid-save, the in-flight save closes the new modal.",
+                  "Photo pipeline has no error path (undecodable HEIC is silently dropped); saving before decode finishes saves without the photo; a stale decode can land in a newer modal session.",
+                  "makeCatchCard: a cancelled share falls through to a download plus toast, and the unattached-anchor download may fail in WebViews. Verify Web Share with files and blob downloads inside the native iOS fishapp:// WKWebView shell.",
+                  "biteCondAt Math.round(null) turns a missing hourly wind into 0 kn / 0Â°. Port verbatim or fix deliberately.",
+                  "Performance: biteDayAstro and biteTimesMs memoisation must be kept or the panel open slows dramatically (169 hours Ã— solunar sweeps Ã— date parses).",
+                  "Catch.all is replaced wholesale by spots.js import, so the React store needs a reloadCatchesFromDb action and marker rebuild. Stats grouping is case-sensitive and includes undefined species from imports.",
+                  "Copy inconsistency: the empty list says \u0027tap ðŸŽ£ Log Catch\u0027 but the button says \u0027ðŸŽ£ Log a Catch\u0027. Preserve the copy or align it deliberately."
+              ],
+    "topLevelSideEffects":  [
+                                "None at script load: astro.js runs a pure IIFE (const Astro); tides.js/catch.js/bite.js only declare consts and functions. bite.js allocates _biteAstroCache (Map) and _biteTimeCache (WeakMap).",
+                                "Init is driven by app.js: tidesInit() (fetches ./data/tide-stations-ca.json, not awaited) and catchInit(map) (adds the L.layerGroup to the map, loads IDB catches, adds markers, renders the list).",
+                                "Intervals are owned by app.js: 10-min loadTidesTimes when panel-tides is open, online and visible (app.js:497-506); 10-min watchCheck (app.js:510)."
+                            ]
+}

@@ -188,3 +188,7 @@ setInterval(() => { if (Awake.reasons.size) awakeUpdateUi(); }, 5000);
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') setTimeout(awakeUpdateUi, 400);
 });
+
+/* CONTRACT STUB (Layers → Device reads it) — the navigation port fills this in. */
+import { createStore as __createStore } from 'zustand/vanilla';
+export const awakeStore = __createStore(() => ({ visible: false, warn: false, what: '', detail: '', keepAliveKind: 'off', keepAliveText: '' }));

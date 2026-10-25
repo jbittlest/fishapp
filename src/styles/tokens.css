@@ -24,7 +24,7 @@
 
   /* ---- z scale: one scale, no ad-hoc values ---- */
   --z-chart: 0; --z-overlay: 10; --z-scrim: 20; --z-chrome: 100; --z-backdrop: 200; --z-sheet: 300;
-  --z-persist: 400; --z-modal: 500; --z-toast: 600; --z-alarm: 900; --z-boot: 1000;
+  --z-tabbar: 350; --z-persist: 400; --z-modal: 500; --z-toast: 600; --z-alarm: 900; --z-boot: 1000;
 
   /* ---- motion ---- */
   --t-fast: 120ms; --t-base: 220ms; --t-sheet: 380ms;

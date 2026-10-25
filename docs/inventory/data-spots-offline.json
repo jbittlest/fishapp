@@ -1,0 +1,438 @@
+﻿{
+    "key":  "data-spots-offline",
+    "specFile":  "C:/Users/jbitt/AppData/Local/Temp/claude/C--Users-jbitt-OneDrive-Desktop-Carrots/089709da-890a-4c8f-9bbf-0a347ea15c9c/scratchpad/fishapp-concepts/inventory/data-spots-offline.md",
+    "surfaces":  [
+                     {
+                         "name":  "Offline charts panel",
+                         "kind":  "panel",
+                         "ownerModule":  "download.js",
+                         "domIds":  [
+                                        "panel-download",
+                                        "dl-name",
+                                        "dl-estimate",
+                                        "btn-dl-start",
+                                        "dl-progress",
+                                        "dl-bar-fill",
+                                        "dl-status",
+                                        "btn-dl-cancel",
+                                        "areas-list",
+                                        "storage-info"
+                                    ],
+                         "summary":  "Download visible map bounds for active layers at detail z12/z14(default)/z16; live estimate (or \u0027Area too large\u0027 warning \u003e30,000 tiles); preflight toasts (too big / nothing / offline / not enough storage); progress bar \u0027done / total tiles (n skipped)\u0027; pack-capture phase \u0027ðŸ“Š Capturing â€¦\u0027; cancel writes a \u0027(partial)\u0027 area; saved-areas list with fly-to and delete; storage line."
+                     },
+                     {
+                         "name":  "Detail level radios",
+                         "kind":  "panel-section",
+                         "ownerModule":  "download.js",
+                         "domIds":  [
+                                        "dlzoom"
+                                    ],
+                         "summary":  "input[name=dlzoom] values 12/14/16; change -\u003e updateEstimate (wired in app.js:485-486)."
+                     },
+                     {
+                         "name":  "Saved areas list",
+                         "kind":  "panel-section",
+                         "ownerModule":  "download.js",
+                         "domIds":  [
+                                        "areas-list"
+                                    ],
+                         "summary":  "Empty \u0027Nothing downloaded yet.\u0027; rows \u0027ðŸ—º name / N tiles Â· M MB Â· ðŸ“Š data Â· date\u0027 + âžœ (fitBounds via mapProgrammatic, follow off) + ðŸ—‘ (confirm \u0027Delete offline charts for \"name\"?\u0027, toast \u0027Removing N tilesâ€¦\u0027, chunked delete, toast \u0027Offline area deleted\u0027)."
+                     },
+                     {
+                         "name":  "Storage info line",
+                         "kind":  "panel-section",
+                         "ownerModule":  "download.js",
+                         "domIds":  [
+                                        "storage-info"
+                                    ],
+                         "summary":  "\u0027Storage: X MB used of ~Y GB available Â· N tiles cached\u0027; blank when navigator.storage unsupported or error."
+                     },
+                     {
+                         "name":  "Spots list",
+                         "kind":  "panel-section",
+                         "ownerModule":  "spots.js",
+                         "domIds":  [
+                                        "panel-spots",
+                                        "spots-list"
+                                    ],
+                         "summary":  "Empty \u0027No spots yet. Tap ðŸ“Œ or long-press the map.\u0027; sorted by distance from GPS (else newest); sub \u0027x.xx nm Â· brgÂ° Â· date\u0027; âžœ fly to + open popup; ðŸ—‘ confirm \u0027Delete \"name\"?\u0027. Re-rendered on GPS fixes only while panel open, throttled 3 s / 5 m."
+                     },
+                     {
+                         "name":  "Backup export/import actions",
+                         "kind":  "panel-section",
+                         "ownerModule":  "spots.js",
+                         "domIds":  [
+                                        "btn-export",
+                                        "btn-import",
+                                        "import-file"
+                                    ],
+                         "summary":  "Export downloads fishapp-backup-YYYY-MM-DD.json (spots, tracks, catches, trips, area metadata) and toasts counts; Import merges with dedupe and toasts \u0027Imported â€¦\u0027 / \u0027Nothing new to import â€” it was all already here\u0027 / \u0027Import failed â€” â€¦\u0027 / \u0027Import stopped: â€¦ Some records may already be saved.\u0027"
+                     },
+                     {
+                         "name":  "Spot edit modal",
+                         "kind":  "modal",
+                         "ownerModule":  "spots.js",
+                         "domIds":  [
+                                        "modal-spot",
+                                        "spot-modal-title",
+                                        "spot-name",
+                                        "spot-type",
+                                        "spot-notes",
+                                        "spot-save",
+                                        "spot-cancel"
+                                    ],
+                         "summary":  "Title \u0027New spot\u0027/\u0027Edit spot\u0027; name (default \u0027Spot N+1\u0027), type select (fish/anchor/hazard/ramp/wreck/other with emoji), notes; Save toasts \u0027Spot saved ðŸ“Œ\u0027; Cancel or backdrop tap closes; autofocus name for new spots after 50 ms."
+                     },
+                     {
+                         "name":  "Spot markers + popup",
+                         "kind":  "map-layer",
+                         "ownerModule":  "spots.js",
+                         "domIds":  [
+
+                                    ],
+                         "summary":  "divIcon emoji + name label (90x44, anchor 45,26) in always-on Spots.layer; popup \u0027{emoji} name\u0027, \u0027x.xx nm Â· brgÂ°\u0027 if GPS, notes, buttons \u0027ðŸ§­ Go\u0027 (gotoStart), \u0027Edit\u0027, \u0027Delete\u0027 (confirm)."
+                     },
+                     {
+                         "name":  "Nearest reefs list",
+                         "kind":  "panel-section",
+                         "ownerModule":  "reefs.js",
+                         "domIds":  [
+                                        "reefs-list",
+                                        "ovl-reefs"
+                                    ],
+                         "summary":  "Initial \u0027Loading reefsâ€¦\u0027; \u0027No reef data loaded.\u0027 if reefs not loaded; 12 nearest to GPS (else map centre) \u0027x.x nm Â· brgÂ° Â· d ft\u0027; âžœ turns reef layer on (no pref persist) and flies to it."
+                     },
+                     {
+                         "name":  "Reef markers + live popup",
+                         "kind":  "popup",
+                         "ownerModule":  "reefs.js",
+                         "domIds":  [
+
+                                    ],
+                         "summary":  "ðŸª¸ divIcon markers (142); popup name, \u0027x.xx nm Â· brgÂ° from you\u0027, \u0027Reef depth: N ft\u0027, composition, live Wind/Swell/Water/Seabed rows (loading spinner / \u0027needs internet\u0027 offline / \u0027unavailable\u0027 / \u0027no data\u0027 etc.), \u0027ðŸ“Œ Save as spot\u0027 opens spot modal prefilled type wreck."
+                     },
+                     {
+                         "name":  "MPA polygons + popup",
+                         "kind":  "map-layer",
+                         "ownerModule":  "reefs.js",
+                         "domIds":  [
+                                        "ovl-mpa"
+                                    ],
+                         "summary":  "157 GeoJSON polygons coloured red (no take) / magenta (special closure) / orange (restricted), fillOpacity 0.18; popup \u0027ðŸš« name\u0027, type, take rule, disclaimer \u0027Always confirm current CA DFW regulations before fishing.\u0027"
+                     },
+                     {
+                         "name":  "Offline-first chart tile layers",
+                         "kind":  "map-layer",
+                         "ownerModule":  "tiles.js",
+                         "domIds":  [
+
+                                    ],
+                         "summary":  "OfflineTileLayer per LAYERS entry: IDB hit â†’ blob; miss â†’ network (1 retry after 700 ms) and cache; offline/failure â†’ transparent EMPTY_TILE. Drives Leaflet loading/load events used for app.js #tile-busy spinner."
+                     }
+                 ],
+    "engineApi":  [
+                      {
+                          "module":  "db",
+                          "name":  "openDB",
+                          "kind":  "action",
+                          "description":  "Open/upgrade IndexedDB \u0027fishapp\u0027 v3 (stores tiles, spots, tracks, areas, catches, trips). Await at boot."
+                      },
+                      {
+                          "module":  "db",
+                          "name":  "idb",
+                          "kind":  "action",
+                          "description":  "get/getAll/put/del/count returning promises; writes resolve on transaction commit, reject on abort (quota)."
+                      },
+                      {
+                          "module":  "db",
+                          "name":  "loadTileKeys",
+                          "kind":  "action",
+                          "description":  "Background build of the in-memory TileKeys index (fast path for not-stored tiles)."
+                      },
+                      {
+                          "module":  "db",
+                          "name":  "deleteTilesByPrefix",
+                          "kind":  "action",
+                          "description":  "One-time migration flush of a layer prefix (e.g. \u0027gmrt/\u0027); always resolves."
+                      },
+                      {
+                          "module":  "tiles",
+                          "name":  "makeLayer",
+                          "kind":  "action",
+                          "description":  "Create an OfflineTileLayer for a LAYERS id (used by the map/layers engine)."
+                      },
+                      {
+                          "module":  "tiles",
+                          "name":  "LAYERS",
+                          "kind":  "query",
+                          "description":  "Layer catalogue (ids, zoom limits, tile sizes, urlFor, attribution)."
+                      },
+                      {
+                          "module":  "download",
+                          "name":  "estimate",
+                          "kind":  "state",
+                          "description":  "{count, jobsLen, mb, tooBig, minZ, maxZ} recomputed on panel open, map moveend while open, and detail-level change."
+                      },
+                      {
+                          "module":  "download",
+                          "name":  "updateEstimate",
+                          "kind":  "action",
+                          "description":  "Recompute estimate from current map bounds/zoom, selected maxZ and active layer prefs (count before allocating)."
+                      },
+                      {
+                          "module":  "download",
+                          "name":  "progress",
+                          "kind":  "state",
+                          "description":  "{running, done, total, failed, pct, phase:\u0027idle\u0027|\u0027tiles\u0027|\u0027pack\u0027, statusText} for the progress UI; start button disabled while running."
+                      },
+                      {
+                          "module":  "download",
+                          "name":  "startDownload",
+                          "kind":  "action",
+                          "description":  "Preflight checks, persist(), 6-worker tile download with quota stop, area pack capture, area record write, toasts; always resets in finally."
+                      },
+                      {
+                          "module":  "download",
+                          "name":  "cancelDownload",
+                          "kind":  "action",
+                          "description":  "Set DL.cancelled; workers stop picking new jobs; a \u0027(partial)\u0027 area record is written."
+                      },
+                      {
+                          "module":  "download",
+                          "name":  "areas",
+                          "kind":  "state",
+                          "description":  "AreaRecord[] (sorted ts desc in UI) with name, bounds, tiles, bytes, data, incomplete."
+                      },
+                      {
+                          "module":  "download",
+                          "name":  "deleteArea",
+                          "kind":  "action",
+                          "description":  "Confirm, delete the area\u0027s recomputed tile keys in 2000-key chunks, then the record; refresh packs, list, storage."
+                      },
+                      {
+                          "module":  "download",
+                          "name":  "flyToArea",
+                          "kind":  "action",
+                          "description":  "closePanels, setFollow(false), mapProgrammatic(fitBounds(area.bounds))."
+                      },
+                      {
+                          "module":  "download",
+                          "name":  "storageInfo",
+                          "kind":  "state",
+                          "description":  "{usedMB, quotaGB, tiles} or null when unsupported/error."
+                      },
+                      {
+                          "module":  "download",
+                          "name":  "refreshStorageInfo",
+                          "kind":  "action",
+                          "description":  "navigator.storage.estimate + idb.count(\u0027tiles\u0027)."
+                      },
+                      {
+                          "module":  "areadata",
+                          "name":  "areaPackFor",
+                          "kind":  "query",
+                          "description":  "Newest area record with data whose bounds contain a point (for First Mate)."
+                      },
+                      {
+                          "module":  "areadata",
+                          "name":  "areaPackSummary",
+                          "kind":  "query",
+                          "description":  "JSON summary of a pack for the get_area_intel AI tool; plus readers areaFcstIndex, areaDailyForecast, areaTidesNext, areaSstStats, areaDepthAt."
+                      },
+                      {
+                          "module":  "areadata",
+                          "name":  "areaDataRefresh",
+                          "kind":  "action",
+                          "description":  "Reload AreaData.packs from IDB after an area is saved or deleted."
+                      },
+                      {
+                          "module":  "spots",
+                          "name":  "spots",
+                          "kind":  "state",
+                          "description":  "Spot[] {id, lat, lng, name, type, notes, ts}; UI sorts by distance from gps.lastLatLng else ts desc."
+                      },
+                      {
+                          "module":  "spots",
+                          "name":  "editing",
+                          "kind":  "state",
+                          "description":  "Spot or {lat,lng,name?,type?,notes?} being edited; modal open when non-null; isNew = no id."
+                      },
+                      {
+                          "module":  "spots",
+                          "name":  "openSpotModal",
+                          "kind":  "action",
+                          "description":  "Open modal for new (lat/lng, optional prefills) or existing spot. Called from Mark tab, map long-press, inspect popup, reef popup, spot popup Edit."
+                      },
+                      {
+                          "module":  "spots",
+                          "name":  "saveSpotFromModal",
+                          "kind":  "action",
+                          "description":  "Persist {name (default \u0027Spot N+1\u0027), type, notes, ts preserved}; replace marker; toast \u0027Spot saved ðŸ“Œ\u0027; close modal."
+                      },
+                      {
+                          "module":  "spots",
+                          "name":  "closeSpotModal",
+                          "kind":  "action",
+                          "description":  "Hide modal, clear editing."
+                      },
+                      {
+                          "module":  "spots",
+                          "name":  "deleteSpot",
+                          "kind":  "action",
+                          "description":  "Delete record, marker, list entry (confirm happens in UI). Also used by First Mate delete_waypoint."
+                      },
+                      {
+                          "module":  "spots",
+                          "name":  "flyToSpot",
+                          "kind":  "action",
+                          "description":  "closePanels, setFollow(false), mapProgrammatic(setView(ll, max(zoom,14))), open marker popup."
+                      },
+                      {
+                          "module":  "spots",
+                          "name":  "navigateToSpot",
+                          "kind":  "action",
+                          "description":  "Close popup and gotoStart({lat,lng}, name)."
+                      },
+                      {
+                          "module":  "spots",
+                          "name":  "createSpot",
+                          "kind":  "action",
+                          "description":  "asstCreateSpot equivalent (no modal) used by First Mate and voice; awaits write."
+                      },
+                      {
+                          "module":  "backup",
+                          "name":  "exportBackup",
+                          "kind":  "action",
+                          "description":  "Download fishapp-backup-YYYY-MM-DD.json with spots, tracks, catches, trips, areas (no data); toast counts."
+                      },
+                      {
+                          "module":  "backup",
+                          "name":  "importBackup",
+                          "kind":  "action",
+                          "description":  "Validate JSON + app marker, dedupe-merge 4 stores, toast result, always resync spots/tracks/catches/trips state."
+                      },
+                      {
+                          "module":  "reefs",
+                          "name":  "reefs",
+                          "kind":  "state",
+                          "description":  "Reef[] {n, la, lo, d?, c?} and loaded flag."
+                      },
+                      {
+                          "module":  "reefs",
+                          "name":  "reefsVisible / mpaVisible",
+                          "kind":  "state",
+                          "description":  "Layer visibility, persisted in fishapp.layers (reefs/mpa default true)."
+                      },
+                      {
+                          "module":  "reefs",
+                          "name":  "setReefsVisible / setMpaVisible",
+                          "kind":  "action",
+                          "description":  "Add/remove reef marker group or MPA polygon group; persist prefs; also needed by First Mate toggle_layer (replaces synthetic change events on #ovl-reefs/#ovl-mpa)."
+                      },
+                      {
+                          "module":  "reefs",
+                          "name":  "flyToReef",
+                          "kind":  "action",
+                          "description":  "closePanels, setFollow(false), ensure reef layer visible, mapProgrammatic(setView(ll, max(zoom,14)))."
+                      },
+                      {
+                          "module":  "reefs",
+                          "name":  "saveReefAsSpot",
+                          "kind":  "action",
+                          "description":  "Close popup, openSpotModal({lat, lng, name, type:\u0027wreck\u0027, notes:\u0027{d} ft. {c}\u0027})."
+                      },
+                      {
+                          "module":  "ui",
+                          "name":  "toast",
+                          "kind":  "event",
+                          "description":  "All user-facing result messages (verbatim strings in spec section 4)."
+                      },
+                      {
+                          "module":  "ui",
+                          "name":  "confirm",
+                          "kind":  "event",
+                          "description":  "Blocking confirmation for spot/area deletes; nothing happens unless confirmed."
+                      },
+                      {
+                          "module":  "gps",
+                          "name":  "onFix -\u003e refreshSpotDistances",
+                          "kind":  "event",
+                          "description":  "Re-sort/re-render spots list only while the Spots panel is open, throttled to 3 s and 5 m movement."
+                      },
+                      {
+                          "module":  "map",
+                          "name":  "moveend -\u003e updateEstimate",
+                          "kind":  "event",
+                          "description":  "Only while the Offline charts panel is open."
+                      }
+                  ],
+    "crossDeps":  [
+                      "download.js uses window._map (app.js), toast/closePanels (app.js), setFollow/mapProgrammatic (gps.js), escapeHtml (spots.js), buildAreaPack/areaDataRefresh (areadata.js), LAYERS (tiles.js), idb/tileKey/getTileBlob/putTileBlob/deleteTiles (db.js)",
+                      "download.js activeLayerIds reads Layers-panel DOM owned by app.js: input[name=base]:checked, #ovl-enc, #ovl-seamark",
+                      "app.js calls updateEstimate on map moveend when #panel-download is open and on dlzoom change; wires #btn-dl-start/#btn-dl-cancel (sets DL.cancelled)",
+                      "app.js togglePanel(\u0027panel-download\u0027) calls updateEstimate+renderAreasList+updateStorageInfo; togglePanel(\u0027panel-spots\u0027) calls renderSpotsList+renderTracksList(tracks.js)+renderReefsList+renderTripsList(goto.js)",
+                      "app.js boot: await openDB, loadTileKeys (not awaited), deleteTilesByPrefix(\u0027gmrt/\u0027) gated by localStorage fishapp.reliefSource, makeLayer for all chart layers, reefsInit then reefsSetVisible from fishapp.layers prefs, areaDataInit, spotsInit",
+                      "tiles.js OfflineTileLayer uses tileKey/getTileBlob/putTileBlob/TileKeys/tileKeysReady (db.js) and global fetch wrapped with 30 s timeout (app.js)",
+                      "areadata.js uses idb (db.js), nearestTideStation (tides.js, needs tidesInit loaded), FISH_TAXA (fish.js), Reefs.reefs (reefs.js), nmBetween (gps.js), L.latLng",
+                      "assistant.js reads Spots.all, pushes into it and calls addSpotMarker/renderSpotsList/deleteSpot; uses idb.put(\u0027spots\u0027); reads Reefs.reefs; calls areaPackFor/areaFcstIndex/areaDailyForecast/areaTidesNext/areaSstStats/areaDepthAt/areaPackSummary",
+                      "assistant.js asstToolToggleLayer sets #ovl-reefs/#ovl-mpa .checked and dispatches change events (must become setReefsVisible/setMpaVisible actions)",
+                      "voice.js voiceMarkSpot -\u003e asstCreateSpot (assistant.js) -\u003e spots state",
+                      "gps.js gpsOnFix calls refreshSpotDistances() on every accepted fix",
+                      "spots.js popup Go calls gotoStart (goto.js); spot/reef popups and lists use GPS.lastLatLng, nmBetween, bearingBetween (gps.js)",
+                      "inspect.js tap popup \u0027ðŸ“Œ Save spot\u0027 calls openSpotModal; reefs.js uses queryPointData/windText/swellText/sstText/depthText (inspect.js)",
+                      "spots.js importData refreshes renderTracksList (tracks.js), Catch.all/Catch.layer/Catch.markers/addCatchMarker/renderCatchList (catch.js), renderTripsList (goto.js)",
+                      "escapeHtml (spots.js) is used by tracks.js, goto.js, fish.js, catch.js, bite.js, assistant.js, download.js, reefs.js",
+                      "idb (db.js) is used by tracks.js, goto.js, catch.js, assistant.js",
+                      "sw.js precaches data/reefs-ca.json and data/mpa-ca.json; reefs/areadata fetch them by relative URL"
+                  ],
+    "safetyCritical":  [
+                           "IDB writes resolve only on transaction commit; QuotaExceeded surfaces via tx.onabort -\u003e rejection (db.js:30-48). Never report a spot/tile/area saved before commit.",
+                           "db helpers return rejected promises instead of throwing synchronously when storage is unavailable (db.js:50-62).",
+                           "putTileBlob propagates write failures and keeps TileKeys in sync (db.js:67-75); bulk download stops on quota and toasts \u0027âš ï¸ Storage full â€” saved N of M tiles. This area is incomplete.\u0027 (download.js:164,184,201-204).",
+                           "Storage preflight with 15% headroom before downloading (download.js:131-144).",
+                           "Count tiles before allocating the job array; refuse \u003e30,000 tiles; estimate runs on every map move incl. GPS follow pans (download.js:53-65,106-112).",
+                           "Download run wrapped in try/finally so running flag/progress/start button always reset (download.js:195-255).",
+                           "Cancelled downloads still write a \u0027(partial)\u0027 area record so orphan tiles stay deletable after persist() (download.js:234-246).",
+                           "Area delete: tiles first in 2000-key commit-awaited chunks, then the record (download.js:285-286, db.js:113-133).",
+                           "deleteTilesByPrefix always settles (boot splash hang) and the migration flag is written before it runs, un-awaited (db.js:97-102, app.js:53-61).",
+                           "Tile key / grid parity with Leaflet for 512-px layers: key z = CSS zoom, x/y on grid z-1; urlFor subtracts 1 (BlueTopo level z-1 else HTTP 400; bbox via tileBBox3857(z-1)) (download.js:74-76, tiles.js:48-49,60,72,90,100,116).",
+                           "BlueTopo blank tiles (\u003c=3000 bytes, minBytes) are never cached by the live layer (tiles.js:159-164).",
+                           "Tile failure/offline -\u003e transparent EMPTY_TILE, no error image; offline skips network (tiles.js:143-151,168-177).",
+                           "List fly-to buttons call setFollow(false) and move the map inside mapProgrammatic so auto-refollow does not yank the view back (download.js:276-278, spots.js:131-134, reefs.js:152-158).",
+                           "MPA restriction colours/text and the disclaimer \u0027Always confirm current CA DFW regulations before fishing.\u0027 must survive verbatim; unknown MPA types default to orange \u0027Restricted â€” check regulations\u0027 (reefs.js:12-22,112-117).",
+                           "Reef popup shows \u0027needs internet\u0027 immediately offline instead of a spinner (reefs.js:55,74).",
+                           "Backup must include spots, tracks, catches, trips; export anchor appended to DOM and revoked after 4 s (spots.js:158-187).",
+                           "Import: dedupe by stable identity, honest distinct failure toasts, always resync UI in finally (spots.js:189-254).",
+                           "Escape all user/data strings inserted into HTML popups/divIcons (escapeHtml, spots.js:256-259).",
+                           "Area-pack honesty: per-section *Error flags, fish.total from total_results, non-finite daily values -\u003e null so an unknown day is never \u0027best\u0027 (areadata.js:60-64,99-103,214-237).",
+                           "Spot distance list refresh throttled 3 s / 5 m and skipped when panel hidden; called on every GPS fix (spots.js:144-156)."
+                       ],
+    "risks":  [
+                  "loadTileKeys sets tileKeysReady=true even if getAllKeys fails, so the fast path sends every tile to the network and stored tiles show blank offline (db.js:82-88, tiles.js:183) â€” recommend setting ready only on success.",
+                  "deleteTiles removes keys from TileKeys before commit; an aborted chunk leaves tiles stored but invisible offline (db.js:128).",
+                  "Bulk download ignores minBytes (download.js:175 uses size\u003e0), storing BlueTopo blanks as successful tiles.",
+                  "activeLayerIds diverges from what app.js shows: bluetint base downloads no labels and no blueshade; only gmrt gets reliefhi and gmrt/sat get labels (download.js:22-23 vs app.js:128,136-148).",
+                  "Area bounds are re-read after the async storage estimate; a GPS-follow pan in between makes the recorded bounds differ from the downloaded tiles, so later deletion misses tiles (download.js:102 vs 156).",
+                  "Deleting an area deletes all its computed tile keys even if shared with an overlapping area or browse cache, silently making the other area incomplete (download.js:282-285).",
+                  "incomplete flag (failed\u003e0) is stored but never shown; \u0027(charts + data)\u0027 and âœ… toast appear even when every pack section failed (download.js:225,231).",
+                  "Cancel is ignored once the pack phase starts; in-flight tile fetches finish; no per-tile retry in bulk download.",
+                  "areaDailyForecast uses the UTC date as \u0027today\u0027 (toISOString), dropping local today in US evenings; areaFcstIndex has no max distance so expired packs report their last hour as now (areadata.js:201-209,238).",
+                  "saveSpotFromModal has no try/catch and no re-entry guard: storage failure leaves the modal open silently; double-tap Save on a new spot writes two spots (spots.js:71-93).",
+                  "renderReefsList shows \u0027No reef data loaded.\u0027 if opened before reefsInit resolves and never refreshes; reef-list âžœ sets #ovl-reefs without a change event so prefs.reefs is not persisted (reefs.js:132-134,154-157).",
+                  "reefsInit().then applies boot-time prefs, overriding a toggle made during the load window (app.js:226-229).",
+                  "window.confirm and blob-anchor downloads may not work in the native iOS WKWebView shell (fishapp:// scheme) unless WKUIDelegate confirm panel and WKDownload are implemented â€” deletes would silently no-op and export would produce no file.",
+                  "First Mate toggle_layer drives #ovl-reefs/#ovl-mpa via synthetic DOM change events; React port must route it through store actions or the AI tool breaks.",
+                  "IDB schema has no onblocked/onversionchange handlers; bumping DB_VER in the React build with an old tab open could block the upgrade.",
+                  "Many cross-file globals (escapeHtml, idb, Spots, Reefs, area readers) are consumed by assistant.js and other groups; module boundaries must re-export them or those features break.",
+                  "Import ignores backup version and never restores areas; catches dedupe key lacks species (name field absent)."
+              ],
+    "topLevelSideEffects":  [
+                                "db.js: declares DB_NAME/DB_VER, _db=null, TileKeys=new Set(), tileKeysReady=false (no I/O)",
+                                "tiles.js: OfflineTileLayer = L.TileLayer.extend(...) at load â€” requires Leaflet loaded first (no I/O)",
+                                "download.js: DL={running:false,cancelled:false}, constants only",
+                                "areadata.js: AreaData={packs:[]} only",
+                                "spots.js: SPOT_ICONS, Spots state object, _spotDistTs/_spotDistLL lets only",
+                                "reefs.js: Reefs state object, MPA_STYLE table only",
+                                "No listeners, timers or network/IDB calls run at script load in this group; all init is invoked from app.js init()"
+                            ]
+}

@@ -803,3 +803,6 @@ export function motorOnOpen() {
   motorInit();
   motorProbe();
 }
+
+/* CONTRACT STUB (More sheet reads it) — Web Bluetooth present and not inside the iOS app. */
+export function motorSupported() { return typeof navigator !== 'undefined' && !!navigator.bluetooth && !window.FishNative; }

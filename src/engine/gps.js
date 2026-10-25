@@ -27,7 +27,20 @@ export const GPS = {
 /* What the HUD, the Emergency sheet and everything else on screen read. Plain data only.
    status: 'searching' (no fix yet) | 'fix' | 'denied' (permission refused) | 'lost' (error)
    quality: 'ok' (≤20 m) | 'warn' (coarser) | 'none' — the legacy dot colours. */
-export const gpsStore = createStore(() => ({
+/**
+ * @typedef {Object} GpsView
+ * @property {'searching'|'fix'|'denied'|'lost'} status
+ * @property {'ok'|'warn'|'none'} quality
+ * @property {number|null} accM
+ * @property {number|null} sogKn
+ * @property {number|null} cogDeg
+ * @property {number|null} lat
+ * @property {number|null} lng
+ * @property {number} fixAt
+ * @property {boolean} follow
+ */
+/** @type {import('zustand/vanilla').StoreApi<GpsView>} */
+export const gpsStore = createStore(() => /** @type {GpsView} */ ({
   status: 'searching',
   quality: 'none',
   accM: null,
@@ -198,7 +211,8 @@ export function setFollow(on) {
 
 /* What the Device section shows about the screen lock. kind: ok | off | warn | unsupported.
    Report what is ACTUALLY true right now, not what we asked for (see renderStatus). */
-export const wakeStore = createStore(() => ({ kind: 'off', text: '' }));
+/** @type {import('zustand/vanilla').StoreApi<{kind: 'ok'|'off'|'warn'|'unsupported', text: string}>} */
+export const wakeStore = createStore(() => ({ kind: /** @type {'ok'|'off'|'warn'|'unsupported'} */ ('off'), text: '' }));
 
 /* Keep the screen awake the whole time the app is open (iOS 16.4+, Android).
    The OS drops the lock whenever the app is hidden, so we re-acquire on every

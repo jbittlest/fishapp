@@ -1,0 +1,302 @@
+﻿{
+    "key":  "motor-helm",
+    "specFile":  "C:/Users/jbitt/AppData/Local/Temp/claude/C--Users-jbitt-OneDrive-Desktop-Carrots/089709da-890a-4c8f-9bbf-0a347ea15c9c/scratchpad/fishapp-concepts/inventory/motor-helm.md",
+    "surfaces":  [
+                     {
+                         "name":  "Trolling Motor tile (More sheet)",
+                         "kind":  "other",
+                         "summary":  "More-grid tile \u0027âš™ï¸ Trolling Motor\u0027 that toggles panel-motor; togglePanel calls motorOnOpen() only on hidden-\u003evisible.",
+                         "domIds":  [
+                                        "btn-motor"
+                                    ],
+                         "ownerModule":  "app.js (index.html:145, app.js:547, 332)"
+                     },
+                     {
+                         "name":  "Trolling motor link panel",
+                         "kind":  "panel",
+                         "summary":  "Bottom sheet \u0027Trolling motor link\u0027 with intro hint and five numbered sections (Connection, Safety, Protocol profile, Commands, Recon + log). Closing it never disarms; engine state and timers persist while hidden.",
+                         "domIds":  [
+                                        "panel-motor"
+                                    ],
+                         "ownerModule":  "motor.js"
+                     },
+                     {
+                         "name":  "Unsupported-platform banner",
+                         "kind":  "banner",
+                         "summary":  "warn-box shown when navigator.bluetooth is absent; three verbatim variants: insecure context, iOS non-Bluefy, other browser (HTML with \u003cb\u003e).",
+                         "domIds":  [
+                                        "motor-unsupported"
+                                    ],
+                         "ownerModule":  "motor.js (motorSupport/motorInit)"
+                     },
+                     {
+                         "name":  "1 Â· Connection",
+                         "kind":  "panel-section",
+                         "summary":  "PAIR-button hint, Connect/Disconnect toggle button, Show all devices, Copy log, status line \u0027Not connected\u0027 / \u0027âœ… Connected to {name}\u0027. No busy state while connecting (progress only in log).",
+                         "domIds":  [
+                                        "btn-motor-connect",
+                                        "btn-motor-scanall",
+                                        "btn-motor-copylog",
+                                        "motor-conn-status"
+                                    ],
+                         "ownerModule":  "motor.js"
+                     },
+                     {
+                         "name":  "2 Â· Safety",
+                         "kind":  "panel-section",
+                         "summary":  "Arm button (disabled when disconnected; amber \u0027ðŸ”’ Disarmed â€” tap to arm\u0027 vs red pulsing \u0027ðŸ”“ ARMED â€” tap to disarm\u0027), deadman row visible only while armed with \u0027Auto-stop in Ns without input\u0027 countdown and â¹ STOP, plus the mandatory best-effort/foot-pedal disclaimer.",
+                         "domIds":  [
+                                        "btn-motor-arm",
+                                        "motor-deadman-row",
+                                        "motor-deadman",
+                                        "btn-motor-stop"
+                                    ],
+                         "ownerModule":  "motor.js"
+                     },
+                     {
+                         "name":  "3 Â· Protocol profile",
+                         "kind":  "panel-section",
+                         "summary":  "Service / Write / Notify UUID text inputs (autocapitalize/autocorrect/spellcheck off) re-seeded from localStorage on every panel open, Save profile button.",
+                         "domIds":  [
+                                        "motor-svc",
+                                        "motor-tx",
+                                        "motor-rx",
+                                        "btn-motor-saveuuid"
+                                    ],
+                         "ownerModule":  "motor.js"
+                     },
+                     {
+                         "name":  "4 Â· Commands",
+                         "kind":  "panel-section",
+                         "summary":  "Captured-command buttons rendered from profile.frames (danger ones red with âš ï¸ prefix, onclick motorSendFrame(i)), empty-state hint, Add captured command (3 native dialogs). No edit/delete.",
+                         "domIds":  [
+                                        "motor-cmds",
+                                        "btn-motor-addcmd"
+                                    ],
+                         "ownerModule":  "motor.js"
+                     },
+                     {
+                         "name":  "5 Â· Recon + frame log",
+                         "kind":  "panel-section",
+                         "summary":  "Record/Stop recording toggle, Mark what I just did (prompt), Export session (JSON download), frame count, and the colour-classed monospace \u003cpre\u003e log (â‰¤400 lines, escaped, autoscroll) that carries all diagnostics.",
+                         "domIds":  [
+                                        "btn-motor-record",
+                                        "btn-motor-mark",
+                                        "btn-motor-export",
+                                        "motor-frame-count",
+                                        "motor-log"
+                                    ],
+                         "ownerModule":  "motor.js"
+                     },
+                     {
+                         "name":  "Motor toasts",
+                         "kind":  "toast",
+                         "summary":  "Shared #toast (3 s). 15 distinct verbatim messages incl. \u0027âš ï¸ Motor link lost while armed â€” use the foot pedal\u0027, \u0027â± Deadman expired â€” motor link disarmed\u0027, \u0027Arm the link first\u0027.",
+                         "domIds":  [
+                                        "toast"
+                                    ],
+                         "ownerModule":  "app.js toast() called from motor.js"
+                     },
+                     {
+                         "name":  "Safety/native dialogs",
+                         "kind":  "modal",
+                         "summary":  "window.confirm for ARM (multi-line safety checklist), per-send danger confirm (\u0027Send \"X\"?\\n\\nThis can move the boat.\u0027), danger classification on add; window.prompt for mark, command label, hex. Native confirm blocks the event loop, which the send path relies on (no post-confirm re-check).",
+                         "domIds":  [
+
+                                    ],
+                         "ownerModule":  "motor.js"
+                     },
+                     {
+                         "name":  "Session export download",
+                         "kind":  "other",
+                         "summary":  "Blob + \u003ca download\u003e \u0027motor-session-YYYY-MM-DD-HH-MM-SS.json\u0027 with {exported, device, profile, frames}.",
+                         "domIds":  [
+
+                                    ],
+                         "ownerModule":  "motor.js"
+                     }
+                 ],
+    "engineApi":  [
+                      {
+                          "module":  "motor",
+                          "name":  "support",
+                          "kind":  "state",
+                          "description":  "{ok, reason:\u0027\u0027|\u0027insecure\u0027|\u0027ios\u0027|\u0027other\u0027} from motorSupport(); drives the banner and connect refusal."
+                      },
+                      {
+                          "module":  "motor",
+                          "name":  "connected / deviceName",
+                          "kind":  "state",
+                          "description":  "Link state and Motor.device.name for status line and Connect/Disconnect label; arm button disabled when !connected."
+                      },
+                      {
+                          "module":  "motor",
+                          "name":  "armed",
+                          "kind":  "state",
+                          "description":  "Arm state; drives arm button text/class and visibility of deadman row + STOP."
+                      },
+                      {
+                          "module":  "motor",
+                          "name":  "deadmanRemainingS",
+                          "kind":  "state",
+                          "description":  "max(0, ceil((20000 - (now - lastHumanTs))/1000)) recomputed on the 1 s deadman tick while armed; null when disarmed."
+                      },
+                      {
+                          "module":  "motor",
+                          "name":  "recording / frameCount",
+                          "kind":  "state",
+                          "description":  "Recon recording flag and Motor.frames.length (includes marks) for the record button and \u0027N frames captured\u0027."
+                      },
+                      {
+                          "module":  "motor",
+                          "name":  "log",
+                          "kind":  "state",
+                          "description":  "Ring of â‰¤400 {t, line, cls} lines (cls \u0027\u0027|hdr|ok|warn|err|rx|tx); render as escaped text, autoscroll on append."
+                      },
+                      {
+                          "module":  "motor",
+                          "name":  "profile",
+                          "kind":  "state",
+                          "description":  "{service, write, notify, frames:[{label, hex, danger}]} from localStorage \u0027fishapp.motor.profile\u0027."
+                      },
+                      {
+                          "module":  "motor",
+                          "name":  "toggleConnect / connect({all})",
+                          "kind":  "action",
+                          "description":  "Connect flow with requestDevice option ladder; MUST be called synchronously from the click handler (transient user activation). Show-all button calls connect({all:true})."
+                      },
+                      {
+                          "module":  "motor",
+                          "name":  "disconnect",
+                          "kind":  "action",
+                          "description":  "Disarm(\u0027manual disconnect\u0027) then gatt.disconnect, clear chars, log."
+                      },
+                      {
+                          "module":  "motor",
+                          "name":  "toggleArm / arm / disarm(reason)",
+                          "kind":  "action",
+                          "description":  "Arm requires connected + confirm, touches human clock, starts 1 s deadman; disarm clears timer and sends NO frame."
+                      },
+                      {
+                          "module":  "motor",
+                          "name":  "stop(reason)",
+                          "kind":  "action",
+                          "description":  "Send first /stop/i-labelled frame with force (bypasses arm gate, confirm and rate limit) if connected, then disarm."
+                      },
+                      {
+                          "module":  "motor",
+                          "name":  "sendFrame(index)",
+                          "kind":  "action",
+                          "description":  "touch() then sendHex(frame.hex, {danger, label}); the only gesture path that feeds the deadman besides arm."
+                      },
+                      {
+                          "module":  "motor",
+                          "name":  "addFrame",
+                          "kind":  "action",
+                          "description":  "prompt label, prompt hex (validated by motorParseHex), confirm \u0027Can this command MOVE THE BOAT?\u0027 -\u003e danger flag; save; toast \u0027Command saved\u0027."
+                      },
+                      {
+                          "module":  "motor",
+                          "name":  "saveProfile({service, write, notify})",
+                          "kind":  "action",
+                          "description":  "trim().toLowerCase() and persist; toast \u0027Profile saved â€” reconnect to pick it up\u0027."
+                      },
+                      {
+                          "module":  "motor",
+                          "name":  "recordToggle / markEvent / exportSession / copyLog",
+                          "kind":  "action",
+                          "description":  "Recon tools: start resets frames and timestamps log; mark prompts and inserts {t,ts,mark}; export downloads JSON; copy writes log text to clipboard."
+                      },
+                      {
+                          "module":  "motor",
+                          "name":  "onPanelOpen",
+                          "kind":  "action",
+                          "description":  "On hidden-\u003evisible only: repaint, re-seed UUID inputs from storage, run browser-check probe (appends to log). Never re-arms."
+                      },
+                      {
+                          "module":  "motor",
+                          "name":  "toast / linkLostWhileArmed / deadmanExpired / disarmed(reason)",
+                          "kind":  "event",
+                          "description":  "Engine notifications for the shared toast bus and any indicators; speak(\u0027Motor link lost. Use the foot pedal.\u0027) is intended but currently dead (no global speak)."
+                      },
+                      {
+                          "module":  "helm",
+                          "name":  "helmParseTemplate / helmRender / helmToHex / helmInferFields / helmSolveChecksum / HelmSim",
+                          "kind":  "query",
+                          "description":  "Pure frame-template, inference, checksum-solver and simulator library; no UI or callers today; port verbatim with vitest vectors."
+                      },
+                      {
+                          "module":  "helm",
+                          "name":  "helmTxSend(hex, opts, coalesceKey)",
+                          "kind":  "action",
+                          "description":  "Rate-limited (bucket cap 8, 5/s) last-value-wins sender over motorSendHex; force bypasses everything. Unwired today."
+                      },
+                      {
+                          "module":  "helm",
+                          "name":  "apCompute(ll, fixAgeMs, coarse, dt)",
+                          "kind":  "query",
+                          "description":  "Single ILOS autopilot step returning {trackBrg, xte, authoritative, want, commanded, deadbanded}; mutates AP.yInt/AP.note; no tick loop exists. Unwired today."
+                      }
+                  ],
+    "crossDeps":  [
+                      "motor.js uses readJSON (app.js:643) for \u0027fishapp.motor.profile\u0027 and \u0027fishapp.motor.ruledout\u0027",
+                      "motor.js uses toast (app.js:676) for all user feedback",
+                      "motor.js reads APP_BUILD (app.js:6, loaded later; read lazily in try) in motorProbe",
+                      "motor.js calls speak() guarded by typeof â€” no global speak exists anywhere (assistant.js only has asstSpeak), so the link-lost voice alert never fires",
+                      "app.js:548-560 wires all motor buttons and calls motorInit at boot; app.js:332 togglePanel calls motorOnOpen; app.js:279 lists panel-motor among sheets",
+                      "app.js reads Motor.connected / Motor.armed to choose connect/disconnect and arm/disarm",
+                      "motorRenderFrames emits inline onclick=\u0027motorSendFrame(i)\u0027 (global)",
+                      "helm.js uses motorSendHex and motorParseHex (motor.js)",
+                      "helm.js apCompute/apCrossTrack use bearingBetween (gps.js:252) and Leaflet L.LatLng.distanceTo (haversine R=6371000)",
+                      "helm.js exports are referenced by no other file",
+                      "sw.js:35-36 precaches motor.js and helm.js; MOTOR.md is referenced by UI copy but not precached or linked"
+                  ],
+    "safetyCritical":  [
+                           "Arm gate at the single choke point: motorSendHex motor.js:596-599 refuses danger frames unless Motor.armed (\u0027Arm the link first\u0027) and requires a per-send confirm; force:true bypasses it (only STOP may use force)",
+                           "Arming requires connection + confirm (motor.js:508-517); arm button disabled when disconnected (index.html:375, motor.js:670)",
+                           "Arming calls motorTouch and starts setInterval(motorDeadmanTick,1000) (motor.js:518-521)",
+                           "Deadman reads lastHumanTs only; idle \u003e 20000 ms (MOTOR_DEADMAN_MS, motor.js:52) -\u003e motorStop(\u0027deadman\u0027) + toast (motor.js:554-564); effective expiry 20-21 s",
+                           "Two clocks: motorTouch (548-552) is the ONLY feeder of lastHumanTs, called only from motorArm:519 and motorSendFrame:702; motorSendHex feeds only lastActionTs (604). Nothing automated may ever call touch",
+                           "visibilitychange to non-visible while armed -\u003e motorStop(\u0027backgrounded\u0027) (motor.js:569-574); pagehide while armed -\u003e motorStop(\u0027page closing\u0027) (575); both registered at module load and must outlive the panel",
+                           "gattserverdisconnected -\u003e motorOnDisconnected disarms, clears chars and deadman, toasts if wasArmed (motor.js:339, 358-371)",
+                           "Manual disconnect disarms first (motor.js:374)",
+                           "STOP sends the FIRST frame whose label matches /stop/i with force (no arm, no confirm, no rate limit) if connected, then disarms synchronously (motor.js:537-544); STOP button only visible while armed",
+                           "Disarm (motor.js:526-532) sends no frame: manual disarm leaves the motor running and hides STOP",
+                           "motorParseHex returns null on any malformed hex; send and add refuse (motor.js:167-177, 593-594, 711)",
+                           "No built-in protocol/frames; empty state only (motor.js:686-687, MOTOR.md:159-162)",
+                           "Device-controlled text escaped in log and labels (motor.js:185-193, 692, 695-697); React must render as text",
+                           "No post-confirm re-check of armed/connected in motorSendHex (598-\u003e604) and motorArm; safe only because native confirm blocks the event loop â€” an async modal must re-check connected/armed/deadman before writing",
+                           "requestDevice must be reached synchronously from the tap (motor.js:311-317, 278-284); ladder resume on retap (294) and terminal-error reset (298-302)",
+                           "Safety disclaimer copy must never be removed (index.html:380-384; motor.js:21-24)",
+                           "helm.js (unwired): force path bypasses budget/queue (helm.js:35-37); token bucket cap 8 / 5 per s (54-64); last-value-wins coalescing (39-41); missing params throw (142); AP slew 12 deg/tick (292,331), integrator freeze on stale/coarse fix (315-326)"
+                       ],
+    "risks":  [
+                  "helm.js is entirely unwired (no callers, no UI, no autopilot tick); Helm object, Helm.limits, AP.on/humanDeadline/lastTick, AP_TICK_MS, AP_FIX_SAFE_MS are unused â€” do not invent UI/tick during reskin",
+                  "Spoken \u0027Motor link lost. Use the foot pedal.\u0027 alert never fires (no global speak) â€” owner decision needed",
+                  "Manual disarm/disconnect do not send STOP and STOP is hidden while disarmed",
+                  "STOP label match is first substring /stop/i (e.g. \u0027Spot-Lock stop\u0027 could be sent as STOP)",
+                  "\u0027Show all devices\u0027 while connected does not disconnect/disarm/clear chars; armed carries to new device; stale disconnect listener",
+                  "No in-flight guard on Connect; double tap -\u003e parallel requestDevice",
+                  "Replacing native confirm/prompt with async modals changes timing: must re-check connected/armed/deadman after await",
+                  "Panel must not own the engine: deadman interval and visibility/pagehide listeners must survive unmount and StrictMode double-mount",
+                  "Add-command danger dialog fails open (Cancel = not dangerous)",
+                  "Device Information only requested on ladder rung 1; later rungs falsely rule out devices",
+                  "characteristicvaluechanged listeners may stack on reconnect",
+                  "profile.notify stored but unused; ruled-out list unbounded with no UI",
+                  "Export via \u003ca download\u003e may fail in Bluefy / native WKWebView shell",
+                  "Native iOS shell (fishapp://) has no Web Bluetooth; banner shows insecure-context or Bluefy copy depending on WKWebView isSecureContext â€” neither mentions the shell",
+                  "helmTxSend with danger+force would bypass the arm gate; helm never sets danger; single pending slot across coalesce keys; coalesced send costs 2 tokens",
+                  "helmSolveChecksum big-endian matches do not round-trip (template parser always le)",
+                  "Field encoders do not range-check (u8 260 -\u003e 0x04); Helm.limits not enforced",
+                  "apCompute: first tick unslewed with deadbanded=true; never writes AP.commandedHdg; stale fix still slews toward stale-position heading; requires L.LatLng.distanceTo",
+                  "MOTOR.md names UI labels (More -\u003e Trolling Motor, section 3, âº Record frames, â˜… Mark, â‡© Export, âž• Add captured command) â€” update docs if labels change",
+                  "Frame count and deadman countdown refresh only on repaint/tick in old code (minor UI drift if React renders live)"
+              ],
+    "topLevelSideEffects":  [
+                                "motor.js:27-57 creates global Motor state object and constants (no timers, no BLE calls at load)",
+                                "motor.js:569-574 registers document \u0027visibilitychange\u0027 listener (armed + not visible -\u003e motorStop(\u0027backgrounded\u0027))",
+                                "motor.js:575 registers window \u0027pagehide\u0027 listener (armed -\u003e motorStop(\u0027page closing\u0027))",
+                                "helm.js: no side effects at load (constants and mutable singletons Helm, HelmTx, HELM_BUCKET, AP only)",
+                                "app.js:560 calls motorInit() at boot (paints banner, inputs, buttons)"
+                            ]
+}

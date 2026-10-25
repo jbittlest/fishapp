@@ -421,3 +421,7 @@ export function voiceInit() {
     if (typeof toast === 'function') toast('🎤 Tap anywhere to resume hands-free');
   }
 }
+
+/* CONTRACT STUB (tab bar reads it) — the voice port fills this in. */
+import { createStore as __createStore } from 'zustand/vanilla';
+export const voiceStore = __createStore(() => ({ supported: !!Voice.supported, on: false, awake: false, listening: false, label: 'Hey Fish', transcript: '' }));

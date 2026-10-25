@@ -17,8 +17,16 @@ export function openDB() {
       if (!db.objectStoreNames.contains('catches')) db.createObjectStore('catches', { keyPath: 'id', autoIncrement: true });
       if (!db.objectStoreNames.contains('trips')) db.createObjectStore('trips', { keyPath: 'id', autoIncrement: true });
     };
-    req.onsuccess = () => { _db = req.result; resolve(_db); };
+    req.onsuccess = () => {
+      _db = req.result;
+      /* Let a future version's upgrade proceed instead of being blocked by this open tab. */
+      _db.onversionchange = () => { try { _db.close(); } catch (e) {} _db = null; };
+      resolve(_db);
+    };
     req.onerror = () => reject(req.error);
+    /* Another tab on an older version is holding the database open. Without this the open
+       request just waits — and boot waited with it, splash up, no map, no GPS. */
+    req.onblocked = () => reject(new Error('Offline storage is busy — close other FishApp tabs'));
   });
 }
 
@@ -83,8 +91,11 @@ export async function loadTileKeys() {
   try {
     const keys = await _req(_store('tiles').getAllKeys());
     keys.forEach((k) => TileKeys.add(k));
+    /* Only trust the index once it is complete. Setting this after a FAILED read (as the old
+       code did) sent every tile straight to the network, so downloaded charts showed blank
+       offline — the opposite of the fallback the comment below promises. */
+    tileKeysReady = true;
   } catch (e) { /* fall back to per-tile IDB reads */ }
-  tileKeysReady = true;
 }
 
 /* Delete every cached tile whose key starts with a layer prefix, e.g. "gmrt/".
@@ -123,9 +134,11 @@ export async function deleteTiles(keys, onProgress) {
       let store;
       try { store = _store('tiles', 'readwrite'); } catch (e) { return reject(e); }
       const tx = store.transaction;
-      tx.oncomplete = () => resolve();
+      /* Drop keys from the index only once the deletes have COMMITTED — an aborted chunk
+         used to leave tiles stored on disk but invisible to the offline fast path. */
+      tx.oncomplete = () => { slice.forEach((k) => TileKeys.delete(k)); resolve(); };
       tx.onabort = tx.onerror = () => reject(tx.error || new Error('tile delete aborted'));
-      slice.forEach((k) => { TileKeys.delete(k); try { store.delete(k); } catch (e) {} });
+      slice.forEach((k) => { try { store.delete(k); } catch (e) {} });
     });
     done += slice.length;
     if (onProgress) onProgress(Math.min(done, keys.length), keys.length);

@@ -127,3 +127,9 @@ export async function renderTracksList() {
     box.appendChild(item);
   });
 }
+
+/* CONTRACT STUB (More sheet reads it) — the navigation port fills this in. */
+import { createStore as __createStore } from 'zustand/vanilla';
+/** @type {import('zustand/vanilla').StoreApi<{recording: boolean, startedAt: number, points: number, saved: any[]}>} */
+export const tracksStore = __createStore(() => ({ recording: false, startedAt: 0, points: 0, saved: /** @type {any[]} */ ([]) }));
+export function tracksInit() {}

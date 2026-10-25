@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="day" data-lume="day">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>FishApp</title>
+<meta name="description" content="Offline marine charts, GPS navigation and fishing tools">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FishApp">
+<meta name="theme-color" content="#0B131C">
+<meta name="color-scheme" content="dark">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/icon-180.png">
+<link rel="icon" type="image/png" href="./icons/icon-192.png">
+<style>
+  /* Boot splash — painted before any JS or bundled CSS arrives. Hidden by engine/app.js bootDone(). */
+  html, body { margin: 0; height: 100%; background: #060B11; }
+  #map { position: fixed; inset: 0; }
+  #boot { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center;
+    background: #060B11; color: #F3F6F9; font-family: 'Barlow', system-ui, -apple-system, sans-serif; transition: opacity .35s ease; }
+  #boot.hide { opacity: 0; pointer-events: none; }
+  #boot .b-inner { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  #boot .b-mark { width: 64px; height: 64px; border-radius: 20px; display: grid; place-items: center; background: #0B131C;
+    box-shadow: inset 0 0 0 1px rgba(196, 214, 232, .12); }
+  #boot .b-name { font-size: 22px; font-weight: 600; letter-spacing: .01em; }
+  #boot .b-spin { width: 22px; height: 22px; border-radius: 50%; border: 2.5px solid rgba(196, 214, 232, .18); border-top-color: #FFB547;
+    animation: b-spin .7s linear infinite; }
+  #boot .b-status { font-size: 13px; color: #B4C0CC; min-height: 18px; }
+  @keyframes b-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { #boot { transition: none; } #boot .b-spin { animation-duration: 1.4s; } }
+</style>
+</head>
+<body>
+<!-- Chart colour lookup. NOAA BlueTopo ships a green→yellow ramp that reads like a landcover
+     map; this recolours it to nautical convention in the GPU, offline, with no build step.
+     Server-side styling is not an option (CloudFront 403s SLD_BODY).
+
+     The DIRECTION is the load-bearing detail: output runs pale deep water → saturated shallow
+     water, which is the INVERSE of web-map convention, because on the water shallow means
+     danger. Getting that backwards would be a safety inversion wearing a style costume. -->
+<svg width="0" height="0" aria-hidden="true" style="position:absolute" focusable="false"><defs>
+  <filter id="lut-day" color-interpolation-filters="sRGB">
+    <!-- s = (R-B)*1.05 + 0.126 : collapses the source ramp to one scalar, deep→0 shallow→1 -->
+    <feColorMatrix type="matrix" values="1.05 0 -1.05 0 0.126
+                                         1.05 0 -1.05 0 0.126
+                                         1.05 0 -1.05 0 0.126
+                                         0    0  0    1 0"/>
+    <!-- Most of a bay sits in a narrow deep band. Without this gamma the chart is a pale
+         wash — which is precisely what makes the current relief base look flat. -->
+    <feComponentTransfer>
+      <feFuncR type="gamma" exponent="0.45"/>
+      <feFuncG type="gamma" exponent="0.45"/>
+      <feFuncB type="gamma" exponent="0.45"/>
+    </feComponentTransfer>
+    <!-- deep ─────────────────────────────► shoal ► drying (last stop = S-52 land tan) -->
+    <feComponentTransfer>
+      <feFuncR type="table" tableValues="0.925 0.855 0.760 0.620 0.430 0.300 0.788"/>
+      <feFuncG type="table" tableValues="0.965 0.925 0.880 0.800 0.690 0.590 0.725"/>
+      <feFuncB type="table" tableValues="0.975 0.960 0.945 0.925 0.900 0.840 0.478"/>
+    </feComponentTransfer>
+  </filter>
+  <filter id="lut-night" color-interpolation-filters="sRGB">
+    <feColorMatrix type="matrix" values="1.05 0 -1.05 0 0.126
+                                         1.05 0 -1.05 0 0.126
+                                         1.05 0 -1.05 0 0.126
+                                         0    0  0    1 0"/>
+    <feComponentTransfer>
+      <feFuncR type="gamma" exponent="0.45"/>
+      <feFuncG type="gamma" exponent="0.45"/>
+      <feFuncB type="gamma" exponent="0.45"/>
+    </feComponentTransfer>
+    <!-- Luminance inverted deliberately: at night deep water is most of the screen and should
+         be darkest, while the SHALLOW water — the hazard — stays brightest. Never use
+         invert(), which would turn shallow-safe colours into deep-water colours. -->
+    <feComponentTransfer>
+      <feFuncR type="table" tableValues="0.055 0.062 0.070 0.080 0.092 0.105 0.150"/>
+      <feFuncG type="table" tableValues="0.085 0.100 0.118 0.138 0.162 0.185 0.130"/>
+      <feFuncB type="table" tableValues="0.125 0.148 0.175 0.205 0.240 0.275 0.075"/>
+    </feComponentTransfer>
+  </filter>
+</defs></svg>
+
+<div id="map"></div>
+<div id="root"></div>
+
+<div id="boot" role="status" aria-live="polite">
+  <div class="b-inner">
+    <div class="b-mark" aria-hidden="true">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#FFB547" stroke-width="1.75" stroke-linejoin="round"><path d="M12 2.5c2.6 2.6 4 6 4 10v8.5H8v-8.5c0-4 1.4-7.4 4-10z" fill="#FFB547" fill-opacity=".18"/></svg>
+    </div>
+    <div class="b-name">FishApp</div>
+    <div class="b-spin"></div>
+    <div id="boot-status" class="b-status">Starting up…</div>
+  </div>
+</div>
+
+<script type="module" src="/src/main.tsx"></script>
+</body>
+</html>

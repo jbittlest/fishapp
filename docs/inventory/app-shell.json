@@ -1,0 +1,494 @@
+﻿{
+    "key":  "app-shell",
+    "specFile":  "C:/Users/jbitt/AppData/Local/Temp/claude/C--Users-jbitt-OneDrive-Desktop-Carrots/089709da-890a-4c8f-9bbf-0a347ea15c9c/scratchpad/fishapp-concepts/inventory/app-shell.md",
+    "surfaces":  [
+                     {
+                         "name":  "Boot splash",
+                         "kind":  "overlay",
+                         "ownerModule":  "app.js",
+                         "domIds":  [
+                                        "boot",
+                                        "boot-status"
+                                    ],
+                         "summary":  "Static HTML splash (ðŸŽ£, FishApp, spinner, status). The status text goes \u0027Starting upâ€¦\u0027 â†’ \u0027Opening chartsâ€¦\u0027 â†’ \u0027Getting your locationâ€¦\u0027. It fades out (0.35s) and is removed after 400ms in the finally block, right after GPS starts. If openDB never settles, it hangs on \u0027Opening chartsâ€¦\u0027."
+                     },
+                     {
+                         "name":  "Top status bar",
+                         "kind":  "hud",
+                         "ownerModule":  "app.js (frame, tile spinner, offline badge); gps.js (GPS fields)",
+                         "domIds":  [
+                                        "topbar",
+                                        "stat-gps",
+                                        "gps-dot",
+                                        "gps-acc",
+                                        "tile-busy",
+                                        "stat-speed",
+                                        "stat-heading",
+                                        "stat-coords",
+                                        "offline-badge"
+                                    ],
+                         "summary":  "GPS dot and accuracy (NO GPS / GPS DENIED / Â±Nm), speed in kn, heading in Â°, DM coordinates, a tile-loading spinner shown while any base or chart overlay is loading, and an OFFLINE badge that follows navigator.onLine. Its bottom edge is measured by the panel height clamp."
+                     },
+                     {
+                         "name":  "Map controls (emergency, follow, zoom)",
+                         "kind":  "hud",
+                         "ownerModule":  "app.js",
+                         "domIds":  [
+                                        "controls",
+                                        "btn-emergency",
+                                        "btn-follow",
+                                        "zoomctl",
+                                        "btn-zoomin",
+                                        "btn-zoomout"
+                                    ],
+                         "summary":  "ðŸ†˜ toggles the Emergency panel. â—‰ toggles follow-GPS (.active class set by gps.js setFollow; an explicit OFF is never auto-reverted; a drag turns follow off and auto-refollows after 45s). +/âˆ’ call map.zoomIn/zoomOut."
+                     },
+                     {
+                         "name":  "Bottom tab bar",
+                         "kind":  "panel-section",
+                         "ownerModule":  "app.js (wiring, active state); voice.js (voice button classes and label)",
+                         "domIds":  [
+                                        "tabbar",
+                                        "btn-weather",
+                                        "btn-tides",
+                                        "btn-voice",
+                                        "btn-mark",
+                                        "btn-more"
+                                    ],
+                         "summary":  "Weather / Tides / Hey Fish / Mark / More. Weather, Tides and More are .active while their panel is open (syncTabs). The voice button gets .listening/.awake/.unsupported and its label switches between Listening and Hey Fish. Mark opens the spot modal at the GPS fix, or the map centre if there is no fix. z-index 2500, above the sheets."
+                     },
+                     {
+                         "name":  "More sheet",
+                         "kind":  "panel",
+                         "ownerModule":  "app.js",
+                         "domIds":  [
+                                        "panel-more",
+                                        "btn-spots",
+                                        "btn-tools",
+                                        "btn-layers",
+                                        "btn-assistant",
+                                        "btn-knots",
+                                        "btn-download",
+                                        "btn-track",
+                                        "btn-motor",
+                                        "app-build"
+                                    ],
+                         "summary":  "8 tiles that open panels (Record Track instead closes panels and toggles track recording; the tile gets .recording while recording). Shows the build label: \u0027build v93\u0027 or \u0027build v93 Â· update ready (vNN) â€” close and reopen\u0027."
+                     },
+                     {
+                         "name":  "Panel system (11 bottom sheets)",
+                         "kind":  "panel",
+                         "ownerModule":  "app.js",
+                         "domIds":  [
+                                        "panel-layers",
+                                        "panel-spots",
+                                        "panel-download",
+                                        "panel-weather",
+                                        "panel-tides",
+                                        "panel-tools",
+                                        "panel-knots",
+                                        "panel-emergency",
+                                        "panel-assistant",
+                                        "panel-motor",
+                                        "panel-more"
+                                    ],
+                         "summary":  "At most one sheet open. togglePanel closes all, then opens (or just closes if the panel was already open) and runs that panel\u0027s on-open hook. Each âœ• ([data-close]) hides its own panel with no hooks. maxHeight is clamped against the measured top bar on open, resize and orientationchange. No back/escape handling exists."
+                     },
+                     {
+                         "name":  "Map layers panel",
+                         "kind":  "panel",
+                         "ownerModule":  "app.js",
+                         "domIds":  [
+                                        "panel-layers",
+                                        "ovl-enc",
+                                        "ovl-seamark",
+                                        "ovl-wind",
+                                        "ovl-sst",
+                                        "ovl-rain",
+                                        "ovl-reefs",
+                                        "ovl-mpa",
+                                        "ovl-fish",
+                                        "ovl-wake",
+                                        "wake-status",
+                                        "ovl-keepalive",
+                                        "keepalive-status"
+                                    ],
+                         "summary":  "Base radio (ocean/sat/street/bluetint/gmrt) and overlay checkboxes persisted in fishapp.layers. The relief bases force the ENC overlay on and add labels plus a relief detail overlay (blend modes and the SVG LUT filter). Device toggles for wake lock (fishapp.wake) and background keep-alive (fishapp.keepalive) whose status lines report what is actually true. Includes the iPhone honesty hint about the screen lock stopping GPS."
+                     },
+                     {
+                         "name":  "Weather and Guides sub-tabs",
+                         "kind":  "panel-section",
+                         "ownerModule":  "app.js",
+                         "domIds":  [
+                                        "wx-now",
+                                        "wx-10day",
+                                        "tab-knots",
+                                        "tab-fishid"
+                                    ],
+                         "summary":  "app.js switches the weather Now/10-Day tabs (the 10-day loads lazily on first open via WX._fc10loaded) and the Guides Knots/Fish tabs."
+                     },
+                     {
+                         "name":  "Emergency panel",
+                         "kind":  "panel",
+                         "ownerModule":  "app.js",
+                         "domIds":  [
+                                        "panel-emergency",
+                                        "emg-coords",
+                                        "emg-copy",
+                                        "emg-text",
+                                        "emg-contact",
+                                        "emg-setcontact",
+                                        "emg-script-pos"
+                                    ],
+                         "summary":  "Live DM and decimal position (\u0027Waiting for GPSâ€¦\u0027 when there is no fix; no fix-age indicator). Copy coordinates (falls back to a toast). Text my location opens sms:\u003cnumber\u003e?body=â€¦ with a Google Maps link. The emergency contact is set via two prompt() calls. Static satellite SOS steps, VHF 16 / 911, MAYDAY script and PAN-PAN note are safety copy and must stay verbatim."
+                     },
+                     {
+                         "name":  "Toast",
+                         "kind":  "toast",
+                         "ownerModule":  "app.js",
+                         "domIds":  [
+                                        "toast"
+                                    ],
+                         "summary":  "Single slot, 3000ms, last writer wins with no queue. Used by every module (~100 call sites)."
+                     },
+                     {
+                         "name":  "Chart LUT SVG filters",
+                         "kind":  "map-layer",
+                         "ownerModule":  "index.html / app.js updateChartFilter",
+                         "domIds":  [
+                                        "lut-day",
+                                        "lut-night"
+                                    ],
+                         "summary":  "Hidden inline SVG filters that recolour the BlueTopo base (pale deep â†’ saturated shallow; the night LUT inverts luminance but keeps shallow brightest). Applied as a filter on the base tile container only when base is bluetint, via the CSS vars --chart-lut/--chart-trim (data-lume day/dusk/night). Nothing sets data-lume today."
+                     },
+                     {
+                         "name":  "Base and chart tile layers",
+                         "kind":  "map-layer",
+                         "ownerModule":  "app.js (via tiles.js makeLayer)",
+                         "domIds":  [
+                                        "map"
+                                    ],
+                         "summary":  "zIndex: base 0, reliefhi/blueshade 1, labels 3, enc 5, seamark 6. Layers cross-fade out over 0.28s with no fade-in. reliefhi blends multiply; blueshade blends overlay with brightness(0.70) contrast(6); ENC is multiply only on gmrt. Each layer is tracked for the tile-busy spinner."
+                     },
+                     {
+                         "name":  "Service-worker update / build version",
+                         "kind":  "other",
+                         "ownerModule":  "app.js + sw.js",
+                         "domIds":  [
+                                        "app-build"
+                                    ],
+                         "summary":  "Registration uses updateViaCache:\u0027none\u0027 and reg.update() at launch. A controller change reloads the page once, unless a voyage, track, anchor watch or hands-free voice is active. In that case the toast \u0027â¬†ï¸ Update ready â€” applies when you stop\u0027 appears and applyPendingUpdate runs later. The SW precaches the shell, serves same-origin GETs cache-first and answers \u0027version\u0027 messages."
+                     },
+                     {
+                         "name":  "Static containers for other groups",
+                         "kind":  "other",
+                         "ownerModule":  "index.html",
+                         "domIds":  [
+                                        "goto-banner",
+                                        "watch-banner",
+                                        "modal-spot",
+                                        "modal-catch",
+                                        "sst-legend",
+                                        "anim-controls",
+                                        "rain-bar",
+                                        "wind-bar",
+                                        "anchor-alarm",
+                                        "panel-motor",
+                                        "panel-assistant",
+                                        "panel-tools",
+                                        "panel-tides",
+                                        "panel-download",
+                                        "panel-spots",
+                                        "panel-knots",
+                                        "panel-weather"
+                                    ],
+                         "summary":  "index.html defines the DOM and static copy (including safety and honesty hints) for all other groups\u0027 surfaces. app.js wires most of their buttons: spots/catch modals, route/measure/anchor/trip, download, export/import, Go To arrive/cancel, all 11 motor buttons, and the SST/rain/wind loop controls."
+                     }
+                 ],
+    "engineApi":  [
+                      {
+                          "module":  "shell/panels",
+                          "name":  "openPanel",
+                          "kind":  "state",
+                          "description":  "PanelId|null â€” the single open sheet (layers, spots, download, weather, tides, tools, knots, emergency, assistant, motor, more)"
+                      },
+                      {
+                          "module":  "shell/panels",
+                          "name":  "activeTab",
+                          "kind":  "state",
+                          "description":  "Derived from TAB_FOR_PANEL: \u0027weather\u0027|\u0027tides\u0027|\u0027more\u0027|null"
+                      },
+                      {
+                          "module":  "shell/panels",
+                          "name":  "togglePanel",
+                          "kind":  "action",
+                          "description":  "togglePanel(id): close all; if it was hidden, open it, clamp its height and run the on-open hook (download: updateEstimate/renderAreasList/updateStorageInfo; spots: 4 list renders; weather: loadWeatherPanel; tides: loadTidesTimes + renderBiteWindows; tools: renderCatchList/updateAnchorUi/updateTripUi/routeStats; knots: renderKnots/renderFishId; emergency: updateEmergency; assistant: asstOnOpen; motor: motorOnOpen)"
+                      },
+                      {
+                          "module":  "shell/panels",
+                          "name":  "closePanels",
+                          "kind":  "action",
+                          "description":  "Hide every panel and resync the tabs. Called by catch, goto, download, nav, spots, reefs, tracks, weather and voice."
+                      },
+                      {
+                          "module":  "shell/panels",
+                          "name":  "closePanel",
+                          "kind":  "action",
+                          "description":  "The âœ• button: hide one panel and resync the tabs; no hooks run"
+                      },
+                      {
+                          "module":  "shell/panels",
+                          "name":  "isPanelOpen",
+                          "kind":  "query",
+                          "description":  "Synchronous replacement for the DOM .hidden checks in gps.js:143, spots.js:148, nav.js:393, voice.js:114 and app.js:82/499/503"
+                      },
+                      {
+                          "module":  "shell/panels",
+                          "name":  "panel:opened / panel:closed",
+                          "kind":  "event",
+                          "description":  "Emitted on visibility change; nothing listens to close today"
+                      },
+                      {
+                          "module":  "shell/layers",
+                          "name":  "layers",
+                          "kind":  "state",
+                          "description":  "{base:\u0027ocean\u0027|\u0027sat\u0027|\u0027street\u0027|\u0027bluetint\u0027|\u0027gmrt\u0027, enc, seamark, wind, sst, rain, fish, reefs, mpa}, persisted in localStorage fishapp.layers. reefs/mpa default true, fish/sst/rain default false."
+                      },
+                      {
+                          "module":  "shell/layers",
+                          "name":  "tilesLoading",
+                          "kind":  "state",
+                          "description":  "True while any tracked base or chart layer is loading tiles (drives the #tile-busy spinner)"
+                      },
+                      {
+                          "module":  "shell/layers",
+                          "name":  "setBase",
+                          "kind":  "action",
+                          "description":  "Add the new base first, then fade the old one out (280ms). Labels for gmrt/bluetint/sat. Detail overlay reliefhi (multiply) for gmrt or blueshade (overlay + brightness(.70) contrast(6)) for bluetint. Forces ENC on for the relief bases. Then updateEncBlend, updateChartFilter, persist."
+                      },
+                      {
+                          "module":  "shell/layers",
+                          "name":  "setOverlay",
+                          "kind":  "action",
+                          "description":  "setOverlay(\u0027enc\u0027|\u0027seamark\u0027, on): ENC at zIndex 5, others at 6; fade-out removal; persist; ENC blend refresh"
+                      },
+                      {
+                          "module":  "shell/layers",
+                          "name":  "setDataOverlay",
+                          "kind":  "action",
+                          "description":  "setDataOverlay(name in wind|sst|rain|fish|reefs|mpa, on, source). Calls windOverlayEnable/sstEnable/rainEnable/fishEnable/reefsSetVisible and honours the module\u0027s offline veto (persists the vetoed value only for user toggles). Replaces the checkbox+dispatchEvent(\u0027change\u0027) calls in assistant.js:1349 and weather.js:105, and the DOM unchecks in sst.js:44, rain.js:19 and reefs.js:154."
+                      },
+                      {
+                          "module":  "shell/layers",
+                          "name":  "getActiveLayerIds",
+                          "kind":  "query",
+                          "description":  "Replaces download.js:19-27 DOM reads; must reproduce its exact list (labels only for gmrt/sat, reliefhi for gmrt, enc/seamark if on, no blueshade)"
+                      },
+                      {
+                          "module":  "shell/layers",
+                          "name":  "updateChartFilter",
+                          "kind":  "action",
+                          "description":  "Re-apply the BlueTopo LUT filter from the CSS vars --chart-lut/--chart-trim and the blueshade filter. Exposed for a future data-lume day/dusk/night switch."
+                      },
+                      {
+                          "module":  "shell/device",
+                          "name":  "device",
+                          "kind":  "state",
+                          "description":  "{wakeEnabled, wakeStatusText (WakeLock.renderStatus truth), keepAliveEnabled, keepAliveStatusText}"
+                      },
+                      {
+                          "module":  "shell/device",
+                          "name":  "setWakeEnabled / setKeepAliveEnabled",
+                          "kind":  "action",
+                          "description":  "WakeLock.setEnabled(on) (fishapp.wake) / awakeSetEnabled(on) (fishapp.keepalive)"
+                      },
+                      {
+                          "module":  "shell/follow",
+                          "name":  "follow",
+                          "kind":  "state",
+                          "description":  "Mirror of GPS.follow; setFollow (gps.js) must notify"
+                      },
+                      {
+                          "module":  "shell/follow",
+                          "name":  "toggleFollowByUser",
+                          "kind":  "action",
+                          "description":  "â—‰ button: toggle follow; an explicit OFF sets _followOffByUser so it is never auto-reverted; clears the refollow timer"
+                      },
+                      {
+                          "module":  "shell/follow",
+                          "name":  "onDragStart / onZoomStart",
+                          "kind":  "action",
+                          "description":  "Map listeners. A drag turns follow off and arms the 45s refollow; a zoom arms the refollow only if !GPS._programmaticMove. The refollow fires only if follow is off, not user-disabled, and a fix exists."
+                      },
+                      {
+                          "module":  "shell/map",
+                          "name":  "zoomIn / zoomOut / markHere",
+                          "kind":  "action",
+                          "description":  "map.zoomIn/zoomOut; markHere opens the spot modal at GPS.lastLatLng or the map centre. Long-press (contextmenu) opens the spot modal at the pressed point. A tap goes to navHandleClick, else inspectAt."
+                      },
+                      {
+                          "module":  "shell/boot",
+                          "name":  "boot",
+                          "kind":  "state",
+                          "description":  "{status:\u0027Starting upâ€¦\u0027|\u0027Opening chartsâ€¦\u0027|\u0027Startup problem\u0027|\u0027Getting your locationâ€¦\u0027, done, error}"
+                      },
+                      {
+                          "module":  "shell/boot",
+                          "name":  "bootEngine",
+                          "kind":  "action",
+                          "description":  "Run-once bootstrap in Â§7.2 order: openDB â†’ loadTileKeys â†’ migration â†’ map â†’ layers â†’ modules â†’ finally gpsStart, bootDone, SW. Guard against React StrictMode double-invocation."
+                      },
+                      {
+                          "module":  "shell/net",
+                          "name":  "online",
+                          "kind":  "state",
+                          "description":  "navigator.onLine via online/offline events; drives the OFFLINE badge"
+                      },
+                      {
+                          "module":  "shell/toast",
+                          "name":  "toast",
+                          "kind":  "action",
+                          "description":  "toast(msg): single slot, 3000ms, last writer wins (keep window.toast for legacy callers)"
+                      },
+                      {
+                          "module":  "shell/toast",
+                          "name":  "toastState",
+                          "kind":  "state",
+                          "description":  "{msg, visible}"
+                      },
+                      {
+                          "module":  "shell/emergency",
+                          "name":  "emergencyContact",
+                          "kind":  "state",
+                          "description":  "{name, number}|null from localStorage fishapp.emgcontact"
+                      },
+                      {
+                          "module":  "shell/emergency",
+                          "name":  "copyEmergencyCoords / textEmergencyPosition / setEmergencyContact",
+                          "kind":  "action",
+                          "description":  "Copy \u0027lat5, lng5\u0027 (toast fallback); navigate to sms:\u003cnumber\u003e?body=\u003cencoded exact body\u003e; save the contact (name trimmed, number stripped to [\\d+]; cancel aborts)"
+                      },
+                      {
+                          "module":  "shell/sw",
+                          "name":  "build",
+                          "kind":  "state",
+                          "description":  "{app:\u0027v93\u0027, sw: cache suffix|null, label:\u0027build v93\u0027 | \u0027build v93 Â· update ready (vNN) â€” close and reopen\u0027}"
+                      },
+                      {
+                          "module":  "shell/sw",
+                          "name":  "update",
+                          "kind":  "state",
+                          "description":  "{pending:boolean}; set when a controllerchange arrives while busy (Goto.active, Tracks.recording, Nav.anchor.watching, Voice.on/_wantOn)"
+                      },
+                      {
+                          "module":  "shell/sw",
+                          "name":  "applyPendingUpdate",
+                          "kind":  "action",
+                          "description":  "Reload iff pending \u0026\u0026 !alreadyReloaded \u0026\u0026 !busy. Called on visibilityâ†’visible and by goto/tracks/voice stops."
+                      },
+                      {
+                          "module":  "shell/sw",
+                          "name":  "sw:update-ready / sw:version",
+                          "kind":  "event",
+                          "description":  "Update deferred (toast \u0027â¬†ï¸ Update ready â€” applies when you stop\u0027) / version reply from the SW"
+                      },
+                      {
+                          "module":  "shell/refresh",
+                          "name":  "refreshOpenPanels",
+                          "kind":  "action",
+                          "description":  "10-minute tick: if visible and online, reload the open weather panel (loadNow24, plus loadForecast10 if loaded) and the open tides panel (loadTidesTimes); separate 10-minute watchCheck()"
+                      },
+                      {
+                          "module":  "shell/html",
+                          "name":  "LoadingRow / StateBox (+ loadingHTML/stateHTML strings)",
+                          "kind":  "query",
+                          "description":  "Shared loading/empty/error vocabulary with identical markup and classes. The string versions stay on window because their inline onclick calls window.loadNow24/loadForecast10/loadTidesTimes."
+                      }
+                  ],
+    "crossDeps":  [
+                      "app.js requires db.js: openDB (awaited at boot), loadTileKeys, deleteTilesByPrefix",
+                      "app.js requires tiles.js: makeLayer (LAYERS: ocean/sat/street/gmrt/bluetint/blueshade/reliefhi/labels/enc/seamark)",
+                      "app.js uses gps.js: GPS.follow/lastLatLng/_programmaticMove, setFollow, gpsStart, formatCoord, WakeLock",
+                      "app.js uses spots.js: openSpotModal, saveSpotFromModal, closeSpotModal, renderSpotsList, exportData, importData, spotsInit",
+                      "app.js uses tracks.js: trackToggle, renderTracksList, Tracks.recording",
+                      "app.js uses weather.js: wxInit, windOverlayEnable, windLoopToggle, windScrub, loadWeatherPanel, loadNow24, loadForecast10, WX._fc10loaded",
+                      "app.js uses inspect.js: inspectAt; nav.js: navInit, navHandleClick, navSetMode, routeUndo/Clear/Start/Stats, anchorToggle/DismissAlarm/RadiusChanged/Restore, updateAnchorUi, tripToggle/Reset, updateTripUi, Nav.anchor.watching",
+                      "app.js uses reefs.js: reefsInit, reefsSetVisible, renderReefsList; sst.js: sstEnable, sstTogglePlay, sstSetPalette, SST.palette; fish.js: fishInit, fishEnable; rain.js: rainEnable, rainTogglePlay, rainScrub",
+                      "app.js uses tides.js: tidesInit, loadTidesTimes; bite.js: renderBiteWindows, watchCheck; catch.js: catchInit, renderCatchList, openCatchModal, saveCatch, closeCatchModal, onCatchPhoto",
+                      "app.js uses awake.js: Awake.enabled, awakeSetEnabled; goto.js: gotoArrive, gotoCancel, renderTripsList, Goto.active",
+                      "app.js uses knots.js renderKnots, fish-id.js renderFishId, areadata.js areaDataInit, assistant.js asstInit/asstOnOpen, voice.js voiceToggle/voiceInit/Voice.on/_wantOn",
+                      "app.js uses motor.js: Motor.connected/armed, motorInit, motorOnOpen, motorConnect/Disconnect, motorCopyLog, motorArm/Disarm/Stop, motorSaveUuids, motorAddFrame, motorRecordToggle, motorMarkEvent, motorExportSession",
+                      "app.js uses download.js: DL.cancelled, startDownload, updateEstimate, renderAreasList, updateStorageInfo",
+                      "Others use window._map (18 files), toast (16 files), readJSON (bite, motor, tides, weather), loadingHTML (bite, tides, weather), stateHTML (weather, tides)",
+                      "closePanels is called by catch.js:307, goto.js:299, download.js:276, nav.js:64, spots.js:131, reefs.js:152, tracks.js:109, weather.js:213, voice.js:78; togglePanel by voice.js:115 and 351",
+                      "gps.js:143 calls window.updateEmergency on each fix while #panel-emergency is visible",
+                      "goto.js:248, tracks.js:38/52 and voice.js:334 call window.applyPendingUpdate (guarded)",
+                      "motor.js:748 reads the bare global APP_BUILD and its log text references the \u0027update ready\u0027 build label",
+                      "gps.js:173 toggles #btn-follow.active; voice.js toggles #btn-voice classes and the .tb-lbl text; tracks.js toggles #btn-track.recording",
+                      "assistant.js:1349 and weather.js:105-106 set ovl-* .checked and dispatch synthetic \u0027change\u0027 events that rely on app.js listeners; sst.js:44 and rain.js:19 uncheck their boxes offline; reefs.js:154-156 checks #ovl-reefs without saving prefs",
+                      "download.js:19-27 reads input[name=base]:checked, #ovl-enc and #ovl-seamark from the DOM to choose the layers to download",
+                      "weather.js:213-217 showAreaForecast opens #panel-weather directly, bypassing togglePanel (no syncTabs, no clamp)",
+                      "awake.js uses navigator.serviceWorker.ready.showNotification, but sw.js has no notificationclick handler",
+                      "The CSS vars --chart-lut/--chart-trim (style.css:3-5, data-lume) feed updateChartFilter; data-lume and data-relief are never set by any code"
+                  ],
+    "safetyCritical":  [
+                           "Fetch deadline wrapper: every fetch without its own signal aborts at 30s (or timeoutMs) with Error(\u0027timed out after Ns\u0027). It must be installed before any module fetches (app.js:19-41). The timer stops at response headers, so body reads are unbounded.",
+                           "Boot never bricks: the migration flag is written before the non-awaited tile sweep (app.js:55-61); readJSON deletes corrupt keys (643-648); a stale base falls back to \u0027ocean\u0027 (200-203); gpsStart, bootDone and SW registration run in finally even after an init error (585-637).",
+                           "anchorRestore (app.js:540) sits inside the single try and is skipped if any earlier init step throws, so the watch is silently lost after a reload. The port should run it (and GPS start) as independent guarded steps.",
+                           "SW update deferral: never reload during Goto.active, Tracks.recording, Nav.anchor.watching or Voice.on/_wantOn. Defer, never discard; apply on visibilityâ†’visible and on goto/track/voice stop (app.js:600-636). anchorRaise does NOT call applyPendingUpdate. Motor.armed is not in the busy list; a reload fires pagehide â†’ motorStop (motor.js:575), so pagehide must keep working.",
+                           "Follow/refollow: a drag turns follow off and arms a 45s refollow; only non-programmatic zooms arm it (GPS._programmaticMove, 800ms window via mapProgrammatic); an explicit â—‰ OFF is never auto-reverted (app.js:338-362).",
+                           "Chart LUT direction: deep is pale and shallow is saturated; the night LUT inverts luminance but keeps shallow brightest. Never use CSS invert(). Copy the feColorMatrix, gamma and table values byte for byte (index.html:40-80). The SVG must live in the same document, not display:none, and no \u003cbase href\u003e may be introduced.",
+                           "The CSS filter goes only on the Leaflet tile container, never on #map or an ancestor of fixed UI. filter/transform on an ancestor would break all position:fixed elements, including the anchor alarm overlay (app.js:167-170).",
+                           "No fade-in on layers (a stalled animation would leave a blank chart, app.js:107-110). The sheet animation is transform-only, never opacity or translate (style.css:190-206).",
+                           "Panel height clamp against the measured #topbar bottom + 8, min 160px, re-run on resize and orientationchange (+250ms), so the âœ• can\u0027t be trapped under the iPhone status bar (app.js:292-314).",
+                           "Emergency: formatCoord rounds before splitting (never 60.000\u0027). Exact SMS body/URL \u0027sms:\u003cnumber\u003e?body=\u0027 with 5-dp decimals and a Google Maps link. Copy falls back to a toast. There is no fix-age warning on the emergency position (flag, don\u0027t silently change). prompt cancel aborts. All emergency static copy (satellite SOS steps, VHF 16, 911, MAYDAY script, PAN-PAN) verbatim.",
+                           "Module veto on overlay toggles: app.js reads e.target.checked AFTER sstEnable/rainEnable, so the offline uncheck persists false; at boot offline the pref stays true (app.js:254-270).",
+                           "Relief bases (gmrt/bluetint) force ENC on, including at every boot (app.js:155-159, 204-208). ENC blend is multiply only on gmrt (code disagrees with the comment) â€” preserve the code.",
+                           "Motor buttons must stay synchronous user-gesture handlers (Web Bluetooth transient activation); arming is only ever reachable by a deliberate tap (app.js:544-559).",
+                           "SW: the CRITICAL set is filtered to SHELL so a typo can\u0027t brick install; the rest are allowSettled with one retry; cache:\u0027reload\u0027; non-GET never cached; cross-origin not intercepted; offline navigation falls back to ./index.html (sw.js).",
+                           "APP_BUILD must equal the CACHE suffix; navigator.serviceWorker.startMessages() is required or the version reply never arrives (app.js:399-402).",
+                           "Wake lock and keep-alive status text must report actual state (gps.js:225-241, awake.js); React must not render optimistic \u0027On\u0027 text.",
+                           "Honesty copy that must survive verbatim: the iPhone screen-lock/GPS hint (index.html:174-178), the anchor alarm hint (341), the motor interlock disclaimer and \u0027foot pedal and the real remote are the only true kill\u0027 (380-384), and the API key \u0027stored only on this device\u0027 (273)."
+                       ],
+    "risks":  [
+                  "React must keep every panel, modal and banner mounted (hidden via class). Legacy modules call getElementById(...).classList/innerHTML on hidden panels and would throw on null.",
+                  "Containers filled by legacy modules (spots-list, catch-list, motor-log, wx-current, etc.) must be rendered by React with no children, or reconciliation will throw removeChild errors after innerHTML replacement.",
+                  "Legacy modules toggle classes on #btn-follow, #btn-voice, #btn-track, banners, #btn-anchor, nav tool buttons and the motor arm button. A React className re-render would wipe them unless the engine state owns those classes.",
+                  "React 18 StrictMode double-invokes effects; a second L.map(\u0027map\u0027) throws \u0027Map container is already initialized\u0027. Boot must be guarded to run once, and #map must never unmount.",
+                  "Synthetic dispatchEvent(\u0027change\u0027) on React-controlled checkboxes does not fire React onChange. assistant.js:1349, weather.js:105-106, sst.js:44, rain.js:19 and reefs.js:154-156 must be rewired to an engine setDataOverlay action.",
+                  "download.js derives its layers from DOM radios and checkboxes; it must be rewired to engine layer state while reproducing its exact (bluetint-excluding) list.",
+                  "openDB has no onblocked handler: a blocked upgrade hangs the boot forever (splash stuck, no GPS, no SW). An openDB rejection leaves the app with no map at all.",
+                  "Long-press to mark depends on Leaflet tapHold, which needs \u0027safari\u0027 in the UA. iOS standalone and a stock WKWebView UA may lack it, so long-press would do nothing. Verify on device (fix via the shell\u0027s applicationNameForUserAgent or tapHold:true, as a deliberate flagged change).",
+                  "Native fishapp:// shell: no service worker (no updates, label stays \u0027build v93\u0027); prompt/confirm need WKUIDelegate or they return null/false (the emergency contact can\u0027t be set, deletes silently refuse); sms:/tel: need navigation delegate handling; storage is separate from the GitHub Pages origin.",
+                  "Vite build: must keep base \u0027./\u0027 (GitHub Pages /fishapp/ and the custom scheme). sw.js SHELL/CRITICAL must be generated from hashed assets, and CACHE/APP_BUILD derived from one injected version, bumped every release.",
+                  "The toast is last-writer-wins; boot toasts clobber each other (the hands-free resume notice is overwritten by the anchor restore notice). Adding a queue changes behaviour â€” flag it.",
+                  "Reefs race: reefsInit().then applies the boot-time reefPrefs, overriding a toggle made before the data loads; reefs.js âžœ ticks the box without persisting.",
+                  "The README claims the ENC-off choice persists on relief bases, but the code re-forces ENC on every boot. The ENC blend comment says multiply for both relief bases but the code only does it for gmrt. Owner decisions are needed; the port should keep the code behaviour.",
+                  "No back/escape handling exists. Introducing router history would change Android back behaviour; Escape-to-close would be a new feature.",
+                  "The fetch timeout clears at response headers, so slow body reads are unbounded; a stricter port would change behaviour.",
+                  "sw.js has no notificationclick handler, so tapping an anchor/GPS alarm notification won\u0027t focus the app.",
+                  "weather.js showAreaForecast opens the weather panel without togglePanel (no tab highlight, no clamp). A unified React openPanel state would change this, benignly."
+              ],
+    "topLevelSideEffects":  [
+                                "app.js:19-41 installFetchTimeout IIFE replaces window.fetch with the 30s-deadline wrapper at script evaluation",
+                                "app.js:43 async init() IIFE starts immediately at script evaluation (app.js is the last script in index.html)",
+                                "app.js:73 window._map = map (after openDB resolves)",
+                                "app.js:77 map.on(\u0027moveend\u0027) debounced (600ms) save to localStorage fishapp.view, and updateEstimate if Download is open",
+                                "app.js:59-60 sets fishapp.reliefSource=\u0027gebco\u0027 and starts the non-awaited deleteTilesByPrefix(\u0027gmrt/\u0027)",
+                                "app.js:206-208 creates the initial base/enc/seamark Leaflet tile layers and persists prefs",
+                                "app.js:226, 232, 242, 521-523, 578-579 start module inits: reefsInit, wxInit, fishInit, tidesInit, catchInit, navInit, spotsInit, renderTracksList",
+                                "app.js:234, 244, 253, 265 enable wind/fish/sst/rain overlays at boot if the prefs say so",
+                                "app.js:313-314 window resize and orientationchange listeners â†’ clampOpenPanel",
+                                "app.js:358, 362, 368, 373 map listeners dragstart, zoomstart, contextmenu, click",
+                                "app.js:392-405 navigator.serviceWorker \u0027message\u0027 listener, startMessages(), ready.then(postMessage(\u0027version\u0027))",
+                                "app.js:408-410 asstInit(), voiceInit(), areaDataInit()",
+                                "app.js:497-506 setInterval every 10 min refreshing an open Weather/Tides panel; app.js:510 setInterval every 10 min calling watchCheck()",
+                                "app.js:516-517 window online/offline listeners",
+                                "app.js:540 anchorRestore() (may restore the anchor watch, add a circle and marker, add one-shot gesture listeners and a toast)",
+                                "app.js:560 motorInit(); app.js:565-566 WakeLock.setEnabled + acquire; app.js:573 awakeSetEnabled",
+                                "app.js:589 gpsStart(map) in finally; app.js:590 bootDone()",
+                                "app.js:597 navigator.serviceWorker.register(\u0027./sw.js\u0027, {updateViaCache:\u0027none\u0027}).then(reg.update())",
+                                "app.js:617 defines window.applyPendingUpdate; app.js:622 controllerchange listener; app.js:633 document visibilitychange listener",
+                                "sw.js:60, 78, 88, 92 register the install, activate, message and fetch listeners in SW scope"
+                            ]
+}

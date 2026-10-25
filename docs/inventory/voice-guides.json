@@ -1,0 +1,236 @@
+﻿{
+    "key":  "voice-guides",
+    "specFile":  "C:/Users/jbitt/AppData/Local/Temp/claude/C--Users-jbitt-OneDrive-Desktop-Carrots/089709da-890a-4c8f-9bbf-0a347ea15c9c/scratchpad/fishapp-concepts/inventory/voice-guides.md",
+    "surfaces":  [
+                     {
+                         "name":  "Hey Fish voice tab button",
+                         "kind":  "hud",
+                         "ownerModule":  "voice.js",
+                         "domIds":  [
+                                        "btn-voice"
+                                    ],
+                         "summary":  "Raised 3rd tab-bar button (index.html:129). Its .tb-lbl reads \u0027Hey Fish\u0027 or \u0027Listening\u0027. States: idle (green), listening (Voice.on: red and pulsing), awake (9 s command window: blue and still pulsing), unsupported (class has no CSS). It is never .active. There is NO voice overlay; voice state shows only on this button and through toasts, speech and First Mate chat bubbles."
+                     },
+                     {
+                         "name":  "Voice toasts",
+                         "kind":  "toast",
+                         "ownerModule":  "voice.js",
+                         "domIds":  [
+                                        "toast"
+                                    ],
+                         "summary":  "Six verbatim toasts: unsupported (\u0027ðŸŽ¤ This browser can\u0027t do always-on voice â€” use the mic in First Mate to talk\u0027, which also toggles panel-assistant), \u0027ðŸŽ¤ Hands-free off\u0027, \u0027ðŸŽ¤ Listening â€” say â€œHey Fishâ€ then your command\u0027, \u0027ðŸŽ¤ Microphone blocked â€” enable mic access to use Hey Fish\u0027, \u0027ðŸŽ¤ Tap anywhere to resume hands-free\u0027, \u0027ðŸŽ¤ Hands-free resumed â€” say â€œHey Fishâ€\u0027."
+                     },
+                     {
+                         "name":  "Voice spoken replies",
+                         "kind":  "other",
+                         "ownerModule":  "voice.js",
+                         "summary":  "TTS replies for 22 command rules plus the fallthrough, all with verbatim copy (Â§4.1). Routes through asstSpeak, which is silent when First Mate speech is muted (the default). bite.js weather alerts are also spoken through voiceSay while Voice.on."
+                     },
+                     {
+                         "name":  "First Mate fallthrough",
+                         "kind":  "panel-section",
+                         "ownerModule":  "assistant.js",
+                         "domIds":  [
+                                        "asst-messages"
+                                    ],
+                         "summary":  "Unmatched commands, and questions that would otherwise only open a panel, go to asstSend with speech forced on for one reply. The bubbles appear in the First Mate chat even when the panel is closed. The query is silently dropped if First Mate is already streaming."
+                     },
+                     {
+                         "name":  "Guides panel",
+                         "kind":  "panel",
+                         "ownerModule":  "app.js (index.html) + knots.js + fish-id.js",
+                         "domIds":  [
+                                        "panel-knots",
+                                        "tab-knots",
+                                        "tab-fishid",
+                                        "knots-list",
+                                        "fishid-list",
+                                        "btn-knots"
+                                    ],
+                         "summary":  "Opened from the More tile \u0027ðŸ“– Guides\u0027 or by voice (\u0027Guides.\u0027). Header \u0027Guides\u0027. Tabs \u0027ðŸª¢ Knots\u0027 (default) and \u0027ðŸŸ Fish \u0026 Limits\u0027; the selected tab persists for the session. Content is built once on first open. Static and offline, with no loading, empty or error states."
+                     },
+                     {
+                         "name":  "Knots accordion",
+                         "kind":  "panel-section",
+                         "ownerModule":  "knots.js / knot-diagrams.js",
+                         "domIds":  [
+                                        "knots-list",
+                                        "knot-body-{i}"
+                                    ],
+                         "summary":  "Hint \u0027Tap a knot for illustrated steps. Works offline.\u0027 13 knots; several can be open at once and expansion persists for the session. Header \u0027ðŸª¢ {name}\u0027 + use. Body: level, 3-4 SVG diagram frames, each with a numbered caption (the text steps are never shown because every knot has art), then a \u0027ðŸ’¡ tip\u0027."
+                     },
+                     {
+                         "name":  "Fish \u0026 Limits accordion with legal disclaimer",
+                         "kind":  "panel-section",
+                         "ownerModule":  "fish-id.js",
+                         "domIds":  [
+                                        "fishid-list",
+                                        "fi-body-{i}"
+                                    ],
+                         "summary":  "A pinned amber .reg-warn sits first: \u0027âš ï¸ Limits change often and vary by area \u0026 season. This is a general reference only â€” tap for official CDFW regulations before keeping any fish.\u0027 It links to CDFW_URL in a new tab. Then 16 species: head \u0027{emoji} {name}\u0027 / \u0027{size} Â· {bag}\u0027; body: ID text, \u0027ðŸ“ size\u0027 \u0027ðŸª£ bag\u0027, and a \u0027ðŸ’¡ note\u0027 carrying legal cautions."
+                     }
+                 ],
+    "engineApi":  [
+                      {
+                          "module":  "voice",
+                          "name":  "supported",
+                          "kind":  "state",
+                          "description":  "Feature-detected once at load: !!(SpeechRecognition||webkitSpeechRecognition). Gates the toggle (unsupported â†’ toast + toggle the First Mate panel)."
+                      },
+                      {
+                          "module":  "voice",
+                          "name":  "on",
+                          "kind":  "state",
+                          "description":  "Mic session believed live. Drives the red/pulse styling and the \u0027Listening\u0027 label. Set false while the app is hidden. bite.js speaks alerts instead of toasting while on."
+                      },
+                      {
+                          "module":  "voice",
+                          "name":  "wantOn",
+                          "kind":  "state",
+                          "description":  "User intent; survives backgrounding. The SW update gate uses on||wantOn."
+                      },
+                      {
+                          "module":  "voice",
+                          "name":  "awake",
+                          "kind":  "state",
+                          "description":  "Wake word heard; a 9 s command window (blue button)."
+                      },
+                      {
+                          "module":  "voice",
+                          "name":  "resumePending",
+                          "kind":  "state",
+                          "description":  "Optional, new: localStorage fishapp.voice===\u0027on\u0027 and waiting for the first tap. The old UI showed only a toast."
+                      },
+                      {
+                          "module":  "voice",
+                          "name":  "init",
+                          "kind":  "action",
+                          "description":  "Call once after the assistant init. Sets the initial UI, and when fishapp.voice===\u0027on\u0027 registers a one-shot capture-phase pointerdown resume (skipping taps on the mic button) and toasts \u0027Tap anywhere to resume hands-free\u0027."
+                      },
+                      {
+                          "module":  "voice",
+                          "name":  "toggle",
+                          "kind":  "action",
+                          "description":  "Mic button handler. Must run synchronously inside the user gesture: unlockAudio, requestWakeLock, start the recogniser, persist on/off, toast, and speak \u0027Hands free on. Say hey fish when you need me.\u0027"
+                      },
+                      {
+                          "module":  "voice",
+                          "name":  "stop",
+                          "kind":  "action",
+                          "description":  "Full stop: wantOn=false, on=false, abort the recogniser, clear timers, refresh the UI, then applyPendingUpdate(). Does not write localStorage."
+                      },
+                      {
+                          "module":  "voice",
+                          "name":  "say",
+                          "kind":  "action",
+                          "description":  "Speak text and set the echo guard (_muteUntil = now+1200+len*60; speaking for 600 ms). Used by the bite.js weather watch."
+                      },
+                      {
+                          "module":  "voice",
+                          "name":  "extendMuteUntil / setMuteUntil",
+                          "kind":  "action",
+                          "description":  "Replaces assistant.js\u0027s direct writes to Voice._muteUntil: max() extension for the device TTS estimate; exact set to the real cloud audio duration+700 ms and to now+700 on device onend."
+                      },
+                      {
+                          "module":  "voice",
+                          "name":  "isBusy",
+                          "kind":  "query",
+                          "description":  "on||wantOn. The service-worker update deferral must not reload while true."
+                      },
+                      {
+                          "module":  "voice",
+                          "name":  "handleTranscript / run",
+                          "kind":  "action",
+                          "description":  "Test hooks: wake-word gate, then ordered command dispatch with question routing and the First Mate fallthrough."
+                      },
+                      {
+                          "module":  "voice",
+                          "name":  "host.panels/toast/assistant.send/spots.create/nav/tracks/goto/map",
+                          "kind":  "event",
+                          "description":  "Side effects emitted through an injected VoiceHost interface (it replaces the window[fnName] and typeof-global lookups)."
+                      },
+                      {
+                          "module":  "guides",
+                          "name":  "KNOTS / KnotArt",
+                          "kind":  "query",
+                          "description":  "Static knot data and per-knot SVG frame strings, rendered with dangerouslySetInnerHTML. Also used by the First Mate knot answers (steps)."
+                      },
+                      {
+                          "module":  "guides",
+                          "name":  "FISH_ID / CDFW_URL",
+                          "kind":  "query",
+                          "description":  "Static species, size and bag data plus the official regs URL. Also used by First Mate regs answers and the online prompt."
+                      },
+                      {
+                          "module":  "guides",
+                          "name":  "guidesTab / expandedKnots / expandedFish",
+                          "kind":  "state",
+                          "description":  "Session-lifetime UI state (selected tab defaults to knots; expanded sets default empty) so the old \u0027built once\u0027 persistence survives panel close and reopen."
+                      },
+                      {
+                          "module":  "knowledge",
+                          "name":  "fishTipsFor / areaTipsFor / techniqueTipsFor",
+                          "kind":  "query",
+                          "description":  "Order-dependent matchers over FISH_TIPS, AREA_TIPS and TECHNIQUE_TIPS, used by the assistant engine (including skipping geocoding for species names)."
+                      }
+                  ],
+    "crossDeps":  [
+                      "voice.js uses GPS.lastLatLng, GPS.last.coords.speed, gpsIsStale, formatCoord, setFollow, requestWakeLock (gps.js)",
+                      "voice.js uses unlockAudio, anchorDrop, Nav.anchor.watching/radiusFt, and window.routeStart / window.anchorRaise via window[fnName] (nav.js)",
+                      "voice.js uses window.gotoCancel via window[fnName] (goto.js; it shows a blocking confirm())",
+                      "voice.js uses trackToggle and Tracks.recording (tracks.js)",
+                      "voice.js uses biteWindows and biteSpokenSummary (bite.js)",
+                      "voice.js uses asstCreateSpot, asstSpeak (gated by ASST.speak), asstSend, asstUpdateSpeakBtn and ASST.speak (assistant.js)",
+                      "voice.js uses togglePanel, closePanels, toast, applyPendingUpdate and window._map (app.js)",
+                      "app.js:376 wires #btn-voice click â†’ voiceToggle; app.js:409 calls voiceInit; app.js:612 reads Voice.on/_wantOn for the SW update deferral",
+                      "assistant.js:1434-1437 and 1461-1464 write Voice._muteUntil (echo guard for device and cloud TTS)",
+                      "bite.js:521 reads Voice.on and calls voiceSay(alert.msg) instead of toast",
+                      "knots.js uses KnotArt (knot-diagrams.js)",
+                      "app.js:329 calls renderKnots() and renderFishId() on the first open of panel-knots; app.js:421-425 owns the Guides tab switching",
+                      "assistant.js uses KNOTS (794-813), FISH_ID (202-204, 780-792), FISH_TIPS/AREA_TIPS/TECHNIQUE_TIPS (209-212), fishTipsFor (629, 1034), areaTipsFor (493, 630) and techniqueTipsFor (631)"
+                  ],
+    "safetyCritical":  [
+                           "voice.js:126-133 Voice mark spot refuses without a GPS fix or with a stale (\u003e60 s) fix and never falls back to the map centre (unlike the ðŸ“Œ button at app.js:365).",
+                           "voice.js:44-47 Mark/save rule needs an object noun; \u0027save my track\u0027 and \u0027mark the route\u0027 must not drop a waypoint.",
+                           "voice.js:93-97 The speed rule must not match \u0027wind speed\u0027; only boat speed is answered with SOG.",
+                           "voice.js:53-68 Anchor and track replies report the real post-action state (Nav.anchor.watching, Tracks.recording), not intent.",
+                           "voice.js:69-74 Voice zoom uses {animate:false}.",
+                           "voice.js:200-215, 222 Questions skip only the panel rules; \u0027near me/here/us/the boat\u0027 counts as self; \u0027in 30 feet\u0027 is not elsewhere.",
+                           "voice.js:156-170, 268, 238-239 + assistant.js:1434-1437, 1461-1464 Echo guard: _muteUntil and speaking suppress results; the fallthrough never shortens the guard. Without it the app answers its own speech.",
+                           "voice.js:232-246 Speech is forced for exactly one First Mate reply, then ASST.speak and the ðŸ”‡/ðŸ”Š button are restored.",
+                           "voice.js:261-302 Every recogniser handler ignores stale instances (Voice.rec !== r), preventing two live mics and double-executed commands.",
+                           "voice.js:281-286 not-allowed/service-not-allowed is terminal: stop, persist \u0027off\u0027, toast.",
+                           "voice.js:294-297 No restart while document.hidden.",
+                           "voice.js:312-316 _fails is not reset on start; only on a real final result or user action (prevents a respin of ~2.5 per second offshore).",
+                           "voice.js:383-388 Hidden sets Voice.on=false so the UI does not claim \u0027Listening\u0027 and bite.js toasts alerts instead of speaking to a dead mic.",
+                           "app.js:606-612 + voice.js:333-334 SW updates are deferred while on||wantOn; voiceStop applies the pending update.",
+                           "voice.js:400-405 Resume-on-first-tap ignores taps on #btn-voice (otherwise a double toggle).",
+                           "voice.js:34 The wake word excludes a bare \u0027a fish\u0027.",
+                           "voice.js:363-364, 408-409 unlockAudio (also primes the anchor-alarm AudioContext) and the wake lock must run inside the user gesture.",
+                           "fish-id.js:48-49 The Fish \u0026 Limits CDFW disclaimer and official link must stay first and always visible, verbatim; species notes carry legal cautions (rockfish depth closures, WSB seasonal 1-fish window, HMS federal rules).",
+                           "assistant.js:1416 + bite.js:521 EXISTING HAZARD: voiceSay goes through asstSpeak, which is silent when First Mate speech is muted (the default), so command confirmations AND weather alerts while Voice.on are neither spoken nor toasted. Needs an owner decision.",
+                           "voice.js:141-153 \u0027where am I\u0027 and speed readouts do not check gpsIsStale and speak a stale position as current; keep the formatCoord VHF format."
+                       ],
+    "risks":  [
+                  "voiceCall uses window[fnName]; in ES modules routeStart, gotoCancel and anchorRaise are not on window, so a naive port makes those voice commands reply \u0027I can\u0027t do that right now.\u0027 Use an injected VoiceHost.",
+                  "voiceCall reports success whenever the function does not throw: \u0027Starting the route.\u0027 with fewer than 2 points, \u0027Navigation stopped.\u0027 even if the user cancels the confirm(), \u0027Anchor up.\u0027 with no watch. Preserve it, or fix with sign-off.",
+                  "The track voice rule is a pure toggle: \u0027start tracking\u0027 while recording stops it, \u0027stop track\u0027 while idle starts it, and \u0027Track saved.\u0027 is said even when a too-short track is discarded.",
+                  "\u0027when\u0027s the bite\u0027 is unreachable because voiceNorm turns the apostrophe into a space; \u0027fish id\u0027/\u0027limits\u0027 opens Guides on the last-used tab, not Fish \u0026 Limits.",
+                  "React StrictMode or effects could double-register the visibilitychange and capture-phase pointerdown listeners; keep them in a module-level singleton.",
+                  "If the mic button loses id=\u0027btn-voice\u0027 (or an equivalent guard), the relaunch resume plus the toggle double-fire turns voice off on the first tap.",
+                  "Calling voice.toggle from an effect or async boundary instead of synchronously in the click loses the iOS user-gesture unlock (mic, audio, anchor alarm sound).",
+                  "iOS WKWebView shell (fishapp:// scheme): SpeechRecognition may be absent or flaky; mic and speech-recognition usage strings are needed in Info.plist; target=_blank CDFW links need native handling to open externally; localStorage on the custom-scheme origin is separate from GitHub Pages (the fishapp.voice preference does not carry over). Not verifiable from the web repo.",
+                  "knot-diagrams L()/Tg() ignore width arguments (FG frame 2 and Non-Slip frame 2 render at width 4, not 3/3.5); a JSX rewrite must match the rendered output, not the apparent intent. Snapshot-test the strings.",
+                  "\u0027Surgeonâ€™s Knot\u0027 uses U+2019 in both KNOTS and KnotArt; normalising the apostrophe in one place silently drops its diagrams.",
+                  "fish-tips matchers are order-dependent with known mismatches (\u0027spotted sand bass\u0027 â†’ Barred Sand Bass; \u0027dropper\u0027 â†’ Carolina rig; generic aka words like \u0027cow\u0027 and \u0027goat\u0027 suppress geocoding of places in assistant.js:1034); reordering the data changes First Mate answers.",
+                  "localStorage reads and writes in voiceToggle/voiceInit are not try/caught; if storage throws, wantOn can be stuck true without a session (blocking SW updates).",
+                  "Expanded and collapsed state of the knots and fish accordions persists for the session only because the DOM is built once; React component-local state would reset it on panel close."
+              ],
+    "topLevelSideEffects":  [
+                                "voice.js:16-27 creates the Voice singleton; Voice.supported is feature-detected once at script load",
+                                "voice.js:372-390 registers a permanent document \u0027visibilitychange\u0027 listener at load (before app.js\u0027s own listener) that pauses or aborts the recogniser when hidden and restarts it when visible",
+                                "knot-diagrams.js:6-136 IIFE builds all KnotArt SVG strings at load (no DOM)",
+                                "knots.js, fish-id.js and fish-tips.js only define consts and functions (no side effects)",
+                                "voiceInit() (from app.js:409) may add a one-shot capture-phase document \u0027pointerdown\u0027 resume listener and toast when localStorage fishapp.voice===\u0027on\u0027"
+                            ]
+}

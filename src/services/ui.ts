@@ -10,7 +10,7 @@ import { useStore } from 'zustand';
 
 export type PanelId =
   | 'weather' | 'tides' | 'more' | 'layers' | 'spots' | 'download' | 'tools'
-  | 'guides' | 'emergency' | 'assistant' | 'motor';
+  | 'guides' | 'emergency' | 'assistant' | 'motor' | 'about';
 
 export type Detent = 'medium' | 'full';
 

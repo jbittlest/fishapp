@@ -1,0 +1,435 @@
+﻿{
+    "key":  "styles",
+    "specFile":  "C:/Users/jbitt/AppData/Local/Temp/claude/C--Users-jbitt-OneDrive-Desktop-Carrots/089709da-890a-4c8f-9bbf-0a347ea15c9c/scratchpad/fishapp-concepts/inventory/styles.md",
+    "surfaces":  [
+                     {
+                         "name":  "Boot splash",
+                         "kind":  "overlay",
+                         "domIds":  [
+                                        "boot",
+                                        "boot-status"
+                                    ],
+                         "ownerModule":  "app.js (bootStatus/bootDone)",
+                         "summary":  "z 9000 full-screen splash with bobbing logo, spinner and status text. .hide fades it over 0.35s; removed at 400ms. Fade is skipped under reduced motion."
+                     },
+                     {
+                         "name":  "Top status bar",
+                         "kind":  "hud",
+                         "domIds":  [
+                                        "topbar",
+                                        "gps-dot",
+                                        "gps-acc",
+                                        "tile-busy",
+                                        "stat-speed",
+                                        "stat-heading",
+                                        "stat-coords",
+                                        "offline-badge"
+                                    ],
+                         "ownerModule":  "gps.js / app.js",
+                         "summary":  "z 1000. GPS dot red (none) / green (\u003c=20m) / amber; NO GPS / GPS DENIED / Â±Nm; speed kn, heading Â°, DDM coords; OFFLINE badge; small spinner while tiles load. Tabular nums; safe-top padding."
+                     },
+                     {
+                         "name":  "Map control column + zoom keys",
+                         "kind":  "hud",
+                         "domIds":  [
+                                        "controls",
+                                        "btn-emergency",
+                                        "btn-follow",
+                                        "zoomctl",
+                                        "btn-zoomin",
+                                        "btn-zoomout"
+                                    ],
+                         "ownerModule":  "app.js / gps.js",
+                         "summary":  "54px .ctl buttons with safe-area offsets. SOS is always red (.ctl.emg); Follow is blue when .active."
+                     },
+                     {
+                         "name":  "Bottom tab bar",
+                         "kind":  "other",
+                         "domIds":  [
+                                        "tabbar",
+                                        "btn-weather",
+                                        "btn-tides",
+                                        "btn-voice",
+                                        "btn-mark",
+                                        "btn-more"
+                                    ],
+                         "ownerModule":  "app.js (syncTabs) / voice.js",
+                         "summary":  "z 2500, 62px + safe bottom. .active on Weather/Tides/More when their sheet is open. Raised voice button: idle green, .listening red pulse, .awake blue; label \u0027Hey Fish\u0027/\u0027Listening\u0027."
+                     },
+                     {
+                         "name":  "Bottom sheets (11 panels)",
+                         "kind":  "panel",
+                         "domIds":  [
+                                        "panel-more",
+                                        "panel-layers",
+                                        "panel-spots",
+                                        "panel-knots",
+                                        "panel-emergency",
+                                        "panel-assistant",
+                                        "panel-tides",
+                                        "panel-tools",
+                                        "panel-motor",
+                                        "panel-weather",
+                                        "panel-download"
+                                    ],
+                         "ownerModule":  "app.js (togglePanel/closePanels/clampPanelHeight)",
+                         "summary":  "z 2000. Sheets stop at the tab bar; max-height from 100dvh minus tab bar and top gap, then JS-clamped to topbar.bottom+8 (min 160). Sticky header keeps the âœ• reachable; scaleY(0.96) transform-only open animation; one open at a time. First Mate uses a fixed height with internal scroll."
+                     },
+                     {
+                         "name":  "Shared loading/state blocks",
+                         "kind":  "panel-section",
+                         "domIds":  [
+
+                                    ],
+                         "ownerModule":  "app.js (loadingHTML/stateHTML)",
+                         "summary":  ".load-row spinner + message; .state-box icon + message + \u0027â†» Retry\u0027 button whose inline onclick calls a global (loadNow24/loadForecast10/loadTidesTimes)."
+                     },
+                     {
+                         "name":  "Go To navigation banner",
+                         "kind":  "banner",
+                         "domIds":  [
+                                        "goto-banner",
+                                        "gb-name",
+                                        "gb-dist",
+                                        "gb-brg",
+                                        "gb-eta",
+                                        "gb-arrive",
+                                        "gb-cancel"
+                                    ],
+                         "ownerModule":  "goto.js",
+                         "summary":  "z 1500, top safe+52, 64px right gutter for the controls. Green when active; .arriving adds an olive/gold pulse; âœ“ Arrived and âœ• Cancel."
+                     },
+                     {
+                         "name":  "Watch banner",
+                         "kind":  "banner",
+                         "domIds":  [
+                                        "watch-banner",
+                                        "wb-what",
+                                        "wb-detail"
+                                    ],
+                         "ownerModule":  "awake.js",
+                         "summary":  "z 1499. Calm blue when healthy, amber .warn when the watch is degraded (no GPS fix / screen may sleep / keep-alive not running). Moves to top safe+128 when the Go To banner shows (sibling combinator). className is replaced wholesale."
+                     },
+                     {
+                         "name":  "Anchor drag alarm",
+                         "kind":  "overlay",
+                         "domIds":  [
+                                        "anchor-alarm",
+                                        "aa-dist",
+                                        "aa-dismiss"
+                                    ],
+                         "ownerModule":  "nav.js",
+                         "summary":  "z 5000 full-screen red overlay flashing via steps(1) every 0.4s (not suppressed by reduced motion). \u0027âš ï¸ ANCHOR DRAGGING\u0027, distance or \u0027NO GPS â€” the anchor watch cannot see you drift\u0027, Silence button."
+                     },
+                     {
+                         "name":  "Modals",
+                         "kind":  "modal",
+                         "domIds":  [
+                                        "modal-spot",
+                                        "modal-catch",
+                                        "catch-photo-preview"
+                                    ],
+                         "ownerModule":  "spots.js / catch.js",
+                         "summary":  "z 3000 dimmed backdrop, centred card max 380px; tapping the backdrop cancels. Not scrollable today."
+                     },
+                     {
+                         "name":  "Toast",
+                         "kind":  "toast",
+                         "domIds":  [
+                                        "toast"
+                                    ],
+                         "ownerModule":  "app.js (toast)",
+                         "summary":  "z 4000 pill above the tab bar, 3s auto-hide, last call wins, max 85vw."
+                     },
+                     {
+                         "name":  "SST legend",
+                         "kind":  "legend",
+                         "domIds":  [
+                                        "sst-legend",
+                                        "sst-date",
+                                        "sst-palette",
+                                        "sst-play"
+                                    ],
+                         "ownerModule":  "sst.js",
+                         "summary":  "z 1000 bottom-left, 148px. Gradient bar replaced inline per palette; Â°F range ends; play loop button text states."
+                     },
+                     {
+                         "name":  "Rain/wind loop bars",
+                         "kind":  "hud",
+                         "domIds":  [
+                                        "anim-controls",
+                                        "rain-bar",
+                                        "rain-play",
+                                        "rain-scrub",
+                                        "rain-time",
+                                        "wind-bar",
+                                        "wind-play",
+                                        "wind-scrub",
+                                        "wind-time"
+                                    ],
+                         "ownerModule":  "rain.js / weather.js",
+                         "summary":  "z 1000 bottom-centre, width min(90vw,400px). Play/pause, scrubber, time label. Overlaps the zoom-out key and SST legend at narrow widths."
+                     },
+                     {
+                         "name":  "Map chart layers (CSS filter/blend)",
+                         "kind":  "map-layer",
+                         "domIds":  [
+                                        "map"
+                                    ],
+                         "ownerModule":  "app.js (setBase/setOverlay/updateChartFilter/updateEncBlend) + tiles.js",
+                         "summary":  "Tile-pane order: base0 / reliefhi|blueshade1 / labels3 / rain4 / enc5 / seamark6. BlueTopo base filtered by the SVG LUT tokens; blueshade gets brightness(0.7) contrast(6) + overlay blend; enc multiply over GEBCO. data-relief=plain kill switch."
+                     },
+                     {
+                         "name":  "Leaflet popups \u0026 markers theming",
+                         "kind":  "popup",
+                         "domIds":  [
+
+                                    ],
+                         "ownerModule":  "inspect.js / reefs.js / spots.js / catch.js / fish.js / nav.js / goto.js / gps.js / weather.js",
+                         "summary":  "Dark popups (#12293e), 14px content, .ins-popup min-width 200, inline spinner for live values; divIcon classes (boat-icon, spot-icon/label, reef-icon, catch-icon, goto-pin, route-pt, route-leg); attribution dark theme (hidden under the tab bar)."
+                     },
+                     {
+                         "name":  "Emergency sheet styling",
+                         "kind":  "panel-section",
+                         "domIds":  [
+                                        "emg-coords",
+                                        "emg-copy",
+                                        "emg-text",
+                                        "emg-contact",
+                                        "emg-setcontact",
+                                        "emg-script-pos"
+                                    ],
+                         "ownerModule":  "app.js",
+                         "summary":  "Large 26px/800 DDM coordinates box, satellite SOS box, call list, MAYDAY script with amber placeholders. Copy must survive verbatim."
+                     },
+                     {
+                         "name":  "Trolling motor safety controls",
+                         "kind":  "panel-section",
+                         "domIds":  [
+                                        "btn-motor-arm",
+                                        "motor-deadman-row",
+                                        "motor-deadman",
+                                        "btn-motor-stop",
+                                        "motor-unsupported",
+                                        "motor-cmds",
+                                        "motor-log"
+                                    ],
+                         "ownerModule":  "motor.js",
+                         "summary":  "Arm button: amber when disarmed, red pulsing (.armed) when live, 0.4 opacity when disabled. Red danger commands; full-opacity warn-box; monospace no-wrap escaped log."
+                     },
+                     {
+                         "name":  "First Mate chat layout",
+                         "kind":  "panel-section",
+                         "domIds":  [
+                                        "asst-status",
+                                        "asst-messages",
+                                        "asst-suggest",
+                                        "asst-mic",
+                                        "asst-input",
+                                        "asst-send",
+                                        "asst-speak",
+                                        "asst-settings"
+                                    ],
+                         "ownerModule":  "assistant.js",
+                         "summary":  "User/bot/err bubbles (pre-wrap), chips, auto-grow textarea capped at 120px, mic .listening pulse (hidden without SpeechRecognition), speak .on, send :disabled."
+                     }
+                 ],
+    "engineApi":  [
+                      {
+                          "module":  "ui",
+                          "name":  "openSheet",
+                          "kind":  "state",
+                          "description":  "null or sheet id; replaces scanning .hidden on #panel-*; drives sheet visibility and tab .active (Weather/Tides/More only)"
+                      },
+                      {
+                          "module":  "ui",
+                          "name":  "toggleSheet(id) / closeSheets()",
+                          "kind":  "action",
+                          "description":  "Same semantics as togglePanel/closePanels: opening one closes the rest; re-clamps height"
+                      },
+                      {
+                          "module":  "ui",
+                          "name":  "sheetOpened",
+                          "kind":  "event",
+                          "description":  "Fired with id when a sheet opens so modules run their on-open loaders"
+                      },
+                      {
+                          "module":  "ui",
+                          "name":  "toast(msg) / toastState",
+                          "kind":  "action",
+                          "description":  "Show a 3s toast; last call wins"
+                      },
+                      {
+                          "module":  "ui",
+                          "name":  "boot",
+                          "kind":  "state",
+                          "description":  "{status, done} for the splash"
+                      },
+                      {
+                          "module":  "net",
+                          "name":  "online",
+                          "kind":  "state",
+                          "description":  "navigator.onLine mirror; OFFLINE badge, assistant status"
+                      },
+                      {
+                          "module":  "map",
+                          "name":  "tileBusy",
+                          "kind":  "state",
+                          "description":  "true while any tracked tile layer is loading"
+                      },
+                      {
+                          "module":  "chart",
+                          "name":  "lume / setLume(l)",
+                          "kind":  "action",
+                          "description":  "Set \u003chtml data-lume\u003e AND re-apply the base filter (fixing the invalid \u0027url(#lut-night) none\u0027 composition)"
+                      },
+                      {
+                          "module":  "chart",
+                          "name":  "reliefPlain / setReliefPlain(b)",
+                          "kind":  "action",
+                          "description":  "Kill switch: strips tile-pane filters"
+                      },
+                      {
+                          "module":  "chart",
+                          "name":  "reapplyFilters()",
+                          "kind":  "action",
+                          "description":  "Port of updateChartFilter: base LUT+trim when base===\u0027bluetint\u0027; blueshade brightness(0.70) contrast(6); enc blend multiply for gmrt"
+                      },
+                      {
+                          "module":  "gps",
+                          "name":  "quality / accuracyText / speedKn / headingDeg / coordsText",
+                          "kind":  "state",
+                          "description":  "\u0027none\u0027|\u0027ok\u0027|\u0027warn\u0027 dot plus status-bar text"
+                      },
+                      {
+                          "module":  "gps",
+                          "name":  "follow / setFollow(on)",
+                          "kind":  "action",
+                          "description":  "Follow button .active"
+                      },
+                      {
+                          "module":  "voice",
+                          "name":  "voiceState",
+                          "kind":  "state",
+                          "description":  "{on, awake, supported} â†’ tab visual (green/red pulse/blue) and label"
+                      },
+                      {
+                          "module":  "tracks",
+                          "name":  "recording",
+                          "kind":  "state",
+                          "description":  "Record Track tile pulse and watch banner"
+                      },
+                      {
+                          "module":  "goto",
+                          "name":  "gotoState",
+                          "kind":  "state",
+                          "description":  "{active, arriving, name, distText, brgText, etaText}"
+                      },
+                      {
+                          "module":  "awake",
+                          "name":  "watchState",
+                          "kind":  "state",
+                          "description":  "{armed, what[], problems[], fixAgeS} â†’ banner hidden/warn and copy; refreshed every 5s"
+                      },
+                      {
+                          "module":  "nav",
+                          "name":  "anchorAlarm / silence()",
+                          "kind":  "state",
+                          "description":  "{visible, text}; silence() snoozes 5 min"
+                      },
+                      {
+                          "module":  "nav",
+                          "name":  "mode",
+                          "kind":  "state",
+                          "description":  "\u0027route\u0027|\u0027measure\u0027|null â†’ tool button .active"
+                      },
+                      {
+                          "module":  "sst",
+                          "name":  "sstState",
+                          "kind":  "state",
+                          "description":  "{on, date, rangeF, palette, gradient, playing, loading}"
+                      },
+                      {
+                          "module":  "rain/weather",
+                          "name":  "loopState",
+                          "kind":  "state",
+                          "description":  "{visible, playing, idx, max, timeLabel} per rain/wind bar"
+                      },
+                      {
+                          "module":  "motor",
+                          "name":  "motorState",
+                          "kind":  "state",
+                          "description":  "{connected, armed, deadmanS, frames, logLines} â†’ arm button states, dead-man row, log"
+                      },
+                      {
+                          "module":  "assistant",
+                          "name":  "asstUi",
+                          "kind":  "state",
+                          "description":  "{status:{dot,text}, sending, micSupported, listening, speakOn}"
+                      },
+                      {
+                          "module":  "download",
+                          "name":  "downloadState",
+                          "kind":  "state",
+                          "description":  "{running, pct, statusText}"
+                      }
+                  ],
+    "crossDeps":  [
+                      "style.css --chart-lut/--chart-trim are read by app.js updateChartFilter (app.js:173-176) via getComputedStyle(documentElement)",
+                      "style.css --chart-lut references SVG filters #lut-day/#lut-night defined inline in index.html:40-80",
+                      "style.css overrides depend on loading after libs/leaflet/leaflet.css (index.html:16-17), at equal specificity",
+                      "#goto-banner:not(.hidden) ~ #watch-banner (style.css:626) depends on DOM order in index.html:93/108",
+                      ".hidden is toggled by app.js, gps.js, goto.js, awake.js, nav.js, sst.js, rain.js, weather.js, download.js, spots.js, catch.js, motor.js, knots.js, fish-id.js",
+                      "awake.js:170 assigns #watch-banner.className (\u0027warn\u0027 or \u0027\u0027)",
+                      "gps.js:64/121 sets #gps-dot className dot / dot ok / dot warn; gps.js:173 toggles #btn-follow .active",
+                      "voice.js:177/340/395 toggle #btn-voice .awake/.listening/.unsupported",
+                      "tracks.js:24/32 toggle #btn-track .recording (.more-tile.recording)",
+                      "motor.js:669-672 toggle .arm-btn.armed, disabled, #motor-deadman-row .hidden; motor.js:192 emits .mlog.{rx,tx,ok,warn,err,hdr}",
+                      "assistant.js uses .asst-msg.{user,bot,err}, .asst-chip, .asst-mic.listening, .asst-speak.on, .dot in #asst-status",
+                      "tides.js:140/162 emit .tt-row.past/.active/.solunar-{major,minor}; bite.js:425 emits .bite-win.top",
+                      "app.js loadingHTML/stateHTML emit .load-row/.spinner/.state-box; stateHTML inline onclick calls globals loadNow24, loadForecast10, loadTidesTimes",
+                      "sst.js:179 overrides .sst-bar background inline from SST_PALETTE_BAR",
+                      "rain.js:45 setZIndex(4) and app.js setZIndex 0/1/3/5/6 define the tile-pane order the blend modes rely on",
+                      "sw.js:9,56 precaches css/style.css as a CRITICAL shell file"
+                  ],
+    "safetyCritical":  [
+                           "LUT direction: pale = deep, saturated = shallow; night swaps the LUT and never uses invert() (index.html:33-39,71-73; style.css:2-5)",
+                           "Anchor alarm: z 5000 full-screen, steps(1) flash, not disabled by prefers-reduced-motion (style.css:449-461)",
+                           "Watch banner turns amber (.warn) whenever the watch cannot do its job; it must never look healthy when it isn\u0027t (style.css:613-630; awake.js:155-175)",
+                           "Watch banner stacks below the Go To banner via a sibling combinator (style.css:626); both keep a 64px right gutter for the SOS/Follow column",
+                           "Sheets never slide under the status bar: --panel-top-gap + 100dvh max-height plus the JS clamp to topbar.bottom+8; sticky âœ• header (style.css:119-125,176-216; app.js:292-314)",
+                           "Sheet open animation is transform-only from the bottom edge, never a slide or opacity fade (style.css:190-206)",
+                           "Layers never fade in from opacity 0; only fade-out on removal (style.css:24-25; app.js:107-119)",
+                           "filter/blend only on Leaflet tile-layer containers, never on #map or any ancestor of fixed UI (filter creates a containing block) (app.js:167-170)",
+                           ".hidden must beat ID display:flex rules (display:none !important) (style.css:26)",
+                           "Trolling motor arm button: amber disarmed, red pulsing armed, dimmed when disabled; dead-man row only when armed; interlock disclaimer verbatim (style.css:667-680; index.html:375-384)",
+                           "Emergency panel coordinates 26px/800 tabular; copy buttons are the only way to copy because user-select is none (style.css:469-480, 18)",
+                           "Motor log lines must stay escaped/text-only (BLE device names are attacker-controlled) (motor.js:185-193)",
+                           "Regulation warning and MPA disclaimer copy must survive verbatim (fish-id.js:48-49; reefs.js:116)",
+                           "Unknown wind renders grey #8a9aa8 and \u0027â€”\u0027, never 0/blue or NaN/red (weather.js:135-145, 302-305)",
+                           "Map fallback colour #0e2a40 (no bright grey where tiles are missing) (style.css:20)"
+                       ],
+    "risks":  [
+                  "Night mode composes an invalid filter \u0027url(#lut-night) none\u0027 (app.js:176 with style.css:5), which the browser ignores; data-lume is never set by any code",
+                  "Leaflet\u0027s .leaflet-safari .leaflet-tile {image-rendering:-webkit-optimize-contrast} (0,2,0) out-ranks the app\u0027s image-rendering:auto (0,1,1), so smooth upscaling is likely not in effect on iPhone Safari",
+                  "Leaflet attribution sits under the 94%-opaque tab bar and is effectively invisible (licensing gap for OSM/Esri/CARTO/OpenSeaMap)",
+                  "The loop bar overlaps the zoom-out key and the SST legend at \u003c=~400px widths (all z 1000; the loop bar wins by DOM order)",
+                  "Modals are not scrollable; the catch modal can be clipped with the keyboard up",
+                  "button.primary has no :disabled style; Start route, Download and Save catch look enabled when disabled",
+                  "The topbar and banners lack left/right safe-area insets (landscape notch)",
+                  "15px inputs rely on viewport maximum-scale=1 to avoid iOS focus zoom",
+                  "showAreaForecast (weather.js:212-222) opens the weather sheet without clampPanelHeight/syncTabs",
+                  "The First Mate status dot is always \u0027ok\u0027 (assistant.js:1588-1592)",
+                  ".ins-row:first-of-type never matches; .ins-nav is unstyled; .thinking/.unsupported/.reef-live have no CSS",
+                  "Dead rules: .skeleton/shimmer, .anim-label, .sst-tiles, .ctl.recording, .ctl.asst, .asst-msg .cursor, .asst-msg.bot b/strong",
+                  "Vite must not rewrite url(#lut-*) and must precache the hashed CSS as critical; keep -webkit-backdrop-filter and -webkit-user-select for the safari16 target",
+                  "WKWebView shell: env(safe-area-inset-*) can double-count if the native view adds content insets",
+                  "Memory note says ENC auto-enables only on user action, but app.js:155-159 ignores isUserAction and forces ENC on for relief bases, including at startup"
+              ],
+    "topLevelSideEffects":  [
+                                "style.css is linked statically in index.html:17 and precached as CRITICAL by sw.js:56 (install fails if it cannot be cached)",
+                                "The boot splash is painted from static HTML + CSS before any JS runs (z 9000)",
+                                "Infinite CSS animations run whenever their elements are visible: spin, bob, pulse, aaflash, gbpulse, armpulse",
+                                "No JS side effects of its own; updateChartFilter runs once at startup via setBase (app.js:206-\u003e161) and reads the CSS tokens"
+                            ]
+}

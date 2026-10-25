@@ -1,0 +1,370 @@
+﻿{
+    "key":  "weather-overlays",
+    "specFile":  "C:/Users/jbitt/AppData/Local/Temp/claude/C--Users-jbitt-OneDrive-Desktop-Carrots/089709da-890a-4c8f-9bbf-0a347ea15c9c/scratchpad/fishapp-concepts/inventory/weather-overlays.md",
+    "surfaces":  [
+                     {
+                         "name":  "Weather panel",
+                         "kind":  "panel",
+                         "ownerModule":  "weather.js (+app.js togglePanel/tabs)",
+                         "domIds":  [
+                                        "panel-weather"
+                                    ],
+                         "summary":  "Bottom sheet \u0027Weather \u0026 waves\u0027 with two tabs (Now \u0026 24h, ðŸ“… 10-Day). Reset to Now on every open via togglePanel â†’ loadWeatherPanel; opened straight to 10-Day by showAreaForecast (which skips clampPanelHeight and syncTabs)."
+                     },
+                     {
+                         "name":  "Now \u0026 24h tab",
+                         "kind":  "panel-section",
+                         "ownerModule":  "weather.js",
+                         "domIds":  [
+                                        "wx-now",
+                                        "wx-loc",
+                                        "wx-current",
+                                        "wx-hourly",
+                                        "wx-stale"
+                                    ],
+                         "summary":  "Location hint, WIND/GUSTS/WAVES/TEMP cards and up to 24 hourly rows. Cache-first (fishapp.lastwx, 0.25Â° location guard, 12 h cap online). States: offline-empty, loading, error with Retry, stale badge \u0027âš ï¸ Saved forecast from N ago â€” refreshingâ€¦/(offline)\u0027."
+                     },
+                     {
+                         "name":  "10-Day tab",
+                         "kind":  "panel-section",
+                         "ownerModule":  "weather.js",
+                         "domIds":  [
+                                        "wx-10day",
+                                        "fc-loc",
+                                        "fc-days",
+                                        "fc-stale"
+                                    ],
+                         "summary":  "Collapsible day rows labelled from the actual date (past days dropped), weekday plus date, long-range \u0027~\u0027 marker and note for day 7 and later, detail with a 3-hourly strip. Cache-first (fishapp.fc10, which the bite engine and spoken conditions watch also consume)."
+                     },
+                     {
+                         "name":  "Wind animation bar",
+                         "kind":  "hud",
+                         "ownerModule":  "weather.js",
+                         "domIds":  [
+                                        "wind-bar",
+                                        "wind-play",
+                                        "wind-scrub",
+                                        "wind-time"
+                                    ],
+                         "summary":  "Play/pause a 24 h hourly wind-arrow loop (650 ms frames) and a 0-23 scrubber. Label \u0027Mon 3 PM â–¸\u0027. Visible only while the wind overlay is on."
+                     },
+                     {
+                         "name":  "Rain animation bar",
+                         "kind":  "hud",
+                         "ownerModule":  "rain.js",
+                         "domIds":  [
+                                        "rain-bar",
+                                        "rain-play",
+                                        "rain-scrub",
+                                        "rain-time"
+                                    ],
+                         "summary":  "Play/pause RainViewer frames (500 ms) and a scrubber (max = frames-1). Label prefixes nowcast frames with \u0027fcst \u0027."
+                     },
+                     {
+                         "name":  "SST legend",
+                         "kind":  "legend",
+                         "ownerModule":  "sst.js",
+                         "domIds":  [
+                                        "sst-legend",
+                                        "sst-date",
+                                        "sst-palette",
+                                        "sst-play"
+                                    ],
+                         "summary":  "\u0027Water temp \u003cdate\u003e\u0027 title, palette gradient bar, actual Â°F ends of the locally stretched range, 4-option palette select (persisted to fishapp.sstpal), play button \u0027â–¶ Play 5-day loop\u0027/\u0027â³ Loading loopâ€¦\u0027/\u0027â¸ Pause\u0027, and the note \u0027tap anywhere for exact Â°F\u0027."
+                     },
+                     {
+                         "name":  "Wind arrows layer",
+                         "kind":  "map-layer",
+                         "ownerModule":  "weather.js",
+                         "summary":  "Non-interactive divIcon arrows on a 95 px grid, coloured by speed band (unknown = grey), with a knot label. Point where the wind goes. Refreshes 900 ms after moveend/zoomend."
+                     },
+                     {
+                         "name":  "Rain radar layer",
+                         "kind":  "map-layer",
+                         "ownerModule":  "rain.js",
+                         "summary":  "One RainViewer tile layer per frame, all preloaded at opacity 0, zIndex 4. The active frame is shown at opacity 0.75. Attribution \u0027RainViewer\u0027."
+                     },
+                     {
+                         "name":  "SST image overlay",
+                         "kind":  "map-layer",
+                         "ownerModule":  "sst.js",
+                         "summary":  "ERDDAP MUR transparentPng per view (1 or 5 days), colour scale stretched to the local 10â€“90th percentile. Swapped in without a blank flash (token-guarded preload). Rebuilt 1 s after moveend."
+                     },
+                     {
+                         "name":  "Fish sightings layer",
+                         "kind":  "map-layer",
+                         "ownerModule":  "fish.js",
+                         "summary":  "iNaturalist circle markers (green within 30 days, orange older). Zoom â‰¥ 8 only, research-grade open-geoprivacy records. Refreshes 900 ms after moveend."
+                     },
+                     {
+                         "name":  "Fish popup",
+                         "kind":  "popup",
+                         "ownerModule":  "fish.js",
+                         "summary":  "Photo, \u0027ðŸŸ name\u0027, scientific name, \u0027N days ago Â· date\u0027, \u0027X.X nm Â· NÂ° from you\u0027, \u0027iNaturalist observation\u0027. Content built lazily on open."
+                     },
+                     {
+                         "name":  "Tap-to-inspect popup",
+                         "kind":  "popup",
+                         "ownerModule":  "inspect.js",
+                         "summary":  "Coordinates, distance and bearing from you, Depth/Wind/Swell/Water rows that fill in independently (each loading, needs internet, no data, unavailable, or value), and buttons ðŸ“Œ Save spot / ðŸ§­ Navigate here / ðŸ“… See 10-Day forecast for this area."
+                     },
+                     {
+                         "name":  "Overlay toasts",
+                         "kind":  "toast",
+                         "ownerModule":  "weather.js/rain.js/sst.js/fish.js",
+                         "domIds":  [
+                                        "toast"
+                                    ],
+                         "summary":  "Exact strings: \u0027Wind overlay needs internet\u0027, \u0027Loading wind forecastâ€¦\u0027, \u0027Could not load rain radar\u0027, \u0027SST needs internet\u0027, \u0027ðŸŸ N fish sightings here\u0027, \u0027Zoom in to load fish sightings\u0027, etc. Full list in spec Â§4."
+                     },
+                     {
+                         "name":  "Overlay toggles",
+                         "kind":  "panel-section",
+                         "ownerModule":  "app.js (index.html Layers panel)",
+                         "domIds":  [
+                                        "ovl-wind",
+                                        "ovl-sst",
+                                        "ovl-rain",
+                                        "ovl-fish"
+                                    ],
+                         "summary":  "Checkboxes that call the enable functions and persist fishapp.layers. Rain and SST uncheck themselves when offline. The First Mate toggle_layer tool drives them via change events."
+                     }
+                 ],
+    "engineApi":  [
+                      {
+                          "module":  "weather",
+                          "name":  "panel",
+                          "kind":  "state",
+                          "description":  "{open, tab:\u0027now\u0027|\u002710day\u0027, fcLoc:{lat,lng}|null, fc10Loaded} â€” replaces DOM .active/.hidden toggles split across app.js:413-418 and weather.js:203-217"
+                      },
+                      {
+                          "module":  "weather",
+                          "name":  "now",
+                          "kind":  "state",
+                          "description":  "{status:\u0027idle\u0027|\u0027loading\u0027|\u0027ready\u0027|\u0027offline-empty\u0027|\u0027error\u0027, locLabel, vm:{cards[],rows[]}, staleLabel, fromCache}"
+                      },
+                      {
+                          "module":  "weather",
+                          "name":  "fc10",
+                          "kind":  "state",
+                          "description":  "{status, locLabel, forArea, days:[{key,wd,md2,dayOut,longRange,emo,desc,hi,lo,windMax,gust,wdir,windColor,waveFt,wavePer,waveDir,swellFt,swellPer,pop,rainSum,sst,uv,sunrise,sunset,strip[]}], staleLabel, fromCache}"
+                      },
+                      {
+                          "module":  "weather",
+                          "name":  "openWeatherPanel",
+                          "kind":  "action",
+                          "description":  "Replaces loadWeatherPanel: resets to the Now tab, clears fcLoc and fc10Loaded, runs loadNow24. Must go through the shared panel-open path (clamp height and sync tabs)."
+                      },
+                      {
+                          "module":  "weather",
+                          "name":  "setWeatherTab",
+                          "kind":  "action",
+                          "description":  "Switch tabs. Choosing 10day when !fc10Loaded sets the latch and loads 10-day (the latch resets on failure)."
+                      },
+                      {
+                          "module":  "weather",
+                          "name":  "showAreaForecast",
+                          "kind":  "action",
+                          "description":  "(ll) Close other panels, open weather on 10-Day for ll (fcLoc), also load Now (GPS or centre). Overwrites the fishapp.fc10 cache."
+                      },
+                      {
+                          "module":  "weather",
+                          "name":  "loadNow24",
+                          "kind":  "action",
+                          "description":  "Cache-first, deduped Now load (also the Retry action). Location is GPS.lastLatLng or map centre."
+                      },
+                      {
+                          "module":  "weather",
+                          "name":  "loadForecast10",
+                          "kind":  "action",
+                          "description":  "(override?) Cache-first, deduped 10-day load (also the Retry action). Location is override || fcLoc || GPS || centre."
+                      },
+                      {
+                          "module":  "weather",
+                          "name":  "tickAutoRefresh",
+                          "kind":  "action",
+                          "description":  "Every 10 min: if visible, online and the panel is open, run loadNow24, plus loadForecast10 when fc10Loaded."
+                      },
+                      {
+                          "module":  "weather",
+                          "name":  "getCachedNow / getCachedFc10",
+                          "kind":  "query",
+                          "description":  "Raw localStorage payloads fishapp.lastwx and fishapp.fc10 (shape unchanged) for assistant.js and bite.js."
+                      },
+                      {
+                          "module":  "weather/format",
+                          "name":  "compass, dirArrow, windColor, wxNum, MS_TO_FT, wmoIcon, wxAgeLabel",
+                          "kind":  "query",
+                          "description":  "Pure formatters exported for bite, catch, goto, assistant and inspect."
+                      },
+                      {
+                          "module":  "wind",
+                          "name":  "wind",
+                          "kind":  "state",
+                          "description":  "{on, playing, hourOffset, timeLabel, framesLoaded}"
+                      },
+                      {
+                          "module":  "wind",
+                          "name":  "windLoopToggle",
+                          "kind":  "action",
+                          "description":  "Play/pause the 24 h loop. Auto-enables the overlay (and persists the pref) if off. Online only."
+                      },
+                      {
+                          "module":  "wind",
+                          "name":  "windScrub",
+                          "kind":  "action",
+                          "description":  "(v) Pause and show forecast hour v, building frames on demand."
+                      },
+                      {
+                          "module":  "overlays",
+                          "name":  "setOverlay",
+                          "kind":  "action",
+                          "description":  "(kind:\u0027wind\u0027|\u0027rain\u0027|\u0027sst\u0027|\u0027fish\u0027, on) Enable or disable and persist to fishapp.layers. Also used by the First Mate toggle_layer tool. Rain and SST refuse offline and emit overlay:uncheck."
+                      },
+                      {
+                          "module":  "rain",
+                          "name":  "rain",
+                          "kind":  "state",
+                          "description":  "{on, playing, frameCount, idx, timeLabel, isForecastFrame}"
+                      },
+                      {
+                          "module":  "rain",
+                          "name":  "rainTogglePlay / rainScrub",
+                          "kind":  "action",
+                          "description":  "Play/pause (needs â‰¥ 2 frames and online) and jump to a frame (pauses)."
+                      },
+                      {
+                          "module":  "sst",
+                          "name":  "sst",
+                          "kind":  "state",
+                          "description":  "{on, playing, loadingLoop, palette, rangeC, rangeF, dateLabel}"
+                      },
+                      {
+                          "module":  "sst",
+                          "name":  "sstTogglePlay / sstSetPalette",
+                          "kind":  "action",
+                          "description":  "Preload and play the 5-day loop, or stop. Change palette (persists fishapp.sstpal; rebuilds if on)."
+                      },
+                      {
+                          "module":  "sst",
+                          "name":  "getSstRange",
+                          "kind":  "query",
+                          "description":  "SST.range [minC,maxC] for the assistant\u0027s water-temp answer."
+                      },
+                      {
+                          "module":  "fish",
+                          "name":  "fish",
+                          "kind":  "state",
+                          "description":  "{on, count, total} â€” markers stay imperative in Leaflet."
+                      },
+                      {
+                          "module":  "inspect",
+                          "name":  "inspect",
+                          "kind":  "state",
+                          "description":  "{open, ll, distLine, results:{depth,wind,swell,sst}}, each \u0027loading\u0027|\u0027offline\u0027|\u0027nodata\u0027|\u0027error\u0027|value"
+                      },
+                      {
+                          "module":  "inspect",
+                          "name":  "inspectAt",
+                          "kind":  "action",
+                          "description":  "(latlng) Map click when nav mode didn\u0027t consume it. Normalises lng, bumps reqId, opens the popup, queries the point."
+                      },
+                      {
+                          "module":  "inspect",
+                          "name":  "inspectSaveSpot / inspectNavigate / inspectAreaForecast",
+                          "kind":  "action",
+                          "description":  "Close the popup, then openSpotModal({lat,lng}) / gotoStart(ll,\u0027Pin lat3, lng3\u0027) / showAreaForecast(ll)."
+                      },
+                      {
+                          "module":  "inspect",
+                          "name":  "queryPointData",
+                          "kind":  "action",
+                          "description":  "(ll, results, onUpdate) Shared depth, wind, swell and SST fetcher (reefs.js reuses it)."
+                      },
+                      {
+                          "module":  "overlays",
+                          "name":  "toast",
+                          "kind":  "event",
+                          "description":  "Emitted with the exact strings listed in spec Â§4 (replaces direct toast() calls)."
+                      },
+                      {
+                          "module":  "overlays",
+                          "name":  "overlay:uncheck",
+                          "kind":  "event",
+                          "description":  "Rain or SST refused offline, so untick the toggle (at boot, without persisting)."
+                      },
+                      {
+                          "module":  "weather",
+                          "name":  "weather:fc10-saved",
+                          "kind":  "event",
+                          "description":  "Optional: lets the bite engine and conditions watch re-evaluate after a new 10-day payload is cached."
+                      }
+                  ],
+    "crossDeps":  [
+                      "All five files use L (Leaflet 1.9.4) and window._map (app.js:73)",
+                      "weather.js/fish.js/inspect.js use GPS.lastLatLng (gps.js)",
+                      "weather.js/inspect.js use formatCoord (gps.js:273)",
+                      "sst.js/fish.js use mapBoundsClamped (gps.js:262)",
+                      "fish.js/inspect.js use nmBetween and bearingBetween (gps.js)",
+                      "all files use toast (app.js:676)",
+                      "weather.js uses readJSON, stateHTML, loadingHTML (app.js:643-661) and window.closePanels (app.js:287)",
+                      "fish.js uses escapeHtml (spots.js:256)",
+                      "inspect.js uses openSpotModal (spots.js:60) and gotoStart (goto.js:24)",
+                      "inspect.js uses windColor, compass, dirArrow and showAreaForecast (weather.js)",
+                      "compass (weather.js) is used by assistant.js:35, bite.js:386, catch.js:196, goto.js:121",
+                      "MS_TO_FT (weather.js) is used by bite.js:135,474,477 and catch.js:177",
+                      "reefs.js:73,90-96 uses queryPointData, windText, swellText, sstText, depthText (inspect.js)",
+                      "areadata.js:88-89 uses FISH_TAXA (fish.js)",
+                      "assistant.js:680-683 reads SST.range (sst.js)",
+                      "assistant.js:38-40 reads localStorage fishapp.lastwx (written by weather.js:285) raw",
+                      "bite.js:499 biteForecast/watchCheck reads fishapp.fc10 (written by weather.js:454), including the spoken wind/sea safety alerts",
+                      "app.js:232-276 wires the overlay checkboxes, play/scrub buttons and palette; app.js:323 calls loadWeatherPanel; app.js:413-418 handles tabs and sets WX._fc10loaded; app.js:497-506 runs the 10-minute refresh calling loadNow24/loadForecast10; app.js:373 sends map clicks to inspectAt",
+                      "assistant.js:1344-1351 toggles #ovl-wind/sst/rain/fish via change events",
+                      "voice.js:100 opens panel-weather via togglePanel"
+                  ],
+    "safetyCritical":  [
+                           "Unknown values render as \u0027â€”\u0027 and grey, never as 0 or calm blue (wxNum and windColor, weather.js:297-305, 135-139)",
+                           "Wind colour bands \u003c7 blue, \u003c14 green, \u003c21 yellow, \u003c28 orange, else red (weather.js:140-144)",
+                           "Arrow direction: met FROM + 180 points where the wind goes; dirArrow north wind gives â†“ (weather.js:148, 306-311)",
+                           "Never display another location\u0027s cached forecast: 0.25Â° guard; age cap 12 h online, any age offline with stale badge (weather.js:224-234, 249, 418)",
+                           "Stale badge \u0027âš ï¸ Saved forecast from N ago â€” refreshingâ€¦/(offline)\u0027 after 10 min (weather.js:376-383)",
+                           "Render before caching; poisoned-cache guard deletes the key when render throws (weather.js:250-257, 284-285, 419-423, 453-454)",
+                           "Hourly marine data matched by timestamp, not index (weather.js:349-356, 512, 566)",
+                           "10-day labels come from the actual date, past days dropped, weekday plus date (weather.js:480-489)",
+                           "Long-range \u0027~\u0027 marker and note for day 7 and later (weather.js:490, 522, 538)",
+                           "The fishapp.fc10 payload shape and units feed bite.js watchCheck spoken safety alerts; do not change keys or drop hourly fields (weather.js:438-454; bite.js:493-524)",
+                           "Inspect depth: â‰¥0 is land; mâ†’ft/fathom conversions; \u0027no survey data here\u0027 (inspect.js:111-121)",
+                           "Inspect reqId cancels stale responses; lng normalised for worldCopyJump (inspect.js:13-14, 33)",
+                           "Offline shows \u0027needs internet\u0027 immediately rather than a stuck spinner (inspect.js:22-24, 38)",
+                           "SST legend Â°F ends always match the range in the image URL; data date shown (2-day lag); colours are relative, so the legend numbers are the only absolute reference (sst.js:45-48, 172-182)",
+                           "SST no-blank-flash swap with build token (sst.js:111-162)",
+                           "Rain nowcast frames labelled \u0027fcst \u0027 (rain.js:65)",
+                           "Fish: research-grade, open-geoprivacy only (fish.js:46)",
+                           "The area-forecast path opens the panel without clampPanelHeight; the React port should use the shared open path so the sheet\u0027s âœ• never hides under the iOS status bar (weather.js:213-214; app.js:299-307)"
+                       ],
+    "risks":  [
+                  "Inspect windText/swellText show \u0027gust 0\u0027 / \u0027@ 0s\u0027 (or NaN) for missing data, contradicting the wxNum rule; recommend fixing with owner approval (inspect.js:130, 142)",
+                  "10-day daily, detail and 3-hourly values use bare Math.round, so null shows as \u00270 kn\u0027 blue or \u00270Â°\u0027 (weather.js:492-496, 563-576)",
+                  "Toggle-off races: rain and SST async enable continuations re-show layers and legend after the user turned them off (rain.js:20-22; sst.js:45-48)",
+                  "sstEnable offline leaves SST.on=true with the box unchecked, so a later pan can paint SST (sst.js:41-44)",
+                  "Wind loop frames are never invalidated; the scrub reuses stale grid and hours; the wind-time label is not reset after Stop (weather.js:93, 120-126)",
+                  "windScrub has no try/catch, giving a silent unhandled rejection (weather.js:91-99)",
+                  "Follow mode: every GPS fix pans and fires moveend, so wind, fish and SST refetch about once per fix and fish toasts spam (gps.js:130-135)",
+                  "localStorage quota error after a good render replaces it with the error state (weather.js:285, 454)",
+                  "sstStop during loop preload stacks two overlays (sst.js:201-207)",
+                  "Unguarded localStorage read at sst.js load (sst.js:15) can break app.js:260",
+                  "Area forecast overwrites fishapp.fc10, disabling the bite and watch for the boat\u0027s location until a local reload",
+                  "Timezone assumption: Open-Meteo local times parsed as device-local (weather.js:64, 344, 477-489)",
+                  "Daily marine arrays are index-matched, not date-matched (weather.js:501-509)",
+                  "Every 10-day re-render (including the 10-minute auto refresh) collapses expanded days",
+                  "Generic global names (showFrame, card) and inline onclick retry strings must be namespaced or replaced during the port",
+                  "Transitional window shims are needed for compass, MS_TO_FT, FISH_TAXA and the inspect formatters until bite, catch, goto, assistant, reefs and areadata are ported"
+              ],
+    "topLevelSideEffects":  [
+                                "sst.js:15 reads localStorage \u0027fishapp.sstpal\u0027 at script parse time (no try/catch)",
+                                "weather.js, inspect.js, fish.js and rain.js define global state objects (WX, Inspect, Fish, Rain) and constants only; no DOM, map or network access at load",
+                                "wxInit(map) (app.js:232) adds the map \u0027moveend zoomend\u0027 listener; fishInit(map) (app.js:242) adds the map \u0027moveend\u0027 listener",
+                                "sstEnable binds the map \u0027moveend\u0027 lazily, once, on the first online enable, and never unbinds it (sst.js:49-58)",
+                                "app.js:497 setInterval 10 min drives loadNow24 and loadForecast10 while the weather panel is open"
+                            ]
+}

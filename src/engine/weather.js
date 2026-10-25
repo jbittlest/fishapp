@@ -582,3 +582,9 @@ export function fc3hStrip(hh, mh, dayStr) {
   }
   return rows ? '<div class="fc-hourly">' + rows + '</div>' : '';
 }
+
+/* CONTRACT STUB (shell HUD reads it) — the weather port fills this in:
+   latest sea-surface temperature near the boat, °F, with when/where it applies. */
+import { createStore as __createStore } from 'zustand/vanilla';
+/** @type {import('zustand/vanilla').StoreApi<{waterF: number|null, at: number, lat: number|null, lng: number|null}>} */
+export const conditionsStore = __createStore(() => ({ waterF: /** @type {number|null} */ (null), at: 0, lat: /** @type {number|null} */ (null), lng: /** @type {number|null} */ (null) }));

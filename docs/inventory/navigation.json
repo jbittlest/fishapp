@@ -1,0 +1,490 @@
+﻿{
+    "key":  "navigation",
+    "specFile":  "C:/Users/jbitt/AppData/Local/Temp/claude/C--Users-jbitt-OneDrive-Desktop-Carrots/089709da-890a-4c8f-9bbf-0a347ea15c9c/scratchpad/fishapp-concepts/inventory/navigation.md",
+    "surfaces":  [
+                     {
+                         "name":  "GPS HUD (topbar stats)",
+                         "kind":  "hud",
+                         "ownerModule":  "gps.js",
+                         "domIds":  [
+                                        "topbar",
+                                        "stat-gps",
+                                        "gps-dot",
+                                        "gps-acc",
+                                        "stat-speed",
+                                        "stat-heading",
+                                        "stat-coords"
+                                    ],
+                         "summary":  "GPS dot shows red (none/error), green (acc\u003c=20m) or amber. Shows accuracy as Â±Nm, \u0027Â±?\u0027, \u0027GPS DENIED\u0027 or \u0027NO GPS\u0027, plus SOG in kn, per-fix heading and coordinates in degrees + decimal minutes. Updated on every accepted fix and by the error callback. It shows no staleness indicator. #tile-busy and #offline-badge in the same bar belong to app.js."
+                     },
+                     {
+                         "name":  "Follow button",
+                         "kind":  "other",
+                         "ownerModule":  "gps.js + app.js",
+                         "domIds":  [
+                                        "btn-follow"
+                                    ],
+                         "summary":  "â—‰ with the \u0027active\u0027 class means following. Dragging the map turns follow off and arms a 45 s auto-refollow. Tapping it off by hand is never auto-reverted. mapProgrammatic suppresses the refollow timer for deliberate map moves."
+                     },
+                     {
+                         "name":  "Boat marker + accuracy circle",
+                         "kind":  "map-layer",
+                         "ownerModule":  "gps.js",
+                         "domIds":  [
+
+                                    ],
+                         "summary":  "Green SVG divIcon (.boat-icon): a circle with no heading, otherwise an arrow rotated to the heading, redrawn only on changes of 3Â° or more. A light-blue accuracy circle has its radius set to the fix accuracy. Created on the first fix and never removed."
+                     },
+                     {
+                         "name":  "Go To navigation banner",
+                         "kind":  "banner",
+                         "ownerModule":  "goto.js",
+                         "domIds":  [
+                                        "goto-banner",
+                                        "gb-name",
+                                        "gb-dist",
+                                        "gb-brg",
+                                        "gb-eta",
+                                        "gb-arrive",
+                                        "gb-cancel"
+                                    ],
+                         "summary":  "Shows the destination or \u0027WP k of N\u0027, the distance in nm/mi (total remaining on a route, plus the leg distance), and \u0027steer BÂ° NE\u0027 with a turn arrow. The ETA uses live SOG above 1 kn, otherwise the planned speed. Pulses yellow (.arriving) inside the arrival radius. âœ“ saves the voyage and âœ• cancels with a confirm."
+                     },
+                     {
+                         "name":  "Watch banner",
+                         "kind":  "banner",
+                         "ownerModule":  "awake.js",
+                         "domIds":  [
+                                        "watch-banner",
+                                        "wb-what",
+                                        "wb-detail"
+                                    ],
+                         "summary":  "Persistent banner shown while the keep-alive has reasons (anchor/track). Lists \u0027âš“ Anchor watch\u0027 and \u0027âº Recording\u0027. Turns amber with \u0027âš ï¸ no GPSâ€¦\u0027, \u0027screen may sleep\u0027 or \u0027background keep-alive not running\u0027. Ticks every 5 s and drops below the Go To banner when both are visible."
+                     },
+                     {
+                         "name":  "Anchor alarm full-screen overlay",
+                         "kind":  "overlay",
+                         "ownerModule":  "nav.js",
+                         "domIds":  [
+                                        "anchor-alarm",
+                                        "aa-dist",
+                                        "aa-dismiss"
+                                    ],
+                         "summary":  "Flashing red overlay at z-index 5000 titled \u0027âš ï¸ ANCHOR DRAGGING\u0027 (also used for the blind alarm). The distance line reads \u0027N ft from anchor (limit R ft)\u0027 or \u0027NO GPS â€” the anchor watch cannot see you drift\u0027. Beeps and vibrates every 2 s. \u0027Silence\u0027 snoozes for 5 min or until drift grows 25%."
+                     },
+                     {
+                         "name":  "Nav Tools: Route planner",
+                         "kind":  "panel-section",
+                         "ownerModule":  "nav.js",
+                         "domIds":  [
+                                        "btn-route-add",
+                                        "btn-route-undo",
+                                        "btn-route-clear",
+                                        "btn-route-start",
+                                        "route-speed",
+                                        "route-gph",
+                                        "route-stats"
+                                    ],
+                         "summary":  "Add-points mode drops numbered draggable waypoints. Shows a dashed blue line with per-leg nm labels and a breakdown of total nm, time at speed, gallons, points and each leg\u0027s nm and bearing. Start route (2 or more points) hands off to Go To and clears the planner. Speed and gph also feed the Go To ETA and the assistant."
+                     },
+                     {
+                         "name":  "Nav Tools: Measure",
+                         "kind":  "panel-section",
+                         "ownerModule":  "nav.js",
+                         "domIds":  [
+                                        "btn-measure",
+                                        "measure-out"
+                                    ],
+                         "summary":  "Toggles measure mode. Two taps draw a dashed amber line and show \u0027X.XX nm (Y.YY mi) Â· BÂ°\u0027."
+                     },
+                     {
+                         "name":  "Nav Tools: Anchor alarm",
+                         "kind":  "panel-section",
+                         "ownerModule":  "nav.js",
+                         "domIds":  [
+                                        "anchor-radius",
+                                        "btn-anchor",
+                                        "anchor-status"
+                                    ],
+                         "summary":  "Radius in ft (default 150, applied live on change). Drop/Raise button. Status line reads empty, \u0027Watching â€” alarms if you drift past N ft[ Â· snoozed M min]\u0027 or \u0027âš ï¸ NO GPS â€” the watch cannot see you drift\u0027. Includes a static iOS honesty hint."
+                     },
+                     {
+                         "name":  "Nav Tools: Trip stats",
+                         "kind":  "panel-section",
+                         "ownerModule":  "nav.js",
+                         "domIds":  [
+                                        "btn-trip",
+                                        "btn-trip-reset",
+                                        "trip-stats"
+                                    ],
+                         "summary":  "Start, Pause and Resume trip, plus Reset. Shows distance (real movement only), active time, and max and average speed."
+                     },
+                     {
+                         "name":  "Voyages list",
+                         "kind":  "panel-section",
+                         "ownerModule":  "goto.js",
+                         "domIds":  [
+                                        "trips-list"
+                                    ],
+                         "summary":  "Saved Go To voyages (IndexedDB trips), newest first. Each row shows name, nm, duration, average kn and date. ðŸ‘/ðŸ™ˆ shows the path and pin and fits the map. ðŸ—‘ deletes with a confirm."
+                     },
+                     {
+                         "name":  "Tracks list",
+                         "kind":  "panel-section",
+                         "ownerModule":  "tracks.js",
+                         "domIds":  [
+                                        "tracks-list"
+                                    ],
+                         "summary":  "Saved tracks (IndexedDB tracks), newest first, with name, nm and date. Show/hide draws an orange line and fits the map. Delete asks for confirmation."
+                     },
+                     {
+                         "name":  "Record Track tile",
+                         "kind":  "other",
+                         "ownerModule":  "tracks.js",
+                         "domIds":  [
+                                        "btn-track"
+                                    ],
+                         "summary":  "More-sheet tile that toggles recording. Gets the pulsing red .recording class while recording. Closes panels first."
+                     },
+                     {
+                         "name":  "Device settings (wake lock + keep-alive)",
+                         "kind":  "panel-section",
+                         "ownerModule":  "gps.js + awake.js",
+                         "domIds":  [
+                                        "ovl-wake",
+                                        "wake-status",
+                                        "ovl-keepalive",
+                                        "keepalive-status"
+                                    ],
+                         "summary":  "Two persisted toggles with honest status lines. The screen-lock status covers 5 states. A static iPhone honesty paragraph must be kept verbatim."
+                     },
+                     {
+                         "name":  "Route planner / measure / anchor / Go To / track map layers",
+                         "kind":  "map-layer",
+                         "ownerModule":  "nav.js + goto.js + tracks.js",
+                         "domIds":  [
+
+                                    ],
+                         "summary":  "Draggable route markers (.route-pt), the dashed route line and .route-leg labels. Measure dots and line. Anchor circle and âš“ marker. ðŸŽ¯ .goto-pin with popup. Green course line and dashed route-ahead line. Live orange track line. Saved tracks and voyages on demand."
+                     },
+                     {
+                         "name":  "System alarm notification",
+                         "kind":  "other",
+                         "ownerModule":  "awake.js",
+                         "domIds":  [
+
+                                    ],
+                         "summary":  "Notification tagged \u0027fishapp-alarm\u0027 with requireInteraction, shown through the service worker for drag or blind alarms. Permission is requested once, when the anchor is dropped."
+                     },
+                     {
+                         "name":  "Toasts and confirms from this group",
+                         "kind":  "toast",
+                         "ownerModule":  "app.js toast() used by all",
+                         "domIds":  [
+                                        "toast"
+                                    ],
+                         "summary":  "About 35 exact toast strings (anchor refusals, snooze, blind, restore, route guidance, waypoint reached, arriving, voyage/track saved) and 4 confirm() prompts. All are quoted verbatim in spec Â§4."
+                     }
+                 ],
+    "engineApi":  [
+                      {
+                          "module":  "gps",
+                          "name":  "gps.position / lastFixTs / accuracy / coarse / heading(sticky) / displayHeading / speedKn",
+                          "kind":  "state",
+                          "description":  "Last accepted fix and derived values. coarse means acc\u003e100 m or unknown. heading is sticky (the last non-null value). displayHeading is the per-fix value shown in the topbar."
+                      },
+                      {
+                          "module":  "gps",
+                          "name":  "gps.status",
+                          "kind":  "state",
+                          "description":  "\u0027none\u0027|\u0027ok\u0027|\u0027warn\u0027|\u0027denied\u0027|\u0027lost\u0027 driving the dot colour and the accuracy text (\u0027Â±Nm\u0027, \u0027Â±?\u0027, \u0027GPS DENIED\u0027, \u0027NO GPS\u0027)."
+                      },
+                      {
+                          "module":  "gps",
+                          "name":  "gps.follow",
+                          "kind":  "state",
+                          "description":  "Follow-mode flag, default true."
+                      },
+                      {
+                          "module":  "gps",
+                          "name":  "gpsStart(map)",
+                          "kind":  "action",
+                          "description":  "Starts watchPosition with {enableHighAccuracy:true, maximumAge:1000, timeout:30000}, requests the wake lock and starts the 15 s stale watchdog. Must run after anchorRestore."
+                      },
+                      {
+                          "module":  "gps",
+                          "name":  "setFollow(on) / toggleFollowByUser()",
+                          "kind":  "action",
+                          "description":  "Sets follow; turning it on pans to the boat. The user toggle records a deliberate off that the 45 s auto-refollow never reverts."
+                      },
+                      {
+                          "module":  "gps",
+                          "name":  "mapProgrammatic(fn)",
+                          "kind":  "action",
+                          "description":  "Wraps deliberate setView/fitBounds calls so they don\u0027t arm the refollow timer (800 ms flag)."
+                      },
+                      {
+                          "module":  "gps",
+                          "name":  "gpsIsStale()",
+                          "kind":  "query",
+                          "description":  "True if there was never a fix or the last accepted fix is more than 60 s old."
+                      },
+                      {
+                          "module":  "gps",
+                          "name":  "fix / gpsError / gpsStale",
+                          "kind":  "event",
+                          "description":  "Emitted per accepted fix (ll, kn, pos), on a geolocation error (code) and on a watchdog stale tick. Safety consumers must be called synchronously by the engine, not via React."
+                      },
+                      {
+                          "module":  "wakeLock",
+                          "name":  "wakeLock{enabled,supported,held,failed,failReason} + statusText",
+                          "kind":  "state",
+                          "description":  "Honest screen-lock state with 5 exact status strings."
+                      },
+                      {
+                          "module":  "wakeLock",
+                          "name":  "setWakeEnabled(on) / acquire()",
+                          "kind":  "action",
+                          "description":  "Persists fishapp.wake. acquire is guarded by a _pending flag set before the await and is re-run on visibility and on every pointerdown/touchstart/click."
+                      },
+                      {
+                          "module":  "awake",
+                          "name":  "awake{enabled, reasons, keepAliveRunning, banner{visible,warn,what,detail}}",
+                          "kind":  "state",
+                          "description":  "Keep-alive reasons (\u0027anchor\u0027,\u0027track\u0027) and the watch-banner model, recomputed every 5 s and 400 ms after becoming visible."
+                      },
+                      {
+                          "module":  "awake",
+                          "name":  "setKeepAliveEnabled(on) / awakeAcquire(reason) / awakeRelease(reason)",
+                          "kind":  "action",
+                          "description":  "Reference-counted near-silent looping audio (volume 0.02, Â±1 LSB noise WAV). Starts only from a user gesture. Persists fishapp.keepalive."
+                      },
+                      {
+                          "module":  "awake",
+                          "name":  "awakeHealth()",
+                          "kind":  "query",
+                          "description":  "Returns {armed, keepAlive, keepAliveWanted, screenLock, screenLockWanted, notify, fixAgeS, gpsOk(\u003c60s)}."
+                      },
+                      {
+                          "module":  "anchor",
+                          "name":  "anchor{watching, ll, radiusFt, blind, dragging, snoozeUntil, snoozeFt, outCount, alarmVisible, alarmDistText} + anchorStatusText + buttonLabel",
+                          "kind":  "state",
+                          "description":  "Anchor watch state machine and derived copy."
+                      },
+                      {
+                          "module":  "anchor",
+                          "name":  "anchorDrop() / anchorRaise() / anchorToggle()",
+                          "kind":  "action",
+                          "description":  "Drop at the GPS position; refuses with no fix, a stale fix or a coarse fix. The drop gesture also runs unlockAudio, requestWakeLock, awakeAcquire(\u0027anchor\u0027) and awakeAskNotify, then persists."
+                      },
+                      {
+                          "module":  "anchor",
+                          "name":  "setAnchorRadius(ft)",
+                          "kind":  "action",
+                          "description":  "Applies live: resizes the circle, clears snooze and outCount, persists, re-evaluates. Commit on input change, not keystroke."
+                      },
+                      {
+                          "module":  "anchor",
+                          "name":  "anchorDismissAlarm()",
+                          "kind":  "action",
+                          "description":  "Silence means a 5 min snooze, or until the distance reaches 1.25Ã— the distance at silencing. Never a permanent latch."
+                      },
+                      {
+                          "module":  "anchor",
+                          "name":  "anchorRestore()",
+                          "kind":  "action",
+                          "description":  "At boot, before gpsStart: restores from fishapp.anchor if less than 36 h old. Audio is primed by the first pointerdown/touchstart/keydown and the toasts say so."
+                      },
+                      {
+                          "module":  "anchor",
+                          "name":  "unlockAudio()",
+                          "kind":  "action",
+                          "description":  "Creates or resumes the single shared AudioContext (also used by voice). Must be called from a gesture."
+                      },
+                      {
+                          "module":  "anchor",
+                          "name":  "alarmStart / alarmStop",
+                          "kind":  "event",
+                          "description":  "Drag or blind alarm lifecycle. The engine itself beeps every 2 s, vibrates and sends the notification."
+                      },
+                      {
+                          "module":  "trip",
+                          "name":  "trip{active,start,segStart,accMs,dist,maxKn,sumKn,nKn} + durationMs/avgKn/buttonLabel",
+                          "kind":  "state",
+                          "description":  "Trip stats. Distance counts only moves of 10 m or more with kn\u003e0.5 on non-coarse fixes."
+                      },
+                      {
+                          "module":  "trip",
+                          "name":  "tripToggle() / tripReset()",
+                          "kind":  "action",
+                          "description":  "Start, pause (banks accMs) or resume (fresh segStart and lastLL). Reset has no confirmation. Also used by the assistant\u0027s set_trip tool."
+                      },
+                      {
+                          "module":  "route",
+                          "name":  "route{mode, pts, legs[{nm,brg}], totalNm, speedKn=20, gph=8}",
+                          "kind":  "state",
+                          "description":  "Planner state. speedKn and gph must be engine state because the Go To ETA and the assistant read them."
+                      },
+                      {
+                          "module":  "route",
+                          "name":  "setNavMode(mode) / handleMapClick(ll)â†’bool",
+                          "kind":  "action",
+                          "description":  "Toggles \u0027route\u0027 or \u0027measure\u0027 mode. The map click is consumed when a mode is active; otherwise the inspect popup opens."
+                      },
+                      {
+                          "module":  "route",
+                          "name":  "routeAddPoint / routeMovePoint(i,ll) / routeUndo / routeClear / routeStart / setRouteSpeed / setRouteGph",
+                          "kind":  "action",
+                          "description":  "Planner editing. routeStart hands a copy of the points to gotoStartRoute, then clears the planner."
+                      },
+                      {
+                          "module":  "measure",
+                          "name":  "measure{a, result{nm,mi,brg}} / measureReset()",
+                          "kind":  "state",
+                          "description":  "Two-tap measure. A third tap starts over."
+                      },
+                      {
+                          "module":  "goto",
+                          "name":  "goto{active, destName, dest, route, legIdx, arriving, banner{name,distText,brgText,etaText}}",
+                          "kind":  "state",
+                          "description":  "Live Go To run and the exact banner strings."
+                      },
+                      {
+                          "module":  "goto",
+                          "name":  "gotoStart(ll,name)â†’bool / gotoStartRoute(pts)",
+                          "kind":  "action",
+                          "description":  "Confirms before discarding a voyage with more than 2 breadcrumbs (returns false if the user backs out). Requests the wake lock, draws the pin and lines, closes the popup."
+                      },
+                      {
+                          "module":  "goto",
+                          "name":  "gotoArrive() / gotoCancel()",
+                          "kind":  "action",
+                          "description":  "Arrive saves a trips record when there are 2 or more breadcrumbs and a start position, guarded against double taps. Cancel confirms when there are more than 2 breadcrumbs. Both call applyPendingUpdate in a finally."
+                      },
+                      {
+                          "module":  "goto",
+                          "name":  "trips[] / loadTrips / toggleTripShown(t) / deleteTrip(id)",
+                          "kind":  "action",
+                          "description":  "Voyage archive CRUD. Showing a trip closes panels and fits the bounds via mapProgrammatic."
+                      },
+                      {
+                          "module":  "goto",
+                          "name":  "waypointReached / arriving / voyageSaved",
+                          "kind":  "event",
+                          "description":  "Waypoint advance (arrival radius or passed abeam within 2 nm), arrival hysteresis (enter below 0.08-0.25 nm, exit at 0.12 nm or more), and save."
+                      },
+                      {
+                          "module":  "tracks",
+                          "name":  "tracks{recording, startedAt, pointCount, saved[], shownIds}",
+                          "kind":  "state",
+                          "description":  "Recording state and saved tracks."
+                      },
+                      {
+                          "module":  "tracks",
+                          "name":  "trackToggle() / loadTracks / toggleTrackShown(t) / deleteTrack(id)",
+                          "kind":  "action",
+                          "description":  "Start recording (awakeAcquire(\u0027track\u0027)) or stop (save if 2 or more points, awakeRelease, applyPendingUpdate)."
+                      },
+                      {
+                          "module":  "tracks",
+                          "name":  "trackDistanceNm(points)",
+                          "kind":  "query",
+                          "description":  "Sums only segments of 10 m or more (Leaflet haversine)/1852. Used for tracks and voyages."
+                      },
+                      {
+                          "module":  "engine",
+                          "name":  "isBusy() / busyChanged",
+                          "kind":  "query",
+                          "description":  "Goto.active, Tracks.recording or anchor.watching. Used by the service-worker update deferral."
+                      },
+                      {
+                          "module":  "engine",
+                          "name":  "toast(msg)",
+                          "kind":  "event",
+                          "description":  "Engine-emitted user messages (exact copy in spec Â§4). The engine is given toast, confirm and closePanels at init."
+                      },
+                      {
+                          "module":  "geo",
+                          "name":  "formatCoord / nmBetween / bearingBetween / fmtDur / mapBoundsClamped / compass",
+                          "kind":  "query",
+                          "description":  "Pure helpers shared app-wide. Keep the exact formulas: R=6371e3 haversine, /1852, Ã—1.15078, rounding before splitting minutes."
+                      }
+                  ],
+    "crossDeps":  [
+                      "gps.js/nav.js/goto.js/tracks.js use toast() from app.js. Some calls are unguarded: gps.js:56, nav.js:30-31,158,162,165,182, tracks.js:27,37,50",
+                      "goto.js:299 and tracks.js:109 call closePanels() (window.closePanels, app.js:287) unguarded; nav.js:64 guards it",
+                      "nav.js, goto.js, tracks.js and gps.js use window._map (app.js:73)",
+                      "goto.js:248 and tracks.js:38,52 call window.applyPendingUpdate (app.js:617, defined only when serviceWorker is supported)",
+                      "gps.js:143 calls updateEmergency() (app.js:428) when #panel-emergency is visible",
+                      "gps.js:144 calls refreshSpotDistances() (spots.js:147) unguarded on every fix",
+                      "goto.js:45,191,275 and tracks.js:100 use escapeHtml (spots.js:256)",
+                      "goto.js:121 uses compass() (weather.js:312)",
+                      "goto.js and tracks.js use idb.getAll/put/del (db.js:56-62); stores \u0027trips\u0027 and \u0027tracks\u0027",
+                      "goto.js:106 and assistant.js:713,716,743 read the DOM inputs #route-speed/#route-gph (owned by the nav.js planner)",
+                      "gps.js:141 calls trackOnFix (tracks.js) unguarded, before navOnFix",
+                      "gps.js:142 navOnFix (nav.js) â†’ gotoOnFix (goto.js); gps.js:68,77 â†’ navOnGpsLost/navOnGpsStale (nav.js)",
+                      "nav.js uses GPS.lastLatLng/accuracy/coarse, gpsIsStale and requestWakeLock (gps.js) and awakeAcquire/Release/AskNotify/Notify/UpdateUi (awake.js)",
+                      "goto.js uses GPS.last.coords.heading, GPS.heading and GPS.lastLatLng (gps.js), fmtDur (nav.js) and trackDistanceNm (tracks.js)",
+                      "awake.js reads GPS.lastFixTs and WakeLock (gps.js), Nav.anchor.watching (nav.js) and Tracks.recording (tracks.js)",
+                      "gps.js WakeLock calls awakeUpdateUi (awake.js)",
+                      "nav.js routeStart â†’ gotoStartRoute (goto.js)",
+                      "voice.js calls anchorDrop, trackToggle, setFollow, gpsIsStale, formatCoord, unlockAudio and requestWakeLock directly, and routeStart, gotoCancel and anchorRaise BY NAME via window[fnName] (voice.js:120-124). Voice reads Nav.anchor and Tracks.recording",
+                      "assistant.js uses tripToggle/tripReset (set_trip tool), Nav.trip/Nav.anchor for context, GPS.last.coords.speed/heading, setFollow, mapProgrammatic, nmBetween, bearingBetween and formatCoord",
+                      "inspect.js:100-103 and spots.js:33 call gotoStart; spots.js:242,251 call renderTracksList/renderTripsList after an import",
+                      "app.js wires every button and input in this group (app.js:352-362,471-473,523-542,562-575,579,589) and uses Goto.active, Tracks.recording and Nav.anchor.watching for SW update deferral (app.js:606-612)",
+                      "GPS.lastLatLng is read across the app: weather, tides, catch, bite, fish, inspect, reefs, spots, assistant, voice, app emergency/SMS/mark; nmBetween, bearingBetween, formatCoord and mapBoundsClamped are used by many modules (see spec Â§6.2)"
+                  ],
+    "safetyCritical":  [
+                           "Highest severity, an existing bug: when a drag alarm goes blind and GPS then recovers with the boat still outside the circle, the alarm stops and is never restarted. navAnchorEvaluate clears blind and stops the alarm but leaves dragging=true (nav.js:406, 421). Recommended fix: set dragging=false when clearing blind.",
+                           "GPS fix sanity gate before any consumer: reject non-finite, out-of-range, exactly (0,0), and teleports above 103 m/s when the previous fix is under 60 s old. A rejected fix must not update lastFixTs (gps.js:36-48, 83).",
+                           "Staleness: 60 s threshold, polled every 15 s by the watchdog; the geolocation error callback immediately calls navOnGpsLost (gps.js:24, 31, 61-78).",
+                           "Coarse fixes (\u003e100 m or unknown accuracy): the anchor drop is refused, trip distance ignores them, and the anchor limit is widened by their accuracy, capped at 1Ã— the radius (gps.js:27, 87; nav.js:164-166, 387, 411-412).",
+                           "The anchor is evaluated first on every fix, in its own try (nav.js:376-378). Recommended: also guard trackOnFix, which currently runs unguarded before it (gps.js:141).",
+                           "Anchor alarm needs 2 consecutive out-of-circle fixes; limit = radius + min(accuracy slop, radius); the alarm auto-stops back inside the circle (nav.js:399-429).",
+                           "Silence is a snooze, never a latch: 5 min, or the drift reaches 1.25Ã— the distance at silencing; back inside the circle clears it (nav.js:297-313, 418-420).",
+                           "Blind alarm on stale or lost GPS while watching, with \u0027NO GPS\u0027 copy, beeps, notification and toast (nav.js:314-326).",
+                           "Anchor drop is refused with no fix, a stale fix or a coarse fix. The drop gesture must unlock audio, request the wake lock, acquire the keep-alive and ask notification permission (nav.js:156-183).",
+                           "The anchor watch persists to localStorage \u0027fishapp.anchor\u0027 {lat,lng,radiusFt,ts} and is restored at boot before gpsStart, for up to 36 h. The restore toast must say the sound needs a tap (nav.js:201-235; app.js:540, 589).",
+                           "A radius change mid-watch applies live and re-evaluates (nav.js:252-263).",
+                           "Service-worker update reload is deferred while Go To is active, a track is recording or the anchor is watching. applyPendingUpdate runs after gotoEnd and trackStop (app.js:603-631; goto.js:244-249; tracks.js:38, 52).",
+                           "Wake lock: the _pending flag is set before the await; failures are recorded; the status text reflects the actual state; the lock is re-acquired on visible and on any gesture (gps.js:180-246).",
+                           "Keep-alive: reference-counted reasons, near-silent non-zero noise WAV at volume 0.02, playsinline, started only from gestures (awake.js:35-83).",
+                           "The watch banner must be visible whenever armed, amber on no GPS (60 s or more), screen may sleep or keep-alive not running, with the GPS age ticking every 5 s (awake.js:152-186).",
+                           "formatCoord rounds to thousandths of a minute before splitting degrees/minutes; it is read to the Coast Guard (gps.js:273-283).",
+                           "gotoEnd double-tap guard (_ending) prevents duplicate voyage saves (goto.js:216-219).",
+                           "No silent voyage discard: confirm before starting a new Go To over an active voyage with more than 2 breadcrumbs, and before cancelling one (goto.js:28-30, 211).",
+                           "Route start removes the draggable planner line so it can\u0027t diverge from the followed route (nav.js:63-69).",
+                           "Waypoint advance: speed-scaled arrival radius 0.08-0.25 nm, or passed abeam (\u003e90Â° off the leg bearing and within 2 nm), loop catch-up across legs. The banner headline and ETA use total remaining route distance (goto.js:101-157, 172-199).",
+                           "The Go To steer arrow falls back to the sticky course over ground (GPS.heading) when coords.heading is null (gps.js:96-99; goto.js:91-95).",
+                           "Distance noise filters: tracks record a point on a 10 m move, or after 5 s only when under way; trackDistanceNm sums only segments of 10 m or more; trip distance requires 10 m, kn\u003e0.5 and a non-coarse fix (tracks.js:56-84; nav.js:382-391).",
+                           "Anchor beep: 920 Hz Ã—3 at 0/0.45/0.9 s, repeated every 2 s, with vibration [500,200,500,200,500]; the AudioContext is resumed if suspended (nav.js:327-340).",
+                           "Alarm notifications use tag \u0027fishapp-alarm\u0027, requireInteraction and renotify, shown through the service worker (awake.js:109-131)."
+                       ],
+    "risks":  [
+                  "Existing bug, highest severity: a blind-then-recovered drag alarm stays silent while the boat is still outside (dragging is never reset when blind clears; nav.js:406, 421). The owner must decide; recommend fixing.",
+                  "Existing bug: a restored anchor watch never calls awakeAcquire(\u0027anchor\u0027), so after a reload the watch banner is hidden and background keep-alive is off (nav.js:213-235).",
+                  "Existing bug: silencing a blind alarm silences it indefinitely, because navOnGpsStale early-returns while blind (nav.js:318). A radius change while blind clears blind using a stale position (nav.js:261).",
+                  "Existing bug: the .arriving class leaks into the next voyage (goto.js:47, 243). routeStart clears the planned route even when the user cancels the \u0027voyage in progress\u0027 confirm (nav.js:65-69). With no fix, the banner shows \u0027steer 0Â° N\u0027.",
+                  "React lifecycle risk: anchor evaluation, alarms, watchdog, keep-alive and wake lock must live in a framework-free engine driven by watchPosition and timers, not in effects or renders that are throttled in the background or double-invoked by StrictMode.",
+                  "confirm() is used synchronously (gotoStart returns false). In a WKWebView shell without WKUIDelegate confirm panels it returns false, so voyages with more than 2 points can\u0027t be cancelled and tracks or voyages can\u0027t be deleted. Async in-app dialogs change gotoStart into a Promise and all its callers (inspect, spots, routeStart, voice) must await it.",
+                  "In the iOS fishapp:// WKWebView shell, service workers, the Notification API and possibly the Wake Lock API are unavailable. Alarm notifications silently do nothing (awakeNotify waits on serviceWorker.ready forever if the API exists but no worker registers), and the update-deferral code path does not exist.",
+                  "voice.js calls routeStart, gotoCancel and anchorRaise via window[fnName]. ES modules must explicitly expose them on window (or voice must be ported to engine actions) or voice commands silently reply \u0027I can\u0027t do that right now.\u0027",
+                  "#route-speed and #route-gph DOM values are read by goto.js and assistant.js. They must become engine state, otherwise the Go To ETA and First Mate answers break when the Tools panel isn\u0027t mounted.",
+                  "Route-planner markers must not be re-created or have setIcon called during a drag (cancels the drag). Leaflet layers should stay imperative, not be rebuilt by React renders.",
+                  "There are about 35 exact user-facing strings (safety and honesty copy in particular, including the iPhone limitation paragraph and the anchor hint). A redesign that rewords them changes safety messaging; spec Â§4 has them verbatim.",
+                  "Silent IndexedDB failures: trackStop and gotoEnd await idb.put with no catch, so a quota error gives no toast and the track recording state is already cleared.",
+                  "Saved track/voyage view doesn\u0027t turn follow off, so with follow on the map snaps back to the boat within about 1 s. Decide whether to keep this.",
+                  "The topbar shows no staleness: the dot stays green when fixes stop without an error. Only the watch banner (if armed) and the anchor blind alarm reveal it."
+              ],
+    "topLevelSideEffects":  [
+                                "gps.js:4-17 creates the global GPS (follow=true)",
+                                "gps.js:182 reads localStorage \u0027fishapp.wake\u0027 at script load; gps.js:183 checks \u0027wakeLock\u0027 in navigator",
+                                "gps.js:245 document visibilitychange â†’ WakeLock.acquire() when visible",
+                                "gps.js:246 document pointerdown/touchstart/click (passive) â†’ WakeLock.acquire()",
+                                "awake.js:28-33 creates the global Awake; reads localStorage \u0027fishapp.keepalive\u0027 at load",
+                                "awake.js:179 setInterval 5000 â†’ awakeUpdateUi() while any keep-alive reason is set (runs forever)",
+                                "awake.js:184-186 document visibilitychange â†’ setTimeout(awakeUpdateUi, 400) when visible",
+                                "nav.js:5-12 creates the global Nav; goto.js:6-22 the global Goto; tracks.js:4-12 the global Tracks (no listeners or timers)",
+                                "Init from app.js: navInit(map) (523), anchorRestore() (540, before GPS), WakeLock.setEnabled+acquire (565-566), awakeSetEnabled (573), renderTracksList() (579), gpsStart(map) in finally (589), which starts watchPosition and a 15 s stale-watchdog setInterval (gps.js:59-78)"
+                            ]
+}

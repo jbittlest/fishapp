@@ -1,0 +1,204 @@
+/* AppShell layout. #root ignores pointer events so the chart stays draggable between pieces of
+ * chrome; every interactive block below sets pointer-events:auto explicitly. */
+#root { pointer-events: none; z-index: 1; }
+.shell { position: absolute; inset: 0; pointer-events: none; }
+
+.shell-scrim {
+  position: fixed; top: 0; left: 0; right: 0; height: calc(var(--safe-top) + 64px);
+  background: var(--scrim-top); z-index: var(--z-scrim); pointer-events: none;
+}
+
+/* --------------------------------------------------------- persistent layer */
+.shell-persist {
+  position: fixed; z-index: var(--z-persist); pointer-events: none;
+  top: calc(var(--safe-top) + 6px);
+  left: calc(var(--safe-left) + 12px + var(--rail-w));
+  right: calc(var(--safe-right) + 12px);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.shell.is-desktop .shell-persist { left: calc(var(--rail-w) + 12px); right: 12px; top: calc(var(--safe-top) + 12px); align-items: center; }
+.shell.is-desktop.has-sheet .shell-persist { left: calc(var(--rail-w) + 424px); }
+.shell-persist__row { display: flex; gap: 8px; align-items: flex-start; width: 100%; }
+.shell.is-desktop .shell-persist__row { max-width: 560px; }
+.shell-persist__bands { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.shell.is-desktop .shell-persist__bands { max-width: 560px; }
+.shell-persist__bands > * { pointer-events: auto; }
+
+/* ---------------------------------------------------------------- HUD */
+.shell-hud {
+  flex: 1; min-width: 0; pointer-events: auto;
+  background: var(--chrome); border-radius: var(--r-lg);
+  box-shadow: var(--e1), inset 0 0 0 1px var(--line);
+  padding: 8px 12px 10px;
+}
+.shell-hud__top { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 18px; }
+.shell-hud__fix { display: inline-flex; align-items: center; gap: 7px; font: 600 12px/16px var(--font-ui); letter-spacing: .04em; color: var(--text-2); white-space: nowrap; }
+.shell-hud__dot { position: relative; width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.shell-hud__fix.is-ok .shell-hud__dot { background: var(--ok); box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--ok) 25%, transparent); }
+.shell-hud__fix.is-weak .shell-hud__dot { box-shadow: inset 0 0 0 2px var(--ok); }
+.shell-hud__fix.is-none .shell-hud__dot { box-shadow: inset 0 0 0 2px var(--text-3); }
+.shell-hud__fix.is-alert { color: var(--alert-text); }
+.shell-hud__fix.is-alert .shell-hud__dot::before, .shell-hud__fix.is-alert .shell-hud__dot::after {
+  content: ''; position: absolute; left: 50%; top: -1px; width: 2.4px; height: 11px; margin-left: -1.2px; border-radius: 1px; background: var(--alert-text);
+}
+.shell-hud__fix.is-alert .shell-hud__dot::before { transform: rotate(45deg); }
+.shell-hud__fix.is-alert .shell-hud__dot::after { transform: rotate(-45deg); }
+.shell-hud__right { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.shell-hud__coords { font: 600 12.5px/16px var(--font-inst); font-variant-numeric: tabular-nums; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shell-hud__coords.is-stale { color: var(--text-3); }
+.shell-hud__offline { font: 700 10.5px/1 var(--font-ui); letter-spacing: .08em; text-transform: uppercase; color: var(--text-1); background: var(--control); padding: 4px 7px; border-radius: var(--r-pill); }
+.shell-hud__cells { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 4px; }
+.shell-hud__cell { display: flex; flex-direction: column; gap: 1px; min-width: 0; padding-left: 10px; }
+.shell-hud__cell:first-child { padding-left: 0; }
+.shell-hud__cell + .shell-hud__cell { box-shadow: inset 1px 0 0 var(--line); }
+.shell-hud.is-compact { padding: 6px 12px; }
+.shell-hud.is-compact .shell-hud__cells { margin-top: 0; }
+.shell-hud.is-compact .shell-hud__top { min-height: 0; margin-bottom: 2px; }
+.shell-hud.is-compact .ui-num--m { font-size: 21px; line-height: 24px; }
+.shell-hud.is-compact .ui-label { display: none; }
+
+/* ---------------------------------------------------------------- SOS */
+.shell-sos {
+  pointer-events: auto; flex-shrink: 0; width: 52px; height: 52px; border-radius: var(--r-md);
+  background: var(--alert); color: #fff; box-shadow: var(--e1);
+  font: 700 15px/1 var(--font-inst); letter-spacing: .07em;
+}
+.shell-sos:active { transform: scale(.97); }
+:root[data-theme="night"] .shell-sos { color: #000; }
+
+/* ----------------------------------------------------------- map controls */
+.shell-right {
+  position: fixed; z-index: var(--z-chrome); pointer-events: none;
+  top: calc(var(--persist-bottom) + 10px); right: calc(var(--safe-right) + 12px);
+  display: flex; flex-direction: column; gap: 10px;
+}
+.shell.is-desktop .shell-right { right: 12px; }
+.shell-ctlgroup {
+  pointer-events: auto; display: flex; flex-direction: column; overflow: hidden;
+  background: var(--chrome); border-radius: var(--r-md); box-shadow: var(--e1), inset 0 0 0 1px var(--line);
+}
+.shell-ctl { width: 48px; height: 48px; display: grid; place-items: center; color: var(--text-1); transition: color var(--t-fast), background-color var(--t-fast); }
+.shell-ctl + .shell-ctl { box-shadow: inset 0 1px 0 var(--line); }
+.shell-ctl:active { background: var(--control); }
+.shell-ctl.is-active { color: var(--signal-fg); }
+
+/* --------------------------------------------------------- bottom stack */
+.shell-bottom {
+  position: fixed; z-index: var(--z-tabbar); pointer-events: none;
+  left: calc(var(--safe-left) + 12px + var(--rail-w)); right: calc(var(--safe-right) + 12px);
+  bottom: max(calc(var(--safe-bottom) - 10px), 12px);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.shell.is-desktop .shell-bottom { left: calc(var(--rail-w) + 12px); right: 12px; bottom: 12px; }
+.shell.is-desktop.has-sheet .shell-bottom { left: calc(var(--rail-w) + 424px); }
+.shell-bottom__row { display: flex; align-items: flex-end; gap: 12px; }
+.shell-bottom__main { flex: 1; min-width: 0; display: flex; justify-content: center; }
+.shell-bottom__main > * { pointer-events: auto; width: 100%; max-width: 460px; }
+.shell.is-desktop .shell-bottom__main { justify-content: center; }
+
+/* ---------------------------------------------------------------- tab bar */
+.shell-tabbar {
+  pointer-events: auto; display: grid; grid-template-columns: repeat(5, 1fr); align-items: center;
+  height: 64px; padding: 0 4px; background: var(--chrome); border-radius: var(--r-pill);
+  box-shadow: var(--e1), inset 0 0 0 1px var(--line);
+}
+.shell-tab {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  height: 56px; color: var(--text-2); border-radius: var(--r-pill);
+  transition: color var(--t-fast);
+}
+.shell-tab:active { background: var(--control); }
+.shell-tab__label { font: 600 11px/13px var(--font-ui); letter-spacing: .01em; white-space: nowrap; }
+.shell-tab.is-active { color: var(--signal-fg); }
+/* shape cue for "selected": a dot under the label (colour alone fails at night) */
+.shell-tab.is-active::after { content: ''; position: absolute; bottom: 3px; width: 4px; height: 4px; border-radius: 50%; background: currentColor; }
+/* the centre voice item (features/voice/VoiceTabButton renders .shell-tab.shell-tab--voice) */
+.shell-tab--voice { color: var(--text-1); }
+.shell-tab--voice .shell-tab__disc {
+  position: relative; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--signal); color: var(--signal-ink); margin-top: -2px;
+}
+.shell-tab--voice.is-listening .shell-tab__disc::before, .shell-tab--voice.is-listening .shell-tab__disc::after {
+  content: ''; position: absolute; inset: -1px; border-radius: 50%; box-shadow: 0 0 0 1.5px var(--signal);
+  animation: ring-out 1.2s var(--ease-out) infinite;
+}
+.shell-tab--voice.is-listening .shell-tab__disc::after { animation-delay: .6s; }
+.shell-tab--voice.is-awake .shell-tab__disc { background: var(--control); color: var(--signal-fg); box-shadow: inset 0 0 0 2px var(--signal); }
+.shell-tab--voice.is-off .shell-tab__disc { background: var(--control); color: var(--text-2); }
+
+/* desktop rail */
+.shell-rail {
+  position: fixed; z-index: var(--z-tabbar); pointer-events: auto; top: 0; bottom: 0; left: 0; width: 76px;
+  padding: calc(var(--safe-top) + 12px) 6px 12px; display: flex; flex-direction: column; align-items: stretch; gap: 4px;
+  background: var(--chrome-solid); box-shadow: inset -1px 0 0 var(--line);
+}
+.shell-rail__brand { display: grid; place-items: center; height: 40px; color: var(--signal-fg); margin-bottom: 6px; }
+.shell-rail .shell-tab { height: 60px; border-radius: var(--r-md); }
+.shell-rail .shell-tab.is-active { background: var(--control); }
+.shell-rail .shell-tab.is-active::after { display: none; }
+.shell-rail .shell-tab--voice { margin-bottom: 8px; }
+
+/* --------------------------------------------------------------- map card */
+.shell-cardhost {
+  position: fixed; z-index: calc(var(--z-chrome) + 50); pointer-events: none;
+  left: calc(var(--safe-left) + 12px); right: calc(var(--safe-right) + 12px);
+  bottom: calc(var(--chrome-bottom) + 10px);
+  max-height: calc(100dvh - var(--persist-bottom) - var(--chrome-bottom) - 24px);
+  display: flex; flex-direction: column; justify-content: flex-end;
+}
+.shell.is-desktop .shell-cardhost { left: calc(var(--rail-w) + 12px); right: auto; width: 400px; bottom: calc(var(--chrome-bottom) + 12px); }
+.shell.is-desktop.has-sheet .shell-cardhost { left: calc(var(--rail-w) + 424px); }
+.shell-card {
+  pointer-events: auto; display: flex; flex-direction: column; min-height: 0; max-height: 100%;
+  background: var(--sheet); color: var(--text-1); border-radius: var(--r-xl);
+  box-shadow: var(--e3), inset 0 0 0 1px var(--line); padding: 14px 14px 14px 16px;
+  animation: card-rise var(--t-base) var(--ease-out);
+}
+@keyframes card-rise { from { transform: translateY(10px); } to { transform: none; } }
+.shell-card__head { display: flex; gap: 12px; align-items: flex-start; }
+.shell-card__media { width: 56px; height: 56px; border-radius: var(--r-md); overflow: hidden; flex-shrink: 0; background: var(--raised); }
+.shell-card__media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.shell-card__titles { flex: 1; min-width: 0; }
+.shell-card__eyebrow { margin-bottom: 2px; }
+.shell-card__title { overflow-wrap: anywhere; }
+.shell-card__body { margin-top: 10px; overflow-y: auto; min-height: 0; overscroll-behavior: contain; }
+.shell-card__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.shell-card__actions > .ui-btn { flex: 1 1 auto; }
+
+/* ------------------------------------------------------------- onboarding */
+.shell-onboard {
+  position: fixed; inset: 0; z-index: calc(var(--z-modal) + 50); pointer-events: auto;
+  display: flex; align-items: center; justify-content: center; overflow-y: auto;
+  padding: calc(var(--safe-top) + 16px) 16px calc(var(--safe-bottom) + 16px);
+  background: color-mix(in srgb, var(--ink-950) 82%, transparent);
+  animation: fade-in var(--t-base) var(--ease-out);
+}
+.shell-onboard__card { width: 100%; max-width: 420px; margin: auto; padding: 24px 20px 16px; background: var(--sheet); color: var(--text-1); border-radius: var(--r-xl); box-shadow: var(--e3), inset 0 0 0 1px var(--line); }
+.shell-onboard__mark { width: 52px; height: 52px; border-radius: 16px; display: grid; place-items: center; background: var(--chrome-solid); color: var(--signal); margin-bottom: 14px; }
+.shell-onboard__list { list-style: none; margin: 14px 0 20px; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.shell-onboard__list li { display: flex; gap: 12px; font: 400 15px/21px var(--font-ui); color: var(--text-2); }
+.shell-onboard__list li > .ui-icon { margin-top: 1px; color: var(--signal-fg); flex-shrink: 0; }
+.shell-onboard__list b { color: var(--text-1); font-weight: 600; }
+.shell-onboard__link { display: block; width: 100%; margin-top: 10px; min-height: 44px; font: 600 14px/1 var(--font-ui); color: var(--signal-fg); }
+
+/* everything React draws over the map that is a dialog/overlay accepts input */
+.ui-sheet, .ui-modal-wrap, .ui-toast, .shell-cardhost .shell-card { pointer-events: auto; }
+
+/* ------------------------------------------------- map symbology (Leaflet) */
+.boat-icon { background: none; border: 0; }
+.boat-icon svg { overflow: visible; transition: transform .3s linear; }
+.own-keyline { fill: none; stroke: #fff; stroke-width: 5.5; stroke-linejoin: round; }
+.own-hull { fill: var(--signal); stroke: var(--chart-ink); stroke-width: 2; stroke-linejoin: round; }
+:root[data-theme="night"] .own-keyline { stroke: #2A0805; }
+.gps-acc-circle { stroke: var(--signal); stroke-opacity: .55; fill: var(--signal); fill-opacity: .08; }
+.sel-pin { background: none; border: 0; }
+.sel-pin__ring { fill: var(--chart-ink); fill-opacity: .85; stroke: var(--signal); stroke-width: 3; }
+.sel-pin__dot { fill: #fff; }
+:root[data-theme="night"] .sel-pin__dot { fill: var(--signal); }
+/* name chips on the chart (spots, destinations): ink chip, never bare text with a halo */
+.map-chip {
+  display: inline-block; padding: 3px 8px; border-radius: var(--r-sm); white-space: nowrap;
+  background: color-mix(in srgb, var(--chart-ink) 90%, transparent); color: #F3F6F9;
+  font: 600 12px/16px var(--font-ui); box-shadow: 0 1px 3px rgba(0, 0, 0, .35);
+}
+:root[data-theme="night"] .map-chip { color: var(--text-1); }

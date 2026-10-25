@@ -1,6 +1,6 @@
 /* Design-system primitives (DESIGN.md §8). Every feature builds from these — no feature defines
  * its own button, switch, list row or number style. Styling lives in ui.css under `ui-*` classes. */
-import { useId, useState, type ReactNode, type CSSProperties, type ButtonHTMLAttributes, type InputHTMLAttributes, type TextareaHTMLAttributes, type SelectHTMLAttributes } from 'react';
+import { useId, useState, type ReactNode, type CSSProperties, type ButtonHTMLAttributes, type ComponentProps, type SelectHTMLAttributes } from 'react';
 import { Icon, type IconName } from './Icon';
 
 const cx = (...c: Array<string | false | null | undefined>) => c.filter(Boolean).join(' ');
@@ -238,10 +238,10 @@ export function Field({ label, hint, children, className }: { label: ReactNode; 
     </label>
   );
 }
-export function TextInput(props: InputHTMLAttributes<HTMLInputElement>) {
+export function TextInput(props: ComponentProps<'input'>) {
   return <input autoComplete="off" autoCorrect="off" spellCheck={false} {...props} className={cx('ui-input', props.className)} />;
 }
-export function TextArea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+export function TextArea(props: ComponentProps<'textarea'>) {
   return <textarea {...props} className={cx('ui-input ui-textarea', props.className)} />;
 }
 export function Select({ children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
