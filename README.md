@@ -1,88 +1,64 @@
-# FishApp 🐟
+# FishApp
 
-Personal marine navigation PWA — Garmin Navionics style. Offline nautical charts,
-live GPS, saved fishing spots, and track recording. Installs on iPhone straight
-from Safari (no App Store).
+Offline marine charts, GPS navigation and fishing tools — for the boat, built to keep working when
+you lose signal offshore. Runs in any browser (install it from Safari: Share → Add to Home Screen) and
+as a native iPhone app (`FishApp-iOS`, see its `APP_STORE.md`).
+
+**Live:** https://jbittlest.github.io/fishapp/ · **Privacy:** [privacy.html](https://jbittlest.github.io/fishapp/privacy.html) ·
+**Support:** [support.html](https://jbittlest.github.io/fishapp/support.html) · Previous version: [/classic/](https://jbittlest.github.io/fishapp/classic/)
+
+> FishApp is a navigation aid, not a substitute for official charts, a depth sounder, a VHF radio or a
+> proper lookout.
 
 ## Features
 
-- **Charts**: NOAA ENC nautical charts (US waters — depths, buoys, hazards),
-  OpenSeaMap seamarks (worldwide), Esri ocean/satellite/street base maps
-- **Seafloor relief**: GMRT shaded-relief bathymetry base layer — see the actual
-  shape of the bottom. Rendered fresh at every zoom (never CSS-stretched) and at
-  2x pixel density for retina-crisp display. In US coastal waters, NOAA NCEI's
-  hi-res coastal DEM (down to ~1-3 m) auto-overlays for sandbar/channel-level
-  detail. Cities/islands get a transparent label overlay automatically (also on
-  satellite). NOTE: over open ocean the survey grid is inherently coarse, so at
-  extreme zoom the bottom is smooth by data, not by blur — for pin-sharp bottom
-  detail at any zoom, turn on the NOAA chart overlay (vector contours + soundings).
-  Picking the relief base auto-enables the NOAA chart so you get sharp vector
-  contours over the bottom shape (turn it back off and the choice persists).
-- **Weather** (🌤, Open-Meteo, no API key): current wind/gusts/waves/temp cards +
-  24 h hourly forecast; Windy-style wind-arrow overlay colored by speed. Last
-  forecast is saved so it's still readable offline (with an age warning)
-- **Offline areas**: position the map over your fishing grounds, tap ⇩, pick a
-  detail level, download. Everything you browse online is also auto-cached.
-- **GPS**: live position, speed (knots), heading, accuracy — works with zero
-  cell signal (GPS is satellite-based). Screen stays awake while navigating.
-- **California reefs & MPAs** (bundled, fully offline): 142 artificial reefs
-  (name, depth, composition — e.g. sunken Liberty Ships) as tappable 🪸 markers,
-  plus 157 Marine Protected Areas shaded by restriction (red = no-take, orange =
-  limited). Reef popups have "Save as spot"; Spots panel lists nearest reefs by
-  distance. Data: NOAA Artificial Reefs + CDFW MPAs, refreshable via the fetch
-  URLs in `data/`. (Static datasets — bundled so they work with no signal.)
-  Tapping a reef also fetches live wind / swell / seabed depth for that spot.
-- **Sea surface temp (SST)**: toggle a color SST overlay (NASA GIBS / GHRSST MUR,
-  ~1 km, daily with ~2-day lag) to see temperature breaks — the edges tuna/dorado
-  hold on. Legend + date shown bottom-left. Online-only (date-specific tiles).
-  Exact water temp for any point shows in the tap-to-inspect and reef popups.
-- **Tap to inspect**: single-tap anywhere → popup with **depth** (ft / m / fathoms,
-  from NOAA NCEI DEM), **wind** (kn + direction + gust) and **swell** (height /
-  period / direction) at that exact point. "Save as spot" button in the popup.
-- **Spots**: mark waypoints (📌 button or long-press the map) with type, notes;
-  list sorted by distance from you with bearing.
-- **Tracks**: ⏺ records a breadcrumb trail of where you drove; saved with distance.
-- **Backup**: export/import all spots & tracks as a JSON file.
+- **Charts** — NOAA nautical charts, NOAA BlueTopo US survey bathymetry, global GEBCO/GMRT seafloor relief,
+  satellite and street maps, seamarks. Download an area for offline use: charts plus a 7-day wind, wave,
+  tide and water-temperature pack so First Mate can answer about it with no signal.
+- **Instruments** — GPS fix, SOG, COG (°T), coordinates in DDM to the thousandth of a minute, satellite
+  water temperature; values dim when stale and blank when the fix is lost.
+- **Navigation** — Go-To any point or follow a planned route (ETA, distance, bearing, steer cue), voyage
+  archive, track recording, trip stats, measure tool.
+- **Anchor watch** — drag and lost-GPS alarms that keep working with the screen locked in the iPhone app.
+- **Weather** — now & 24 h, 10-day with 3-hourly detail, area forecasts, wind arrows with a 24 h loop,
+  rain radar loop, sea-surface temperature breaks.
+- **Fishing** — tides and solunar periods, bite windows learned from your own catch log, catch log with
+  photos and auto-captured conditions, California artificial reefs and Marine Protected Areas (offline),
+  recent fish sightings, knot guides, fish ID and limits.
+- **First Mate** — an assistant that answers from your boat data offline and, with your permission, uses
+  a free cloud AI (or Claude with your own key) when you have signal. Hands-free "Hey Fish" voice where
+  the platform supports speech recognition.
+- **Safety** — SOS screen with your position, a pre-filled "text my location" message, VHF/911 and a
+  MAYDAY script with your live position. Day, high-glare Sun and red-safe Night display modes.
 
-## Run locally
+## Source and builds
+
+The app is React 19 + TypeScript + Vite over a plain-JS engine (`src/engine/`, ported from the original
+vanilla app) and Leaflet. The source lives on branch **`ui-src`**; branch `main` holds the built site
+that GitHub Pages serves.
 
 ```
-python -m http.server 8123 --directory .
+src/engine/    app logic (GPS, charts, navigation, weather, tides, assistant…) — never touches the DOM
+src/services/  UI state (panels, cards, dialogs, toasts), theme, iOS-shell bridge
+src/ui/        design-system primitives            docs/DESIGN.md
+src/shell/     app shell: HUD, SOS, map controls, tab bar/rail, sheet/card/modal hosts, core panels
+src/features/  one folder per feature              docs/ARCHITECTURE.md
+legacy/        the original vanilla app (deployed as /classic/)
 ```
-Open http://localhost:8123
 
-## Install on iPhone
+```bash
+npm install
+npm run dev            # http://127.0.0.1:5181
+npm test               # unit tests (Vitest)
+npm run build          # typecheck + production build into dist/ (also generates the service worker)
+npx playwright test    # end-to-end checks against the production build (installed Chrome)
+node tools/deploy.mjs --ios   # copy dist/ into the Pages checkout (+ the iOS app's bundled Web/)
+```
 
-The app must be served over **HTTPS** for GPS + offline to work (any static
-host: GitHub Pages, Netlify, Cloudflare Pages — all free). Then on the phone:
+The service worker is generated at build time from everything the build emits; its cache name is the
+build id plus a content hash, so there is no version number to bump by hand. Installed copies pick up a
+new build on their next launch (never in the middle of a voyage, track, anchor watch or hands-free
+session).
 
-1. Open the URL in Safari
-2. Share → **Add to Home Screen**
-3. Open it once, allow Location access
-4. While on WiFi, download your fishing areas (⇩ button)
-
-## Updating the app
-
-`sw.js` caches the app shell. After changing any code, bump the version string
-(`fishapp-v2` → `fishapp-v3`) in `sw.js` so installed phones pick up the update.
-
-## Architecture
-
-No build step, no dependencies except bundled Leaflet 1.9.4.
-
-| File | Purpose |
-|---|---|
-| `js/tiles.js` | Layer definitions + offline-first tile layer (IndexedDB → network → blank) |
-| `js/db.js` | IndexedDB: tiles, spots, tracks, downloaded areas |
-| `js/gps.js` | Geolocation watch, boat marker, follow mode, wake lock |
-| `js/spots.js` | Waypoint CRUD, list panel, export/import |
-| `js/tracks.js` | Track recording + saved-track management |
-| `js/download.js` | Bulk area downloads with progress, storage management |
-| `js/weather.js` | Open-Meteo forecast panel + wind-arrow map overlay |
-| `js/inspect.js` | Tap-to-inspect popup: point depth + wind + swell |
-| `js/reefs.js` | CA artificial reefs + MPA polygons (bundled offline data) |
-| `js/sst.js` | Sea surface temp overlay (NASA GIBS MUR) + legend |
-| `data/reefs-ca.json` | 142 CA artificial reefs (NOAA Hosted/ArtificialReefs) |
-| `data/mpa-ca.json` | 157 CA Marine Protected Areas (CDFW ds582 polygons) |
-| `js/app.js` | Bootstrap, layer switching, UI wiring |
-| `sw.js` | Service worker — caches the app shell for offline launch |
+`MOTOR.md` documents the experimental trolling-motor link (web only). `proxy/first-mate-worker.js` is the
+Cloudflare Worker behind First Mate's free AI.
