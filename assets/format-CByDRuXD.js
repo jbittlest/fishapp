@@ -1,0 +1,1 @@
+function e(e,t=Date.now()){if(!e||!Number.isFinite(e))return``;let n=new Date(e),r=n.getFullYear()===new Date(t).getFullYear();return n.toLocaleDateString(void 0,r?{month:`short`,day:`numeric`}:{month:`short`,day:`numeric`,year:`numeric`})}export{e as t};
