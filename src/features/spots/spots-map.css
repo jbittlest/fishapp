@@ -1,0 +1,47 @@
+/* Spots feature — map symbology (DESIGN.md §5). Imported by engine/spots.js, not by a lazy
+ * component: the markers exist from boot. Leaflet DOM lives outside .surface-paper, so the
+ * root tokens apply: --text-1 is near-white by day and in sun, red-safe at night. */
+
+/* ---- saved spots: ink disc with a white type glyph, name on an ink chip ---- */
+.spot-mk-wrap { background: none; border: 0; }
+.spot-mk { position: relative; width: 28px; height: 28px; }
+.spot-mk::before { content: ''; position: absolute; inset: -8px; }          /* 44px hit area */
+.spot-mk__disc {
+  position: absolute; inset: 0; display: grid; place-items: center; border-radius: 50%;
+  background: var(--chart-ink); color: var(--text-1);
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--text-1) 80%, transparent);
+}
+.spot-mk__disc svg { display: block; }
+/* hazards are a safety mark: alert keyline as well as the triangle glyph (never colour alone) */
+.spot-mk--hazard .spot-mk__disc { box-shadow: 0 0 0 2px var(--alert); }
+.spot-mk__chip {
+  position: absolute; left: 33px; top: 50%; transform: translateY(-50%);
+  max-width: 168px; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ---- artificial reefs: shape-coded rounded square (spots are discs) ---- */
+.spot-reefmk-wrap { background: none; border: 0; }
+.spot-reefmk {
+  position: relative; width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center;
+  background: var(--chart-ink); color: var(--text-1);
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--text-1) 70%, transparent);
+}
+.spot-reefmk::before { content: ''; position: absolute; inset: -10px; }     /* 44px hit area */
+.spot-reefmk svg { display: block; }
+
+/* ---- Marine Protected Areas ----
+   Day / sun: stroke and fill colours come from MPA_STYLE (they ARE the data: red no-take,
+   magenta special closure, orange limited).
+   Never colour alone: the zone kind is also the LINE PATTERN, in every theme — solid = no take,
+   dashed = limited take, dotted = special closure (the MPA card's swatch echoes it).
+   Night: those literal colours broke the red-safe theme (magenta and orange at full strength
+   over a dark-adapted eye), so they are replaced with night tokens here — CSS beats the SVG
+   presentation attributes Leaflet writes — and the pattern carries the distinction in the
+   monochrome theme. Strength is dimmer at night as well. */
+.spot-mpa { cursor: pointer; }
+.spot-mpa--limited { stroke-dasharray: 7 4; }
+.spot-mpa--closure { stroke-dasharray: .1 5; stroke-linecap: round; stroke-width: 2.5px; }
+:root[data-theme="night"] .spot-mpa { stroke-opacity: .7; fill-opacity: .1; }
+:root[data-theme="night"] .spot-mpa--notake,
+:root[data-theme="night"] .spot-mpa--closure { stroke: var(--alert-text); fill: var(--alert-text); }
+:root[data-theme="night"] .spot-mpa--limited { stroke: var(--text-2); fill: var(--text-2); }

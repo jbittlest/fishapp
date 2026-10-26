@@ -24,7 +24,7 @@ const ti = argv.indexOf('--target');
 const TARGET = path.resolve(ti >= 0 ? argv[ti + 1] : (process.env.FISHAPP_DEPLOY_DIR || DEFAULT_TARGET));
 
 /* Paths the build owns in the deploy checkout: replaced wholesale on every deploy. */
-const MANAGED = ['index.html', 'sw.js', 'manifest.webmanifest', '.nojekyll', 'assets', 'icons', 'data'];
+const MANAGED = ['index.html', 'sw.js', 'manifest.webmanifest', '.nojekyll', 'assets', 'icons', 'data', 'privacy.html', 'support.html', 'classic'];
 /* The pre-React vanilla app. Removed if present; they are not part of the new build. */
 const LEGACY = ['js', 'css', 'libs'];
 /* Docs + infra that live in this source tree and are mirrored so the public repo stays readable. */
@@ -58,6 +58,48 @@ for (const name of fs.readdirSync(DIST)) {
   cp(path.join(DIST, name), name);
 }
 for (const rel of DOCS) if (fs.existsSync(path.join(ROOT, rel))) { rm(rel); cp(path.join(ROOT, rel), rel); }
+
+/* The pre-React app, kept reachable at /classic/ as a rollback while the new UI earns trust on the
+   water. Same origin → same IndexedDB and settings, so it sees the same spots, tracks and charts.
+   Its service worker cache is renamed 'fishapp-classic-…' and only ever deletes its own old
+   caches, so the two workers can't wipe each other's offline shell. */
+function buildClassic() {
+  const out = path.join(TARGET, 'classic');
+  console.log(`${dry ? '[dry] ' : ''}build   classic/ (legacy fallback)`);
+  if (dry) return;
+  fs.mkdirSync(out, { recursive: true });
+  for (const rel of ['index.html', 'js', 'css', 'libs']) fs.cpSync(path.join(ROOT, 'legacy', rel), path.join(out, rel), { recursive: true });
+  for (const rel of ['data', 'icons', 'manifest.webmanifest']) fs.cpSync(path.join(ROOT, 'public', rel), path.join(out, rel), { recursive: true });
+  let sw = fs.readFileSync(path.join(ROOT, 'legacy', 'sw.js'), 'utf8');
+  const m = sw.match(/const CACHE = '(fishapp-[^']+)';/);
+  if (!m) fail('legacy sw.js: CACHE constant not found');
+  sw = sw.replace(m[0], `const CACHE = '${m[1].replace(/^fishapp-/, 'fishapp-classic-')}';`);
+  const before = sw;
+  sw = sw.replace('keys.filter((k) => k !== CACHE)', "keys.filter((k) => k !== CACHE && k.startsWith('fishapp-classic-'))");
+  if (sw === before) fail('legacy sw.js: activate cache filter not found — refusing to ship a worker that could delete the new app cache');
+  fs.writeFileSync(path.join(out, 'sw.js'), sw);
+  // its build label compares APP_BUILD with the worker's cache name
+  const appJs = path.join(out, 'js', 'app.js');
+  const src = fs.readFileSync(appJs, 'utf8');
+  fs.writeFileSync(appJs, src.replace(/const APP_BUILD = '([^']+)';/, (_, v) => `const APP_BUILD = 'classic-${v}';`));
+}
+buildClassic();
+
+/* --ios: also refresh the iOS app's bundled web payload (FishApp-iOS/FishApp/Web), so the Xcode
+   project is self-contained when copied to the Mac. Guarded like the web target. */
+if (argv.includes('--ios')) {
+  const iosWeb = path.resolve(process.env.FISHAPP_IOS_WEB || 'C:/Users/jbitt/OneDrive/Desktop/Projects/FishApp-iOS/FishApp/Web');
+  if (!/FishApp-iOS[\\/]FishApp[\\/]Web$/.test(iosWeb) || !fs.existsSync(path.join(iosWeb, '..', 'Info.plist'))) fail(`refusing iOS target ${iosWeb}`);
+  console.log(`${dry ? '[dry] ' : ''}ios     ${iosWeb}`);
+  if (!dry) {
+    fs.rmSync(iosWeb, { recursive: true, force: true });
+    fs.mkdirSync(iosWeb, { recursive: true });
+    for (const name of fs.readdirSync(DIST)) {
+      if (name === 'sw.js' || name === '.nojekyll') continue;     // no service worker inside the app
+      fs.cpSync(path.join(DIST, name), path.join(iosWeb, name), { recursive: true });
+    }
+  }
+}
 
 console.log(dry ? 'deploy: dry run only — nothing changed' : `deploy: ok → ${TARGET}`);
 if (!dry) console.log(git('status', '--short').split('\n').slice(0, 40).join('\n') || '(no changes)');

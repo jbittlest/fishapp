@@ -13,9 +13,9 @@
    5. Open the Worker → "Settings" → "Bindings" → "Add" → "Workers AI" →
       Variable name MUST be exactly:  AI   → Save/Deploy.
    6. Copy the Worker URL (looks like https://first-mate.<you>.workers.dev).
-   7. In FishApp → 💬 First Mate → ⚙️ settings → paste the URL into
+   7. In FishApp → First Mate → settings → paste the URL into
       "Free-AI endpoint" → Save. (To turn it on for ALL users, also set
-      ASST_PROXY in js/assistant.js to that URL and push.)
+      ASST_PROXY in src/engine/assistant.js to that URL and deploy.)
 
    Free tier is ~10,000 "neurons"/day — plenty for personal use. Swap MODEL
    below for a smarter/bigger one any time (e.g. llama-3.3-70b-instruct-fp8-fast).
@@ -24,37 +24,43 @@
    Re-pasting this file adds a /tts route that gives First Mate a real voice
    instead of the phone's robotic one. It uses the SAME "AI" binding as the
    chat, so there is nothing else to configure — just paste and Deploy, then
-   tick "Natural cloud voice" in the app's ⚙️ settings.
+   turn on "Natural cloud voice" in First Mate settings.
 
-   OPTIONAL, for better-sounding audio: Worker → Settings → Variables and
-   Secrets → add secret OPENAI_KEY = sk-... → Deploy. It's used when present
-   and costs roughly a cent per reply; without it the free voice is used.
+   The voice runs on Cloudflare Workers AI only. An earlier version also sent the
+   text to OpenAI when an OPENAI_KEY secret was set; that path is gone, because
+   the app's privacy policy and its cloud-AI consent question name Cloudflare
+   (and Anthropic, with the user's own key) — not OpenAI. Adding another TTS
+   provider back means naming it there first. An OPENAI_KEY secret left on the
+   Worker is now simply ignored.
    ============================================================================ */
 
 const ALLOWED_ORIGIN = 'https://jbittlest.github.io';   // lock the endpoint to the FishApp site
+/* ...and to the FishApp iPhone app. Its pages load from the registered custom scheme
+   fishapp://app/ (FishApp-iOS WebAppView.swift — chosen precisely because it gives the app a
+   stable, non-opaque origin), so WKWebView sends `Origin: fishapp://app`. The literal `null`
+   is NOT accepted: every sandboxed iframe, data: URL and file:// page on the web sends it, so
+   allowing it would hand the free chat and voice to any site. Check the real Origin header from
+   an iOS build before deploying. A request with no Origin header at all (not a browser) is let
+   through as before: this is a soft anti-abuse guard, not auth. */
+const ALLOWED_ORIGINS = [ALLOWED_ORIGIN, 'fishapp://app'];
 const MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const MAX_TOKENS = 512;
-
-/* Natural speech for the /tts route (see below). Works with NO extra setup — it falls back
-   to Workers AI TTS on the same `AI` binding the chat already uses. Adding an OPENAI_KEY
-   secret is optional and buys better-sounding audio at a per-use cost. */
-const TTS_MODEL = 'gpt-4o-mini-tts';
-const TTS_VOICE = 'onyx';                                // calm, low — suits a boat
-const ALLOWED_TTS_VOICES = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
 
 export default {
   async fetch(request, env) {
     const origin = request.headers.get('Origin') || '';
+    const allowed = !origin || ALLOWED_ORIGINS.includes(origin);
     const cors = {
-      'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
+      // Echo an allowed origin (CORS takes exactly one); anything else gets the site's.
+      'Access-Control-Allow-Origin': origin && allowed ? origin : ALLOWED_ORIGIN,
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
       'Access-Control-Allow-Headers': 'content-type',
       'Vary': 'Origin',
     };
     if (request.method === 'OPTIONS') return new Response(null, { headers: cors });
     if (request.method !== 'POST') return new Response('POST only', { status: 405, headers: cors });
-    // soft anti-abuse guard: only accept browser requests from the FishApp origin
-    if (origin && origin !== ALLOWED_ORIGIN) return new Response('forbidden', { status: 403, headers: cors });
+    // soft anti-abuse guard: only accept browser requests from the FishApp site or app
+    if (!allowed) return new Response('forbidden', { status: 403, headers: cors });
 
     let body;
     try { body = await request.json(); } catch (e) { return json({ error: 'bad json' }, 400, cors); }
@@ -63,37 +69,16 @@ export default {
        iOS Safari won't let a web app use the good system voices, so the built-in
        speech always sounds robotic. This route swaps in a real TTS voice.
 
-       The key lives HERE, in the Worker — never in the phone. Calling OpenAI
-       straight from the browser also trips CORS, so proxying is required, not
-       merely tidier.
-
-       SETUP: Worker → Settings → Variables and Secrets → add secret
-              OPENAI_KEY = sk-...     (then Deploy)
-       Not configured → returns 501 and the app quietly keeps its device voice. */
+       Nothing leaves Cloudflare: the text goes to Workers AI on this Worker's own
+       `AI` binding, the processor the privacy policy names. (The OpenAI route that
+       used to run first when an OPENAI_KEY secret was set has been removed — see the
+       header.) Not configured → returns 501 and the app quietly keeps its device voice. */
     if (new URL(request.url).pathname.replace(/\/+$/, '') === '/tts') {
       const text = String(body.text || '').trim().slice(0, 1200);
       if (!text) return json({ error: 'no text' }, 400, cors);
       const audio = { ...cors, 'content-type': 'audio/mpeg', 'cache-control': 'no-store' };
 
-      // Best quality, only if you've added an OPENAI_KEY secret (optional — costs per use).
-      if (env.OPENAI_KEY) {
-        try {
-          const r = await fetch('https://api.openai.com/v1/audio/speech', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json', authorization: 'Bearer ' + env.OPENAI_KEY },
-            body: JSON.stringify({
-              model: TTS_MODEL,
-              voice: ALLOWED_TTS_VOICES.includes(body.voice) ? body.voice : TTS_VOICE,
-              input: text,
-              response_format: 'mp3',
-            }),
-          });
-          if (r.ok) return new Response(r.body, { headers: audio });
-          // fall through to the free voice rather than failing outright
-        } catch (e) { /* fall through */ }
-      }
-
-      /* Free path — Workers AI TTS on the SAME `AI` binding the chat already uses, so it
+      /* Workers AI TTS on the SAME `AI` binding the chat already uses, so it
          needs no key, no extra account and costs nothing beyond the free allocation.
          MeloTTS hands back base64, so decode it to real bytes before replying. */
       if (env.AI) {

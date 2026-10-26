@@ -142,7 +142,17 @@ export const KNOTS = [
   },
 ];
 
-/* Illustrated stages if we have diagrams for this knot; otherwise the numbered text steps. */
+/* Illustrated stages for this knot ([{svg, cap}]), or null when there are no diagrams and the
+   numbered text steps should be shown instead. Looked up by exact name — note the U+2019 in
+   'Surgeon’s Knot' (KNOTS and KnotArt must spell it identically or its diagrams vanish). */
+export function knotFrames(k) {
+  const frames = k && (typeof KnotArt !== 'undefined') && KnotArt[k.name];
+  return (frames && frames.length) ? frames : null;
+}
+
+/* Illustrated stages if we have diagrams for this knot; otherwise the numbered text steps.
+   (The legacy string renderer, kept byte-for-byte; the Guides panel in
+   features/guides/GuidesPanel.tsx renders the same frames with knotFrames().) */
 export function knotFramesHtml(k) {
   const frames = (typeof KnotArt !== 'undefined') && KnotArt[k.name];
   if (frames && frames.length) {
@@ -153,27 +163,6 @@ export function knotFramesHtml(k) {
   return '<ol>' + k.steps.map((s) => '<li>' + s + '</li>').join('') + '</ol>';
 }
 
-export function renderKnots() {
-  const box = document.getElementById('knots-list');
-  if (!box || box.dataset.built) return;
-  box.dataset.built = '1';
-  box.innerHTML = KNOTS.map((k, i) =>
-    '<div class="knot">' +
-      '<button class="knot-head" data-i="' + i + '">' +
-        '<span class="knot-name">🪢 ' + k.name + '</span>' +
-        '<span class="knot-use">' + k.use + '</span>' +
-      '</button>' +
-      '<div class="knot-body hidden" id="knot-body-' + i + '">' +
-        '<div class="knot-level">' + k.level + '</div>' +
-        knotFramesHtml(k) +
-        (k.tip ? '<div class="knot-tip">💡 ' + k.tip + '</div>' : '') +
-      '</div>' +
-    '</div>').join('');
-  box.querySelectorAll('.knot-head').forEach((h) => {
-    h.onclick = () => {
-      const body = document.getElementById('knot-body-' + h.dataset.i);
-      body.classList.toggle('hidden');
-      h.classList.toggle('open');
-    };
-  });
-}
+/* renderKnots() used to build #knots-list once on the first open of the Guides panel. The
+   accordion is React now (features/guides/GuidesPanel.tsx); its open/closed state lives in a
+   session store there, so it still survives closing and reopening the panel. */

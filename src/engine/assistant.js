@@ -1,42 +1,150 @@
 import L from 'leaflet';
+import { createStore } from 'zustand/vanilla';
 import { idb } from './db.js';
-import { GPS, bearingBetween, formatCoord, mapProgrammatic, nmBetween, setFollow } from './gps.js';
-import { Spots, addSpotMarker, deleteSpot, escapeHtml, renderSpotsList } from './spots.js';
+import { GPS, bearingBetween, formatCoord, gpsIsStale, mapProgrammatic, nmBetween, setFollow } from './gps.js';
+import { Spots, addSpotMarker, deleteSpot, spotsChanged } from './spots.js';
 import { compass } from './weather.js';
 import { Reefs } from './reefs.js';
 import { SST } from './sst.js';
 import { Astro } from './astro.js';
 import { nearestTideStation } from './tides.js';
 import { Catch } from './catch.js';
-import { Nav, tripReset, tripToggle } from './nav.js';
+import { Nav, getRouteGph, getRouteSpeedKn, tripReset, tripToggle } from './nav.js';
 import { KNOTS } from './knots.js';
 import { FISH_ID } from './fish-id.js';
 import { AREA_TIPS, FISH_TIPS, TECHNIQUE_TIPS, areaTipsFor, fishTipsFor, techniqueTipsFor } from './fish-tips.js';
 import { areaDailyForecast, areaDepthAt, areaFcstIndex, areaPackFor, areaPackSummary, areaSstStats, areaTidesNext } from './areadata.js';
 import { biteFmtWindow, biteReason, biteWindows } from './bite.js';
 import { Voice } from './voice.js';
-import { toast } from './app.js';
+import { layersStore, setDataOverlay } from './layers.js';
+import { getMap } from './app.js';
+import { confirmDialog, isPanelOpen, toast, uiStore } from '../services/ui';
 
 /* First Mate — in-app fishing & boating assistant.
    Hybrid: OFFLINE it answers deterministically from the app's own live data
    (position, solunar/sun/moon via astro.js, cached weather, catches, spots,
    reefs, regs, knots). ONLINE with an API key it becomes a full conversational
-   AI (Claude) that is handed the same live snapshot as grounding. */
+   AI (Claude) that is handed the same live snapshot as grounding.
+
+   React port: the engine never touches the DOM. The transcript, status line, voice picker
+   and settings live in `asstStore` (below) so they survive the panel closing — voice.js
+   sends questions with the panel closed and expects the answer spoken. The panel
+   (features/assistant/AssistantPanel.tsx) renders the store and calls these functions. */
 'use strict';
+
+/* ---------------- models ---------------- */
+/* The picker. The legacy list (Opus 4.8 / Sonnet 5 / Haiku 4.5) went stale; these are the
+   current ids. A saved legacy id is migrated to the closest current one (asstMigrateModel),
+   so a user who picked "Haiku" keeps a Haiku. */
+export const ASST_MODELS = [
+  { id: 'claude-opus-5-5', label: 'Claude Opus 5.5', short: 'Opus 5.5', detail: 'smartest' },
+  { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5', short: 'Sonnet 5.5', detail: 'faster' },
+  { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5', short: 'Haiku 5.5', detail: 'fastest / cheapest' },
+];
+export const ASST_DEFAULT_MODEL = 'claude-opus-5-5';
+export function asstMigrateModel(id) {
+  const m = String(id || '').trim().toLowerCase();
+  if (!m) return ASST_DEFAULT_MODEL;
+  if (ASST_MODELS.some((x) => x.id === m)) return m;
+  if (/sonnet/.test(m)) return 'claude-sonnet-5-5';
+  if (/haiku/.test(m)) return 'claude-haiku-5-5';
+  return ASST_DEFAULT_MODEL;     // opus / fable / anything unknown → the default (Opus)
+}
 
 export const ASST = {
   history: [],          // {role:'user'|'assistant', content:'…'}
   lastLoc: null,        // {lat,lng,label} of the last place the user asked about (for follow-ups)
   streaming: false,
+  speak: false,         // read answers aloud (persisted fishapp.asst.speak; voice.js overrides per reply)
   key() { return (localStorage.getItem('fishapp.asst.key') || '').trim(); },
-  model() { return localStorage.getItem('fishapp.asst.model') || 'claude-opus-4-8'; },
+  model() { return asstMigrateModel(localStorage.getItem('fishapp.asst.model')); },
 };
 
+/* ---------------- view store (what the First Mate sheet renders) ---------------- */
+/**
+ * @typedef {Object} AsstMsg
+ * @property {number} id
+ * @property {'user'|'bot'} role
+ * @property {string} text          plain text — render with white-space:pre-wrap and **bold** only, never as HTML
+ * @property {boolean} [thinking]   a reply is in flight
+ * @property {string} [progress]    what the in-flight reply is doing, e.g. 'checking conditions'
+ * @property {boolean} [error]      the AI couldn't answer; the text carries the offline answer
+ * @property {boolean} [greeting]
+ */
+/**
+ * @typedef {Object} AsstVoiceOpt
+ * @property {string} name
+ * @property {boolean} natural
+ */
+/**
+ * @typedef {Object} AsstView
+ * @property {AsstMsg[]} messages
+ * @property {boolean} busy                 a reply is in flight (sends are dropped meanwhile)
+ * @property {boolean} speak                Speak toggle (the user's persistent choice)
+ * @property {'claude'|'proxy'|'offline'|'data'} brain
+ * @property {string} statusText
+ * @property {boolean} showChips
+ * @property {boolean} micSupported         one-shot SpeechRecognition exists
+ * @property {boolean} micListening
+ * @property {boolean} ttsSupported         device speechSynthesis exists
+ * @property {AsstVoiceOpt[]} voices        English device voices, best first
+ * @property {string} voiceName             the device voice in use ('' = none)
+ * @property {'none'|'natural'|'pick-natural'|'ios'|'no-natural'} voiceHint
+ * @property {boolean} online
+ * @property {boolean} hasKey
+ * @property {string} model
+ * @property {string} modelLabel
+ * @property {'yes'|'no'|null} consent      cloud-AI consent (App Store 5.1.2(i)); null = not asked yet
+ * @property {boolean} cloudVoice           natural cloud voice setting
+ * @property {string} proxyUrl              effective free-AI endpoint
+ * @property {boolean} proxyIsDefault       true when no per-device override is set
+ */
+/** @type {import('zustand/vanilla').StoreApi<AsstView>} */
+export const asstStore = createStore(() => /** @type {AsstView} */ ({
+  messages: [],
+  busy: false,
+  speak: false,
+  brain: 'offline',
+  statusText: '',
+  showChips: false,
+  micSupported: false,
+  micListening: false,
+  ttsSupported: false,
+  voices: [],
+  voiceName: '',
+  voiceHint: 'none',
+  online: typeof navigator === 'undefined' ? true : navigator.onLine,
+  hasKey: false,
+  model: ASST_DEFAULT_MODEL,
+  modelLabel: 'Opus 5.5',
+  consent: null,
+  cloudVoice: false,
+  proxyUrl: '',
+  proxyIsDefault: true,
+}));
+
 /* ---------------- small helpers ---------------- */
+/* `live` = the position came from a GPS fix (not the map center). `stale` = that fix is older
+   than GPS_STALE_MS (gps.js), so it is the LAST KNOWN position, not where the boat is now —
+   answers must say so (DESIGN.md: never show a stale value as live), like voice.js does. */
 export function asstPos() {
-  if (typeof GPS !== 'undefined' && GPS.lastLatLng) return { ll: GPS.lastLatLng, live: true };
-  if (window._map) return { ll: window._map.getCenter(), live: false };
-  return { ll: null, live: false };
+  if (typeof GPS !== 'undefined' && GPS.lastLatLng) return { ll: GPS.lastLatLng, live: true, stale: asstFixStale() };
+  const map = getMap();
+  if (map) return { ll: map.getCenter(), live: false, stale: false };
+  return { ll: null, live: false, stale: false };
+}
+export function asstFixStale() {
+  try { return typeof gpsIsStale === 'function' && !!gpsIsStale(); } catch (e) { return false; }
+}
+/** Minutes since the last accepted GPS fix (at least 1), or null if there never was one. */
+export function asstFixAgeMin() {
+  const ts = (typeof GPS !== 'undefined' && GPS.lastFixTs) || 0;
+  return ts ? Math.max(1, Math.round((Date.now() - ts) / 60000)) : null;
+}
+/** "12 min old" / "age unknown" — for labelling a stale fix. */
+export function asstFixAgeText() {
+  const m = asstFixAgeMin();
+  return m == null ? 'age unknown' : m + ' min old';
 }
 export function asstSpeedKn() {
   if (typeof GPS !== 'undefined' && GPS.last && GPS.last.coords && GPS.last.coords.speed != null)
@@ -54,8 +162,23 @@ export function asstCompass(deg) {
   if (typeof compass === 'function') return compass(deg);
   return ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'][Math.round(deg / 22.5) % 16];
 }
-export function asstCachedWx() {
-  try { return JSON.parse(localStorage.getItem('fishapp.lastwx') || 'null'); } catch (e) { return null; }
+/* The cached weather (written by weather.js) is only usable if it was saved for essentially
+   THIS place and recently. It used to be read raw, so offline weather, the go/no-go read and
+   the AI snapshot could quote another harbour's wind under "Wind now". Same rule as
+   weather.js wxCacheFor: within 0.25° (~25 km), and no older than 12 h. */
+export const ASST_WX_MAX_DEG = 0.25;
+export const ASST_WX_MAX_AGE_MS = 12 * 3600000;
+export function asstWxUsable(c, ll, now) {
+  if (!c || !ll || c.lat == null || c.lng == null) return false;
+  if (Math.abs(c.lat - ll.lat) > ASST_WX_MAX_DEG || Math.abs(c.lng - ll.lng) > ASST_WX_MAX_DEG) return false;
+  if (!c.ts || ((now == null ? Date.now() : now) - c.ts) > ASST_WX_MAX_AGE_MS) return false;
+  return true;
+}
+export function asstCachedWx(ll) {
+  let c;
+  try { c = JSON.parse(localStorage.getItem('fishapp.lastwx') || 'null'); } catch (e) { return null; }
+  const here = ll === undefined ? asstPos().ll : ll;
+  return asstWxUsable(c, here) ? c : null;
 }
 export function asstAgo(ts) {
   const m = (Date.now() - ts) / 60000;
@@ -125,19 +248,35 @@ export function asstAstro(ll) {
     };
   } catch (e) { return null; }
 }
+/* Planner speed / fuel from the Nav tools (nav.js owns them now; they used to be read straight
+   out of the #route-speed / #route-gph inputs). NaN when unavailable. */
+export function asstRouteSpeedKn() {
+  try { return typeof getRouteSpeedKn === 'function' ? parseFloat(getRouteSpeedKn()) : NaN; } catch (e) { return NaN; }
+}
+export function asstRouteGph() {
+  try { return typeof getRouteGph === 'function' ? parseFloat(getRouteGph()) : NaN; } catch (e) { return NaN; }
+}
 
 /* ---------------- live-data snapshot (feeds both brains) ---------------- */
 export function asstSnapshot() {
-  const { ll, live } = asstPos();
+  const { ll, live, stale } = asstPos();
   const L1 = [];
   L1.push('=== LIVE BOAT DATA (' + new Date().toLocaleString() + ') ===');
   L1.push('Online: ' + (navigator.onLine ? 'yes' : 'NO — offshore/no signal'));
   if (ll) {
+    /* A stale fix used to go out as "(live GPS)", so both AIs quoted an old position — and an
+       old speed — as current. */
     L1.push('Position: ' + ll.lat.toFixed(5) + ', ' + ll.lng.toFixed(5) +
-      (live ? ' (live GPS)' : ' (map center — no GPS fix yet)'));
-    const sp = asstSpeedKn(), hd = asstHeading();
-    if (sp != null) L1.push('Speed over ground: ' + sp.toFixed(1) + ' kn');
-    if (hd != null) L1.push('Heading: ' + Math.round(hd) + '° (' + asstCompass(hd) + ')');
+      (!live ? ' (map center — no GPS fix yet)'
+        : stale ? ' (LAST KNOWN GPS fix, ' + asstFixAgeText() + ' — the GPS has not updated since; say so if you use it)'
+          : ' (live GPS)'));
+    if (stale) {
+      L1.push('Speed / heading: no current reading (the last GPS fix is too old).');
+    } else {
+      const sp = asstSpeedKn(), hd = asstHeading();
+      if (sp != null) L1.push('Speed over ground: ' + sp.toFixed(1) + ' kn');
+      if (hd != null) L1.push('Heading: ' + Math.round(hd) + '° (' + asstCompass(hd) + ')');
+    }
   } else {
     L1.push('Position: unknown (no GPS, no map).');
   }
@@ -154,7 +293,7 @@ export function asstSnapshot() {
     }
   }
 
-  const wx = asstCachedWx();
+  const wx = asstCachedWx(ll);
   if (wx && wx.wx && wx.wx.current) {
     const c = wx.wx.current, age = Math.round((Date.now() - wx.ts) / 60000);
     L1.push('Weather (cached ' + age + ' min ago): wind ' + Math.round(c.wind_speed_10m) + ' kn ' +
@@ -168,7 +307,7 @@ export function asstSnapshot() {
           Math.round(m.swell_wave_period) + 's from ' + asstCompass(m.swell_wave_direction) : ''));
     }
   } else {
-    L1.push('Weather: none cached (open the Weather panel while online to cache it).');
+    L1.push('Weather: none cached for this location in the last 12 h (open the Weather panel while online to cache it).');
   }
 
   const pk = (ll && typeof areaPackFor === 'function') ? areaPackFor(ll) : null;
@@ -234,28 +373,47 @@ export function asstTipsTable() {
 }
 
 /* ================= OFFLINE deterministic engine ================= */
+/* A question ABOUT a name ("what's this spot called?", "is there a spot named Rock Pile?")
+   is not an instruction to create one. */
+export function asstIsQuestion(t) {
+  if (/^\s*(?:please\b|(?:can|could|would|will) you\b)/.test(t)) return false;   // a polite request, not a question
+  return /^\s*(?:what|what's|whats|which|who|where|when|why|how|is|are|was|were|do|does|did|have|has)\b/.test(t) ||
+    /\?\s*$/.test(t);
+}
 /* async because the bite-window intent reads cached tide predictions (and may refresh them);
    both call sites in asstSend already await it. */
 export async function asstOffline(q) {
   const t = q.toLowerCase();
-  const { ll, live } = asstPos();
+  const { ll, live, stale } = asstPos();
   const has = (...w) => w.some((x) => t.includes(x));
   const word = (...w) => w.some((x) => new RegExp('\\b' + x + '\\b').test(t));
 
   /* Place a waypoint — a LOCAL action, so it works offline too.
      Requires a CREATE phrase. A bare 'waypoint' used to match here first, so
      "how far to my waypoint Rock Pile?" silently wrote a junk pin named
-     "Waypoint 7" to the database instead of answering the distance. */
+     "Waypoint 7" to the database instead of answering the distance.
+     The naming clause ('named'/'called' + 'spot'/'here'/…) also fired on questions —
+     "what's this spot called?" dropped a junk "Waypoint N" pin — so it never fires on a
+     question now. The passive forms ('named'/'called') also fired on any mention of a named
+     spot ("tell me about the spot called Rock Pile"), so they need a create word ('mark',
+     'drop', 'new'…) or the pin to be HERE ("spot here called Rock Pile", "waypoint here named
+     X") — the imperative phrasings the legacy router accepted still create.
+     The explicit create phrases still win either way ("can you drop a pin here and call
+     it Rock Pile?"). */
+  const passiveName = has('named', 'called') &&
+    (word('mark', 'drop', 'save', 'add', 'pin', 'put', 'new') ||
+      /\b(?:spot|pin|waypoint|mark|marker)\s+here\b|\bhere\s+(?:called|named)\b/.test(t));
   if (has('drop a pin', 'pin it', 'mark this', 'mark here', 'mark spot', 'marker here',
     'save this spot', 'save this location', 'save my spot', 'drop a mark',
     'drop a waypoint', 'save a waypoint', 'mark a waypoint', 'add a waypoint', 'new waypoint',
     'drop waypoint', 'save waypoint', 'mark waypoint') ||
-    (has('name it', 'call it', 'named', 'called') && has('here', 'spot', 'pin', 'waypoint', 'mark')))
+    ((has('name it', 'call it') || passiveName) &&
+      has('here', 'spot', 'pin', 'waypoint', 'mark') && !asstIsQuestion(t)))
     return asstOfflinePlaceWaypoint(q);
 
   // Position
   if (has('where am i', 'my position', 'coordinate', 'my location', 'lat/long', 'lat long', 'gps'))
-    return asstAnsPosition(ll, live);
+    return asstAnsPosition(ll, live, stale);
   /* Speed / heading. "heading" as a verb is far more common here than as a bearing
      ("heading to Catalina — how far?"), and a bare match sent those to the speed
      readout instead of the distance answer. */
@@ -368,14 +526,14 @@ export async function asstOffline(q) {
     return asstAnsSpots(ll);
   // Emergency
   if (has('emergency', 'mayday', 'sos', 'sinking', 'help me', 'man overboard', 'distress', 'pan-pan', 'pan pan'))
-    return asstAnsEmergency(ll);
+    return asstAnsEmergency(ll, live, stale);
   // Bare saved-spot name → distance/bearing
   if (typeof Spots !== 'undefined' && ll && Spots.all.length) {
     const spot = Spots.all.find((s) => s.name && s.name.length > 2 && t.includes(s.name.toLowerCase()));
     if (spot) {
       const here = L.latLng(ll.lat, ll.lng), there = L.latLng(spot.lat, spot.lng);
       const nm = nmBetween(here, there), brg = bearingBetween(here, there);
-      return '➡️ ' + spot.name + ': ' + nm.toFixed(1) + ' nm, bearing ' + Math.round(brg) + '° ' + asstCompass(brg);
+      return spot.name + ': ' + nm.toFixed(1) + ' nm, bearing ' + Math.round(brg) + '° ' + asstCompass(brg);
     }
   }
   // Species reference fallback (e.g. "yellowtail")
@@ -387,19 +545,32 @@ export async function asstOffline(q) {
   return asstAnsHelp();
 }
 
-export function asstAnsPosition(ll, live) {
-  if (!ll) return "No position yet — I need a GPS fix. Tap the ◉ follow button and give it a moment under open sky.";
+/* Live fix, stale fix and map center read differently. A stale fix used to print as "Your
+   position", and the map center was offered as the line to read to the Coast Guard; typed
+   here and spoken to Hey Fish (voice.js voiceSayPosition) now agree. */
+export function asstAnsPosition(ll, live, stale) {
+  if (!ll) return "No position yet — I need a GPS fix. Tap the locate button and give it a moment under open sky.";
   const dec = ll.lat.toFixed(5) + ', ' + ll.lng.toFixed(5);
   const dm = (typeof formatCoord === 'function') ? (formatCoord(ll.lat, 'lat') + '  ' + formatCoord(ll.lng, 'lon')) : dec;
-  return (live ? '📍 Your position:\n' : '📍 Map center (no live GPS fix yet):\n') +
-    dm + '\n' + dec + '\n\nFor the Coast Guard, read the top line. Tap 🆘 to copy or text it.';
+  if (!live) {
+    return 'Map center (no live GPS fix yet):\n' + dm + '\n' + dec +
+      '\n\nThis is where the map is pointed, not a GPS position — don\'t read it to the Coast Guard as yours. Tap SOS once you have a fix.';
+  }
+  if (stale) {
+    return 'Last known GPS fix (' + asstFixAgeText() + '):\n' + dm + '\n' + dec +
+      '\n\nThe GPS has not updated since then — tell the Coast Guard this is your last known position. ' +
+      'For the Coast Guard, read the top line. Tap SOS to copy or text it.';
+  }
+  return 'Your position:\n' + dm + '\n' + dec + '\n\nFor the Coast Guard, read the top line. Tap SOS to copy or text it.';
 }
 export function asstAnsSpeed() {
   const sp = asstSpeedKn(), hd = asstHeading();
   if (sp == null && hd == null) return "No speed/heading yet — those come from a moving GPS fix.";
+  /* An old SOG read as current is worse than none (voice.js voiceSaySpeed refuses too). */
+  if (asstFixStale()) return 'No current speed reading. My last GPS fix is too old.';
   let s = '';
-  if (sp != null) s += '🚤 Speed over ground: ' + sp.toFixed(1) + ' kn (' + (sp * 1.15078).toFixed(1) + ' mph)\n';
-  if (hd != null) s += '🧭 Heading: ' + Math.round(hd) + '° ' + asstCompass(hd);
+  if (sp != null) s += 'Speed over ground: ' + sp.toFixed(1) + ' kn (' + (sp * 1.15078).toFixed(1) + ' mph)\n';
+  if (hd != null) s += 'Heading: ' + Math.round(hd) + '° ' + asstCompass(hd);
   return s.trim();
 }
 export function asstAnsSolunar(ll) {
@@ -409,22 +580,22 @@ export function asstAnsSolunar(ll) {
   const now = new Date();
   const lines = a.solunar.map((p) => {
     const active = now >= p.start && now <= p.end;
-    return (p.type === 'major' ? '🎯 MAJOR' : '• minor') + '  ' + asstTime(p.start) + '–' + asstTime(p.end) + (active ? '  ← NOW' : '');
+    return (p.type === 'major' ? '• MAJOR' : '• minor') + '  ' + asstTime(p.start) + '–' + asstTime(p.end) + (active ? '  ← NOW' : '');
   });
-  return "🐟 Best bite windows today (solunar):\n" + lines.join('\n') +
+  return "Best bite windows today (solunar):\n" + lines.join('\n') +
     "\n\nMajors are the strongest. Dawn and dusk overlapping a major are prime. " + a.phaseName + ', ' + a.lit + '% lit.';
 }
 export function asstAnsSun(ll) {
   const a = asstAstro(ll);
   if (!a) return "I need a position to compute sun times.";
   const hrs = (a.sun.sunset - a.sun.sunrise) / 3600000;
-  return "☀️ Today:\nSunrise " + asstTime(a.sun.sunrise) + "\nSunset  " + asstTime(a.sun.sunset) +
+  return "Today:\nSunrise " + asstTime(a.sun.sunrise) + "\nSunset  " + asstTime(a.sun.sunset) +
     "\nSolar noon " + asstTime(a.sun.solarNoon) + "\nDaylight: " + hrs.toFixed(1) + " hrs";
 }
 export function asstAnsMoon(ll) {
   const a = asstAstro(ll);
   if (!a) return "I need a position to compute moon times.";
-  return "🌙 " + a.phaseName + " — " + a.lit + "% illuminated" +
+  return a.phaseName + " — " + a.lit + "% illuminated" +
     (a.moonT.rise ? "\nMoonrise " + asstTime(a.moonT.rise) : '') +
     (a.moonT.set ? "\nMoonset  " + asstTime(a.moonT.set) : '') +
     "\n\nNew and full moons drive the biggest tides and strongest solunar bite.";
@@ -437,7 +608,7 @@ export function asstAnsWeather(q) {
     const d = a.data, i = areaFcstIndex(d.forecast, when.ms);
     if (i >= 0) {
       const f = d.forecast;
-      let s = '🌤 ' + when.label + ' — ' + a.name + ' (downloaded ' + asstAgo(d.capturedTs) + '):\n' +
+      let s = when.label + ' — ' + a.name + ' (downloaded ' + asstAgo(d.capturedTs) + '):\n' +
         'Wind ' + Math.round(f.wind[i]) + ' kn ' + asstCompass(f.dir[i]) + ', gust ' + Math.round(f.gust[i]) + ' kn\n' +
         'Air ' + Math.round(f.temp[i]) + '°F' + (f.precip[i] != null ? ', ' + f.precip[i] + '% rain' : '');
       if (d.marine) {
@@ -446,7 +617,7 @@ export function asstAnsWeather(q) {
         if (mi >= 0 && d.marine.sst[mi] != null) s += '\nWater ' + Math.round(d.marine.sst[mi]) + '°F';
       }
       const g = Math.round(f.gust[i]);
-      if (g >= 25) s += '\n\n⚠️ ' + g + ' kn gusts — rough.';
+      if (g >= 25) s += '\n\n**' + g + ' kn gusts — rough.**';
       else if (g >= 18) s += '\n\nBreezy — expect a chop.';
       return s;
     }
@@ -454,14 +625,14 @@ export function asstAnsWeather(q) {
   const wx = asstCachedWx();
   if (!wx || !wx.wx || !wx.wx.current) return asstNoWx();
   const c = wx.wx.current, age = Math.round((Date.now() - wx.ts) / 60000);
-  let s = "🌤 Wind now (cached " + age + " min ago):\n" + Math.round(c.wind_speed_10m) + ' kn from ' +
+  let s = "Wind now (cached " + age + " min ago):\n" + Math.round(c.wind_speed_10m) + ' kn from ' +
     asstCompass(c.wind_direction_10m) + ', gusting ' + Math.round(c.wind_gusts_10m) + ' kn\nAir ' + Math.round(c.temperature_2m) + '°F';
   if (wx.marine && wx.marine.current) {
     const m = wx.marine.current;
     s += '\nSeas ' + (m.wave_height * 3.28084).toFixed(1) + ' ft @ ' + Math.round(m.wave_period) + 's';
   }
   const g = Math.round(c.wind_gusts_10m);
-  if (g >= 25) s += '\n\n⚠️ ' + g + ' kn gusts — rough. Check conditions before heading out.';
+  if (g >= 25) s += '\n\n**' + g + ' kn gusts — rough. Check conditions before heading out.**';
   else if (g >= 18) s += '\n\nBreezy — expect a chop.';
   return s;
 }
@@ -473,10 +644,10 @@ export function asstAnsWaves() {
   }
   const m = wx.marine.current, age = Math.round((Date.now() - wx.ts) / 60000);
   const ft = (m.wave_height * 3.28084);
-  let s = "🌊 Seas (cached " + age + " min ago):\n" + ft.toFixed(1) + ' ft @ ' + Math.round(m.wave_period) + 's from ' + asstCompass(m.wave_direction);
+  let s = "Seas (cached " + age + " min ago):\n" + ft.toFixed(1) + ' ft @ ' + Math.round(m.wave_period) + 's from ' + asstCompass(m.wave_direction);
   if (m.swell_wave_height != null)
     s += '\nSwell: ' + (m.swell_wave_height * 3.28084).toFixed(1) + ' ft @ ' + Math.round(m.swell_wave_period) + 's from ' + asstCompass(m.swell_wave_direction);
-  if (ft >= 5) s += '\n\n⚠️ Big — small boats beware.';
+  if (ft >= 5) s += '\n\n**Big — small boats beware.**';
   else if (ft >= 3) s += '\n\nModerate chop — bumpy ride.';
   else s += '\n\nCalm-ish. Good conditions.';
   return s;
@@ -495,24 +666,24 @@ export function asstAnsTides(q) {
       show = areaTidesNext(a.data, Date.now(), 4);
     }
     if (!show.length) show = areaTidesNext(a.data, when.ms, 4);
-    const lines = show.map((p) => (p.type === 'High' ? '🔼 High' : '🔽 Low') + '  ' + p.time + '   ' + p.ft + ' ft');
-    return '🌊 Tides — ' + a.data.tides.station + ' (' + when.label + ', downloaded ' + asstAgo(a.data.capturedTs) + '):\n' + lines.join('\n');
+    const lines = show.map((p) => (p.type === 'High' ? 'High' : 'Low ') + '  ' + p.time + '   ' + p.ft + ' ft');
+    return 'Tides — ' + a.data.tides.station + ' (' + when.label + ', downloaded ' + asstAgo(a.data.capturedTs) + '):\n' + lines.join('\n');
   }
-  return "I don't have tide predictions offline for here. Download this area while online — it now captures a week of tides — or open the 🌙 Tides panel with signal.";
+  return "I don't have tide predictions offline for here. Download this area while online — it now captures a week of tides — or open the Tides panel with signal.";
 }
 export function asstAnsFishHistory(t) {
   const a = asstAreaPack();
   if (a && a.data && a.data.fish && a.data.fish.total) {
     const top = Object.entries(a.data.fish.tally).sort((x, y) => y[1] - x[1]).slice(0, 8).map(([k, v]) => k + ' ×' + v).join(', ');
     const recent = (a.data.fish.recent || []).slice(0, 6).map((r) => '• ' + r.species + ' (' + r.date + ')').join('\n');
-    return '🐟 Reported in this area (iNaturalist, downloaded ' + asstAgo(a.data.capturedTs) + ' · ' + a.data.fish.total + ' records):\nTop: ' + top +
+    return 'Reported in this area (iNaturalist, downloaded ' + asstAgo(a.data.capturedTs) + ' · ' + a.data.fish.total + ' records):\nTop: ' + top +
       (recent ? '\n\nRecent:\n' + recent : '') + '\n\n(Community sightings — divers & anglers, not all rod-and-reel.)';
   }
   // No downloaded sightings — fall back to the area game-plan / general targets so we still help.
   const area = (typeof areaTipsFor === 'function') ? areaTipsFor(t || '') : null;
-  if (area) return '📍 What to target — ' + area.name + '\n' + area.text +
+  if (area) return 'What to target — ' + area.name + '\n' + area.text +
     '\n\n(That\'s the general game plan. Download this area with signal to also see recent community sightings.)';
-  return "🎣 What to target here depends on the spot — tell me where (e.g. \"at Catalina\", \"the flats\") or what you're after, and I'll give you species, lures and how to fish them. " +
+  return "What to target here depends on the spot — tell me where (e.g. \"at Catalina\", \"the flats\") or what you're after, and I'll give you species, lures and how to fish them. " +
     "Popular SoCal targets: calico bass, sand bass, halibut, yellowtail, white seabass, barracuda, bonito, rockfish, lingcod, sheephead.";
 }
 export function asstAnsClosures() {
@@ -520,9 +691,9 @@ export function asstAnsClosures() {
   if (a && a.data && a.data.mpas) {
     if (!a.data.mpas.length) return "No marine protected areas were captured inside this downloaded area — but always confirm with CDFW before fishing near a closure.";
     const lines = a.data.mpas.slice(0, 12).map((m) => '• ' + m.n + (m.t ? ' [' + m.t + ']' : '')).join('\n');
-    return '🚫 Protected areas in this download:\n' + lines + '\n\n⚠️ Boundaries are approximate — confirm exact lines & take rules with CDFW before fishing.';
+    return 'Protected areas in this download:\n' + lines + '\n\n**Boundaries are approximate — confirm exact lines & take rules with CDFW before fishing.**';
   }
-  return "No closure data captured offline here. The 🚫 MPA layer is bundled — turn it on in Layers, or download this area so I can summarize closures offline.";
+  return "No closure data captured offline here. The MPA layer is bundled — turn it on in Layers, or download this area so I can summarize closures offline.";
 }
 export function asstYmd(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 
@@ -563,14 +734,14 @@ export function asstAnsPlan() {
   days.sort((x, y) => y.s - x.s);
   const lines = days.slice(0, 3).map((d, idx) => {
     const wd = d.date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
-    let line = (idx === 0 ? '⭐ ' : '• ') + wd;
+    let line = (idx + 1) + '. ' + wd;
     if (d.best) line += ' — bite ' + asstTime(d.best.p.start) + '–' + asstTime(d.best.p.end) +
-      (d.best.inDay ? (d.best.near ? ' (near sunrise/sunset 🔥)' : '') : ' (after dark)');
+      (d.best.inDay ? (d.best.near ? ' (near sunrise/sunset — prime)' : '') : ' (after dark)');
     if (d.wx && d.wx.wind_kn) line += '\n   wind ' + d.wx.wind_kn[0] + '–' + d.wx.wind_kn[1] + 'kn' +
       (d.wx.wave_ft != null ? ', seas ' + d.wx.wave_ft + 'ft' : '') + ', ' + d.wx.precip_pct + '% rain';
     return line;
   });
-  return '🎣 Best days to fish' + (daily ? ' (bite + weather, downloaded ' + asstAgo(a.data.capturedTs) + ')' : ' (bite windows only)') + ':\n' +
+  return 'Best days to fish' + (daily ? ' (bite + weather, downloaded ' + asstAgo(a.data.capturedTs) + ')' : ' (bite windows only)') + ':\n' +
     lines.join('\n') + (daily ? '' : '\n\nDownload this area while online and I can factor in wind & seas too.');
 }
 
@@ -590,7 +761,7 @@ export function asstAnsOutlook() {
       (d.air_f ? ', ' + d.air_f[0] + '–' + d.air_f[1] + '°F' : '') + ', ' + d.precip_pct + '% rain';
   });
   if (!lines.length) return "That area pack's forecast has expired — re-download the area while online for a fresh outlook.";
-  return '📅 ' + a.name + ' — ' + lines.length + '-day outlook (downloaded ' + asstAgo(a.data.capturedTs) + '):\n' + lines.join('\n');
+  return a.name + ' — ' + lines.length + '-day outlook (downloaded ' + asstAgo(a.data.capturedTs) + '):\n' + lines.join('\n');
 }
 
 /* Plain go/no-go read on current wind + seas (with a safety caveat). */
@@ -613,15 +784,17 @@ export function asstAnsGoNoGo() {
       src = 'cached ' + asstAgo(wx.ts);
     }
   }
-  if (wind == null) return "I don't have wind/sea data offline right now. Download this area or open 🌤 Weather with signal.";
+  if (wind == null) return "I don't have wind/sea data offline right now. Download this area or open Weather with signal.";
   const g = Math.round(gust), w = wave != null ? wave : null;
-  let emoji, verdict;
-  if (g >= 25 || (w != null && w >= 6)) { emoji = '⛔'; verdict = 'Rough — think hard before going. Small boats should probably stay in.'; }
-  else if (g >= 18 || (w != null && w >= 4)) { emoji = '⚠️'; verdict = 'Marginal — doable in the right boat, but expect a bumpy, wet ride.'; }
-  else if (g >= 12 || (w != null && w >= 2.5)) { emoji = '🟡'; verdict = 'A little chop, but generally fishable.'; }
-  else { emoji = '✅'; verdict = 'Looks calm and fishable.'; }
-  return emoji + ' ' + verdict + '\nWind ~' + Math.round(wind) + ' kn (gust ' + g + ')' + (w != null ? ', seas ~' + w.toFixed(1) + ' ft' : '') + ' (' + src + ').' +
-    '\n\n⚠️ Rough read only — always get an official marine forecast (VHF WX / NOAA) before you head out.';
+  /* The verdict used to lead with a coloured emoji; it now leads in bold words, which also
+     survive night mode and a screen reader. */
+  let verdict;
+  if (g >= 25 || (w != null && w >= 6)) { verdict = 'Rough — think hard before going. Small boats should probably stay in.'; }
+  else if (g >= 18 || (w != null && w >= 4)) { verdict = 'Marginal — doable in the right boat, but expect a bumpy, wet ride.'; }
+  else if (g >= 12 || (w != null && w >= 2.5)) { verdict = 'A little chop, but generally fishable.'; }
+  else { verdict = 'Looks calm and fishable.'; }
+  return '**' + verdict + '**\nWind ~' + Math.round(wind) + ' kn (gust ' + g + ')' + (w != null ? ', seas ~' + w.toFixed(1) + ' ft' : '') + ' (' + src + ').' +
+    '\n\n**Rough read only — always get an official marine forecast (VHF WX / NOAA) before you head out.**';
 }
 
 /* Nearest saved spot of a given type (ramp, anchorage, hazard, wreck). */
@@ -650,10 +823,10 @@ export function asstAnsBait(t) {
   const tech = (typeof techniqueTipsFor === 'function') ? techniqueTipsFor(t) : null;
 
   // Pure technique question ("how do I fish a dropper loop?") with no species named.
-  if (tech && !sp) return '🎣 ' + tech.name + '\n' + tech.text;
+  if (tech && !sp) return tech.name + '\n' + tech.text;
 
   if (sp) {
-    let s = '🎣 ' + sp.name + '\n' +
+    let s = sp.name + '\n' +
       '• Lures/jigs: ' + sp.lures + '\n' +
       '• Bait: ' + sp.baits + '\n' +
       '• How: ' + sp.method + '\n' +
@@ -671,17 +844,17 @@ export function asstAnsBait(t) {
         const tally = {};
         matches.forEach((c) => { const b = c.bait.trim(); tally[b] = (tally[b] || 0) + 1; });
         const top = Object.entries(tally).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([b, n]) => b + ' ×' + n);
-        s += '\n\n📖 From your log, these have hit: ' + top.join(', ') + '.';
+        s += '\n\nFrom your log, these have hit: ' + top.join(', ') + '.';
       }
     }
-    return s + '\n\n⚠️ Confirm size/bag limits with CDFW before keeping fish.';
+    return s + '\n\n**Confirm size/bag limits with CDFW before keeping fish.**';
   }
 
-  if (area) return '📍 ' + area.name + '\n' + area.text +
+  if (area) return area.name + '\n' + area.text +
     '\n\n(Ask about a species — e.g. "what should I throw for yellowtail here" — for lure/bait specifics.)';
 
   // Nothing matched — nudge with useful options rather than punting.
-  return "🎣 Tell me what you're after (and roughly where) and I'll give you lures, bait and how to fish it — e.g. \"calico bass at Catalina\", \"halibut on the flats\", \"yellowtail on the iron\".\n" +
+  return "Tell me what you're after (and roughly where) and I'll give you lures, bait and how to fish it — e.g. \"calico bass at Catalina\", \"halibut on the flats\", \"yellowtail on the iron\".\n" +
     "Popular SoCal targets: calico bass, sand bass, halibut, yellowtail, white seabass, barracuda, bonito, rockfish, lingcod, sheephead.";
 }
 
@@ -689,33 +862,33 @@ export function asstAnsWaterTemp() {
   const a = asstAreaPack();
   if (a && a.data && typeof areaSstStats === 'function') {
     const st = areaSstStats(a.data);
-    if (st) return "🌡️ Water temp in " + a.name + " (downloaded " + asstAgo(a.data.capturedTs) + "):\n" +
+    if (st) return "Water temp in " + a.name + " (downloaded " + asstAgo(a.data.capturedTs) + "):\n" +
       "About " + st.avg + "°F, ranging " + st.min + "–" + st.max + "°F across the area" +
       (st.span >= 2 ? ".\nWarmest water (a break to try) is near " + st.warmest.lat.toFixed(3) + ", " + st.warmest.lng.toFixed(3) + " (" + st.max + "°F)." : ".");
   }
   const wx = asstCachedWx();
   if (wx && wx.marine && wx.marine.current && wx.marine.current.sea_surface_temperature != null)
-    return "🌡️ Sea-surface temp (cached): " + Math.round(wx.marine.current.sea_surface_temperature) + "°F";
+    return "Sea-surface temp (cached): " + Math.round(wx.marine.current.sea_surface_temperature) + "°F";
   if (typeof SST !== 'undefined' && SST.range)
-    return "🌡️ I don't have an exact water temp cached here. The SST layer's current color scale runs about " +
+    return "I don't have an exact water temp cached here. The SST layer's current color scale runs about " +
       Math.round(SST.range[0] * 9 / 5 + 32) + "–" + Math.round(SST.range[1] * 9 / 5 + 32) +
-      "°F across the view. Turn on the 🌡️ Sea-surface-temp layer (needs internet) and tap the water for an exact reading.";
+      "°F across the view. Turn on the Sea-surface-temp layer (needs internet) and tap the water for an exact reading.";
   return "I don't have a cached water temp. Online, turn on the SST layer and tap the water for an exact °F.";
 }
 export function asstAnsReefs(ll) {
   if (!ll) return "I need a position to find nearby reefs.";
   const reefs = asstNearestReefs(ll, 5);
   if (!reefs.length) return "No reef data loaded (the bundled reef list is California-focused).";
-  return "🪸 Nearest artificial reefs:\n" + reefs.map((x, i) =>
+  return "Nearest artificial reefs:\n" + reefs.map((x, i) =>
     (i + 1) + '. ' + x.r.n + ' — ' + x.nm.toFixed(1) + ' nm ' + asstCompass(x.brg) +
     (x.r.d ? ', ~' + x.r.d + ' ft' : '') + (x.r.c ? '\n   ' + x.r.c : '')).join('\n');
 }
 export function asstAnsSpots(ll) {
   if (typeof Spots === 'undefined' || !Spots.all || !Spots.all.length)
-    return "You have no saved spots yet. Tap 📌 or long-press the map to mark one.";
+    return "You have no saved spots yet. Tap the pin button or long-press the map to mark one.";
   if (!ll) return "You have " + Spots.all.length + " saved spots, but I need a GPS fix to sort by distance.";
   const spots = asstNearestSpots(ll, 6);
-  return "📌 Your nearest spots:\n" + spots.map((x, i) =>
+  return "Your nearest spots:\n" + spots.map((x, i) =>
     (i + 1) + '. ' + x.s.name + ' [' + x.s.type + '] — ' + x.nm.toFixed(1) + ' nm ' + asstCompass(x.brg) +
     (x.s.notes ? '\n   ' + x.s.notes : '')).join('\n');
 }
@@ -725,26 +898,26 @@ export function asstAnsDistanceTo(t, ll) {
   if (!spot) return null;
   const here = L.latLng(ll.lat, ll.lng), there = L.latLng(spot.lat, spot.lng);
   const nm = nmBetween(here, there), brg = bearingBetween(here, there);
-  // Speed: "at 25 kn/mph" in the query → Nav route-speed input → live GPS → 20 kn default
+  // Speed: "at 25 kn/mph" in the query → Nav route-speed setting → live GPS → 20 kn default
   let sp = null;
   const m = t.match(/(\d+(?:\.\d+)?)\s*(kn|knots?|kt|mph)/);
   if (m) { sp = parseFloat(m[1]); if (/mph/.test(m[2])) sp = sp / 1.15078; }
-  if (sp == null) { const rs = parseFloat((document.getElementById('route-speed') || {}).value); if (rs > 0) sp = rs; }
-  if (sp == null) { const g = asstSpeedKn(); if (g && g > 1) sp = g; }
+  if (sp == null) { const rs = asstRouteSpeedKn(); if (rs > 0) sp = rs; }
+  if (sp == null && !asstFixStale()) { const g = asstSpeedKn(); if (g && g > 1) sp = g; }   // never an old SOG
   if (sp == null) sp = 20;
-  const gph = parseFloat((document.getElementById('route-gph') || {}).value) || 8;
+  const gph = asstRouteGph() || 8;
   const roundTrip = /back|round|return/.test(t);
   const legMin = nm / sp * 60, fuel = nm / sp * gph;
-  let s = '➡️ ' + spot.name + ': ' + nm.toFixed(1) + ' nm, bearing ' + Math.round(brg) + '° ' + asstCompass(brg) +
+  let s = spot.name + ': ' + nm.toFixed(1) + ' nm, bearing ' + Math.round(brg) + '° ' + asstCompass(brg) +
     '\nAt ' + Math.round(sp) + ' kn: ~' + Math.round(legMin) + ' min one way, ~' + fuel.toFixed(1) + ' gal';
-  if (roundTrip) s += '\n↩️ Round trip: ' + (nm * 2).toFixed(1) + ' nm, ~' + Math.round(legMin * 2) + ' min, ~' + (fuel * 2).toFixed(1) + ' gal';
-  s += '\n(Assumes ' + gph + ' gal/hr — set speed & GPH in 🧭 Nav Tools.)';
+  if (roundTrip) s += '\nRound trip: ' + (nm * 2).toFixed(1) + ' nm, ~' + Math.round(legMin * 2) + ' min, ~' + (fuel * 2).toFixed(1) + ' gal';
+  s += '\n(Assumes ' + gph + ' gal/hr — set speed & GPH in Nav tools.)';
   return s;
 }
 export function asstAnsDepth(t) {
   const a = asstAreaPack();
   if (!a || !a.data || !a.data.depthGrid || !a.data.depthGrid.length)
-    return "I don't have depth data offline here. Tap the water with signal (depth shows in the popup), or download this area — it now captures a depth grid.";
+    return "I don't have depth data offline here. Tap the water with signal (depth shows on the card), or download this area — it now captures a depth grid.";
   let ll = asstPos().ll, where = 'here';
   const spot = (typeof Spots !== 'undefined' ? Spots.all : []).find((s) => s.name && s.name.length > 2 && t.includes(s.name.toLowerCase()));
   if (spot) { ll = L.latLng(spot.lat, spot.lng); where = spot.name; }
@@ -752,16 +925,16 @@ export function asstAnsDepth(t) {
   const p = areaDepthAt(a.data, ll);
   if (!p) return "No depth was captured near " + where + ".";
   if (p.land) return "That point (" + where + ") reads as land on the survey grid.";
-  return "⚓ Depth " + where + ": about " + p.ft + " ft (" + Math.round(p.ft / 6) + " fathoms) — nearest point in a coarse grid, downloaded " + asstAgo(a.data.capturedTs) + ".\nTap the chart with signal for an exact sounding.";
+  return "Depth " + where + ": about " + p.ft + " ft (" + Math.round(p.ft / 6) + " fathoms) — nearest point in a coarse grid, downloaded " + asstAgo(a.data.capturedTs) + ".\nTap the chart with signal for an exact sounding.";
 }
 export function asstAnsCompareSpots(t) {
   if (typeof Spots === 'undefined' || Spots.all.length < 2) return null;
   const found = Spots.all.filter((s) => s.name && s.name.length > 2 && t.includes(s.name.toLowerCase()));
   if (found.length < 2) return null;
   const { ll } = asstPos();
-  const sp = asstSpeedKn() || parseFloat((document.getElementById('route-speed') || {}).value) || 20;
+  const sp = (asstFixStale() ? null : asstSpeedKn()) || asstRouteSpeedKn() || 20;   // never an old SOG
   const rows = found.slice(0, 3).map((s) => {
-    let line = '📍 ' + s.name + ' [' + s.type + ']';
+    let line = '• ' + s.name + ' [' + s.type + ']';
     if (ll) {
       const there = L.latLng(s.lat, s.lng), here = L.latLng(ll.lat, ll.lng);
       const nm = nmBetween(here, there);
@@ -781,14 +954,14 @@ export function asstAnsCompareSpots(t) {
 }
 export function asstAnsCatches() {
   if (typeof Catch === 'undefined' || !Catch.all || !Catch.all.length)
-    return "Your catch log is empty. Tap 🧭 → Log a Catch to start building it.";
+    return "Your catch log is empty. Open Nav tools & catch log and tap Log catch to start building it.";
   const all = Catch.all.slice().sort((a, b) => b.ts - a.ts);
   const bySp = {};
   all.forEach((c) => { const s = (c.species || 'unknown').trim(); bySp[s] = (bySp[s] || 0) + 1; });
   const top = Object.entries(bySp).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([s, c]) => s + ' ×' + c).join(', ');
   const recent = all.slice(0, 5).map((c) => '• ' + c.species + (c.length ? ' ' + c.length + '"' : '') +
     (c.bait ? ' on ' + c.bait : '') + ' — ' + new Date(c.ts).toLocaleDateString()).join('\n');
-  return "🎣 " + all.length + " catches logged.\nBy species: " + top + "\n\nMost recent:\n" + recent;
+  return all.length + " catches logged.\nBy species: " + top + "\n\nMost recent:\n" + recent;
 }
 export function asstAnsReg(t) {
   const sp = asstFindSpecies(t);
@@ -805,9 +978,9 @@ export function asstFindSpecies(t) {
   return best || null;
 }
 export function asstFormatSpecies(f) {
-  return f.emoji + ' ' + f.name + '\nMin size: ' + f.size + '\nBag limit: ' + f.bag +
+  return f.name + '\nMin size: ' + f.size + '\nBag limit: ' + f.bag +
     (f.note ? '\n' + f.note : '') + '\nID: ' + f.id +
-    '\n\n⚠️ General reference — always confirm current CA regs with CDFW before keeping fish.';
+    '\n\n**General reference — always confirm current CA regs with CDFW before keeping fish.**';
 }
 export function asstFindKnot(t) {
   if (typeof KNOTS === 'undefined') return null;
@@ -822,27 +995,45 @@ export function asstAnsKnot(t) {
   const k = asstFindKnot(t);
   if (k) return asstFormatKnot(k);
   if (typeof KNOTS === 'undefined' || !KNOTS.length) return "No knot guide loaded.";
-  return "🪢 Which knot? I know: " + KNOTS.map((k2) => k2.name).join(', ') +
-    ".\nOpen 📖 Guides → Knots for illustrated steps.";
+  return "Which knot? I know: " + KNOTS.map((k2) => k2.name).join(', ') +
+    ".\nOpen Guides → Knots for illustrated steps.";
 }
 export function asstFormatKnot(k) {
-  return '🪢 ' + k.name + ' — ' + k.use + ' (' + k.level + ')\n' +
+  return k.name + ' — ' + k.use + ' (' + k.level + ')\n' +
     k.steps.map((s, i) => (i + 1) + '. ' + s).join('\n') +
-    (k.tip ? '\n💡 ' + k.tip : '') + '\n\nOpen 📖 Guides → Knots for a diagram.';
+    (k.tip ? '\nTip: ' + k.tip : '') + '\n\nOpen Guides → Knots for a diagram.';
 }
-export function asstAnsEmergency(ll) {
-  let s = "🆘 EMERGENCY\n• VHF Channel 16 — hail & distress\n• Call 911 / Coast Guard (needs signal)\n";
-  if (ll) s += "• Your position: " + ll.lat.toFixed(5) + ', ' + ll.lng.toFixed(5) + "\n";
+/* The script tells the user to read "position above" in a MAYDAY, so the line above must say
+   what it is. With no fix asstPos() hands back the map center, and a stale fix is only where
+   the boat WAS — both used to print as "Your position". Labelled the way voice.js
+   voiceSayPosition and asstPositionSource label them; the rest of the script is unchanged. */
+export function asstAnsEmergency(ll, live, stale) {
+  let s = "EMERGENCY\n• VHF Channel 16 — hail & distress\n• Call 911 / Coast Guard (needs signal)\n";
+  if (ll) {
+    const at = ll.lat.toFixed(5) + ', ' + ll.lng.toFixed(5);
+    if (live === false) s += "• Map center (NO GPS fix): " + at + " — not your position; give your position from a chartplotter or landmarks\n";
+    else if (stale) s += "• Last known GPS fix (" + asstFixAgeText() + "): " + at + " — say it is your last known position\n";
+    else s += "• Your position: " + at + "\n";
+  }
   s += "\nMAYDAY (life-threatening), say 3×: your boat name, position above, nature of emergency, # people aboard.\n" +
-    "No signal + iPhone 14+? Emergency SOS via satellite — point at open sky.\n\nTap the 🆘 button for the full script, one-tap texting, and satellite steps.";
+    "No signal + iPhone 14+? Emergency SOS via satellite — point at open sky.\n\nTap the SOS button for the full script, one-tap texting, and satellite steps.";
   return s;
 }
 export function asstNoWx() {
-  return "I have no cached weather. Open the 🌤 Weather panel once while you have signal — it caches so I can read it offline. " +
-    (navigator.onLine ? "You're online now, so add an API key in settings for a live answer." : "");
+  return "I have no recent weather cached for this spot. Open the Weather panel once while you have signal — it caches so I can read it offline. " +
+    asstLiveHint();
+}
+/* What to suggest for a live answer, by the REASON the phone is answering. "Turn on Allow
+   cloud AI" was also given when it was already on and the relay was blocked (403) or no relay
+   is set — advice that does nothing. */
+export function asstLiveHint() {
+  if (!navigator.onLine) return '';
+  if (asstCloudConsent() !== 'yes') return "You're online now, so turn on Allow cloud AI in First Mate settings for a live answer.";
+  if (!ASST.key() && (ASST._proxyBlocked || !asstProxyUrl())) return "The AI relay isn't available right now, so I can't fetch a live answer.";
+  return 'Try again in a moment for a live answer.';
 }
 export function asstAnsHelp() {
-  return "🎣 I'm First Mate. Even with NO signal or key, I can tell you:\n" +
+  return "I'm First Mate. Even with NO signal or key, I can tell you:\n" +
     "• Best day/time to fish (bite + weather) & the week's outlook\n" +
     "• Is it too rough to go out? (go/no-go read)\n" +
     "• Tides, sunrise/sunset, moon phase, solunar bite windows\n" +
@@ -852,7 +1043,7 @@ export function asstAnsHelp() {
     "• What's biting at a spot & what bait worked (from your log)\n" +
     "• Fish size/bag limits, closures, knots, Mayday info\n" +
     "• Drop & name a waypoint\n\n" +
-    "(Tides, multi-day weather & fish history need the area downloaded first.) Add an API key in ⚙️ and, with signal, I'll also chat freely and take actions.";
+    "(Tides, multi-day weather & fish history need the area downloaded first.) With signal and cloud AI allowed in settings I'll also chat freely; add your own API key and I can take actions too.";
 }
 
 /* Personal bite windows from the user's own catch log (bite.js).
@@ -871,7 +1062,7 @@ export async function asstAnsBite(t) {
     }
     const res = await biteWindows({ days: 7, limit: 3, species: species || undefined });
     if (!res || res.error || !res.windows || !res.windows.length) return null;   // -> generic planner
-    let out = '🎣 Best windows' + (species ? ' for ' + species : '') +
+    let out = 'Best windows' + (species ? ' for ' + species : '') +
       ', scored against your ' + res.n + ' logged catches (' + res.confidence.label + '):\n';
     res.windows.forEach((w, i) => {
       out += '\n' + (i + 1) + '. ' + biteFmtWindow(w) + ' — ' + Math.round(w.score * 100) + '%\n   ' +
@@ -887,20 +1078,24 @@ export async function asstCreateSpot(o) {
   const id = await idb.put('spots', spot);
   spot.id = spot.id || id;
   Spots.all.push(spot);
-  addSpotMarker(spot);
-  renderSpotsList();
+  /* The write is committed from here on. A failure redrawing the marker or the Spots list
+     must not surface as a failed save — the offline path would then tell the user "Nothing
+     was written" about a spot that IS saved and reappears on the next launch. */
+  try { addSpotMarker(spot); } catch (e) { console.error('[first mate] spot marker', e); }
+  try { if (typeof spotsChanged === 'function') spotsChanged(); } catch (e) { console.error('[first mate] spots list', e); }
   return spot;
 }
 export function asstParseWaypointName(q) {
   let m = q.match(/["“']([^"”']{1,40})["”']/);
   if (m) return m[1].trim();
-  m = q.match(/(?:name(?:d| it)?|call(?:ed)?(?: it)?|label(?:ed)?(?: it)?)\s+([\w '&.\-]{1,40})/i);
+  m = q.match(/(?:name(?:d| it)?|call(?:ed)?(?: it)?|label(?:ed)?(?: it)?)\s+([\w '&.-]{1,40})/i);
   if (m) return m[1].trim().replace(/[.,!?]+$/, '');
   return null;
 }
 export async function asstOfflinePlaceWaypoint(q) {
-  const { ll, live } = asstPos();
+  const { ll } = asstPos();
   if (!ll) return "I can't drop a waypoint without a position — I need a GPS fix (or pan the map there first).";
+  const source = asstPositionSource(null) || 'map center — no GPS fix yet';
   const t = q.toLowerCase();
   const name = asstParseWaypointName(q) || ('Waypoint ' + ((typeof Spots !== 'undefined' ? Spots.all.length : 0) + 1));
   let type = 'fish';
@@ -915,24 +1110,31 @@ export async function asstOfflinePlaceWaypoint(q) {
   try {
     await asstCreateSpot({ lat: ll.lat, lng: ll.lng, name: name, type: type });
   } catch (e) {
-    return '⚠️ Couldn\'t save "' + name + '" — storage may be full or blocked. Nothing was written.';
+    return 'Couldn\'t save "' + name + '" — storage may be full or blocked. Nothing was written.';
   }
-  if (typeof toast === 'function') toast('📌 ' + name + ' saved');
-  return '📌 Dropped "' + name + '" (' + type + ') at ' + ll.lat.toFixed(5) + ', ' + ll.lng.toFixed(5) +
-    (live ? '' : ' (map center — no GPS fix yet)') + '.\nSaved and on the map. Open ☰ Spots to rename or remove it.';
+  /* Same wording as the online place_waypoint tool: a pin not placed from a live fix says
+     where it came from (the map center, or a stale last-known fix). */
+  const guessed = source !== 'live GPS';
+  if (typeof toast === 'function') toast(name + ' saved' + (guessed ? ' (' + source + ')' : ''));
+  return 'Dropped "' + name + '" (' + type + ') at ' + ll.lat.toFixed(5) + ', ' + ll.lng.toFixed(5) +
+    (guessed ? ' (' + source + ')' : '') + '.\nSaved and on the map. Open Spots to rename or remove it.';
 }
 
 /* ================= ONLINE brain (Claude) ================= */
+/* What both cloud brains are told about formatting: the transcript renders plain text with
+   **bold** only (never HTML), on a phone, and the app carries no emoji. */
+export const ASST_FORMAT_RULE = "Format for a small screen: plain text, short lines, '-' bullets when listing, **bold** only for the key number or a warning. No headings, tables, links or emoji.";
 export function asstSystemPrompt() {
   return [
     "You are First Mate, a calm, concise assistant built into an offline marine navigation app for a recreational boater and angler.",
     "You have the user's LIVE boat data below — use it. Prefer it over guessing. Units: distances in nautical miles, speed in knots, temps in °F, depths/heights in feet.",
     "Be practical and brief — this is read on a phone on a boat. Lead with the answer. Use short lines. Only elaborate when asked.",
-    "Safety first: for anything life-threatening, tell them to use VHF Ch 16 / call the Coast Guard and point to the app's 🆘 button. Never give false confidence about weather or conditions.",
+    ASST_FORMAT_RULE,
+    "Safety first: for anything life-threatening, tell them to use VHF Ch 16 / call the Coast Guard and point to the app's SOS button. Never give false confidence about weather or conditions.",
     "Fishing regulations you cite are general reference — always tell them to confirm current limits with the state wildlife agency (CDFW in California) before keeping fish.",
-    "You can take real actions in the app via tools: place / list / delete waypoints, toggle map layers, start or stop trip tracking, center the map, and pull LIVE weather & tides for a point. For current weather, seas, water temp or tides, CALL get_conditions / get_tides — don't answer those from the cached snapshot alone. Default every location to the boat's current position unless the user gives coordinates or names a saved spot. After acting, confirm briefly and naturally what you did.",
+    "You can take real actions in the app via tools: place / list / delete waypoints, toggle map layers, start or stop trip tracking, center the map, and pull LIVE weather & tides for a point. For current weather, seas, water temp or tides, CALL get_conditions / get_tides — don't answer those from the cached snapshot alone. Default every location to the boat's current position unless the user gives coordinates or names a saved spot. After acting, confirm briefly and naturally what you did. If a tool result says it used the map center because there was no GPS fix, say so.",
     "If the user is offline (get_conditions / get_tides can't reach the network) or asks about a downloaded area, call get_area_intel — it reads the offline data pack captured when the area was downloaded (multi-day forecast, a week of tides, water-temp grid, fish-sighting history, closures). Always mention when the data was captured so they know its age.",
-    "Catch logging and knots aren't automated yet — for those, point them to the 🧭 and 📖 buttons.",
+    "Catch logging and knots aren't automated yet — for those, point them to Nav tools & catch log and to Guides → Knots in the app.",
     "You are a knowledgeable local deckhand: you have a built-in fishing brain (below) covering species, lures/jigs/baits, techniques, and area game-plans for Southern & Central California. When asked what to throw, what bait, how to catch something, or what's biting at a spot, give a SPECIFIC, confident recommendation from it. NEVER tell the user to ask a local, hire a guide, google it, buy a book, or check somewhere else — you are the local. The only thing to defer is confirming legal size/bag limits with CDFW.",
     "",
     asstSnapshot(),
@@ -945,25 +1147,85 @@ export function asstSystemPrompt() {
 
 /* ================= FREE proxy brain (Cloudflare Workers AI, no key) ================= */
 /* Owner: set this to your deployed Worker URL to give ALL users free no-key chat.
-   (Users can also set it per-device in ⚙️ settings → "Free-AI endpoint".) */
+   (Users can also set it per-device in settings → "Free-AI endpoint".) */
 export const ASST_PROXY = 'https://first-mate.jbittlest.workers.dev';
-export function asstProxyUrl() { return (localStorage.getItem('fishapp.asst.proxy') || ASST_PROXY || '').trim(); }
+export function asstProxyOverride() { return (localStorage.getItem('fishapp.asst.proxy') || '').trim(); }
+export function asstProxyUrl() { return (asstProxyOverride() || ASST_PROXY || '').trim(); }
+/* The settings field shows the EFFECTIVE endpoint (it used to show blank while the default
+   was quietly in use, so it looked switched off when it wasn't). Saving it empty or unchanged
+   means "use the FishApp relay"; turning cloud AI off is the Allow cloud AI switch, not an
+   empty field. Returns { value } to store ('' = default) or { error }. */
+export function asstNormalizeProxy(v) {
+  const s = String(v == null ? '' : v).trim();
+  if (!s || s.replace(/\/+$/, '') === ASST_PROXY) return { value: '' };
+  if (/^https:\/\/[^\s/]+/i.test(s) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(s)) return { value: s };
+  return { error: 'The endpoint must be an https:// address.' };
+}
 
-export function asstProxySystem() {
-  return [
+/* The Worker cuts `system` at 8000 characters (proxy/first-mate-worker.js). The prompt used to
+   run ~10k with the LIVE CONDITIONS / TIDES block appended LAST — so the free brain never saw
+   the live numbers it was told to read out, and punted. Now the live block sits right after
+   the instructions, and only the reference tables are trimmed (whole lines) to fit. */
+export const ASST_PROXY_SYSTEM_CAP = 8000;
+/** Join sections in order under a character cap. Sections without `trim` are always kept;
+ *  `trim` sections fill what's left, cut at whole lines (a header plus at least one row). */
+export function asstFitSections(sections, cap) {
+  const list = sections.filter((s) => s && s.text);
+  const SEP = '\n\n';
+  const reqAfter = (i) => list.slice(i + 1).filter((s) => !s.trim).reduce((n, s) => n + s.text.length + SEP.length, 0);
+  const parts = [];
+  let used = 0;
+  list.forEach((s, i) => {
+    const join = parts.length ? SEP.length : 0;
+    if (!s.trim) { parts.push(s.text); used += join + s.text.length; return; }
+    const room = cap - used - join - reqAfter(i);
+    if (room <= 0) return;
+    if (s.text.length <= room) { parts.push(s.text); used += join + s.text.length; return; }
+    const MORE = '…';
+    const kept = [];
+    let n = 0;
+    for (const ln of s.text.split('\n')) {
+      if (n + ln.length + 1 + MORE.length > room) break;
+      kept.push(ln); n += ln.length + 1;
+    }
+    if (kept.length > 1) { const txt = kept.join('\n') + '\n' + MORE; parts.push(txt); used += join + txt.length; }
+  });
+  const out = parts.join(SEP);
+  return out.length > cap ? out.slice(0, cap) : out;
+}
+/* The few reference rows that matter for THIS question, so a trimmed prompt still carries
+   them (the species' full tip, the named area, the technique and the species' regs). */
+export function asstFocusNotes(text) {
+  const t = (text || '').toLowerCase();
+  const out = [];
+  const sp = (typeof fishTipsFor === 'function') ? fishTipsFor(t) : null;
+  if (sp) out.push('- ' + sp.name + ' — lures/jigs: ' + sp.lures + ' Bait: ' + sp.baits + ' How: ' + sp.method + ' Where/when: ' + sp.where + ' ' + sp.when);
+  const area = (typeof areaTipsFor === 'function') ? areaTipsFor(t) : null;
+  if (area) out.push('- ' + area.name + ': ' + area.text);
+  const tech = (typeof techniqueTipsFor === 'function') ? techniqueTipsFor(t) : null;
+  if (tech) out.push('- ' + tech.name + ': ' + tech.text);
+  const reg = asstFindSpecies(t);
+  if (reg) out.push('- Regs (general reference — verify with CDFW) ' + reg.name + ': min size ' + reg.size + '; bag ' + reg.bag + (reg.note ? '; ' + reg.note : ''));
+  return out.length ? 'MOST RELEVANT TO THIS QUESTION:\n' + out.join('\n') : '';
+}
+export function asstProxySystem(userText, live) {
+  const head = [
     "You are First Mate, a concise, friendly assistant inside an offline marine navigation app for a recreational boater and angler.",
     "Use the LIVE boat data below — prefer it over guessing. Units: nautical miles, knots, °F, feet. Be brief; this is read on a phone on a boat. Lead with the answer.",
-    "A LIVE CONDITIONS / LIVE TIDES block below is real data just fetched for the location it names (the boat, or a place the user asked about). Answer weather, wind, seas, WAVE HEIGHT, SWELL, water-temp and tide questions DIRECTLY from those numbers — report the exact figures (wave_ft, swell_ft, water_temp_f, etc.). This app is hands-free: NEVER tell the user to open the Weather/Tides panel, check a buoy, or look it up themselves. If a wave/swell figure is missing because the point is inland, briefly say so and ask them to name a coastal spot — do not deflect to a panel. Only when NO live block is present at all (fully offline) may you mention the 🌤 / 🌙 panels.",
+    ASST_FORMAT_RULE,
+    "A LIVE CONDITIONS / LIVE TIDES block below is real data just fetched for the location it names (the boat, or a place the user asked about). Answer weather, wind, seas, WAVE HEIGHT, SWELL, water-temp and tide questions DIRECTLY from those numbers — report the exact figures (wave_ft, swell_ft, water_temp_f, etc.). This app is hands-free: NEVER tell the user to open the Weather/Tides panel, check a buoy, or look it up themselves. If a wave/swell figure is missing because the point is inland, briefly say so and ask them to name a coastal spot — do not deflect to a panel. Only when NO live block is present at all (fully offline) may you mention the Weather / Tides panels.",
     "You can't place waypoints, start trips, or navigate the map yourself — for those actions, point them to the on-screen buttons.",
-    "Fishing regulations are general reference — tell them to confirm current limits with the state agency (CDFW in California) before keeping fish. For emergencies: VHF Channel 16 / Coast Guard and the app's 🆘 button.",
+    "Fishing regulations are general reference — tell them to confirm current limits with the state agency (CDFW in California) before keeping fish. For emergencies: VHF Channel 16 / Coast Guard and the app's SOS button.",
     "You are a knowledgeable local deckhand with a built-in fishing brain (below): species, lures/jigs/baits, techniques, and area game-plans for Southern & Central California. When asked what to throw, what bait, how to catch something, or what's biting at a spot, answer with SPECIFIC, confident picks from it. NEVER tell the user to ask a local, hire a guide, google it, or check elsewhere — you ARE the local. Only defer on confirming legal size/bag limits (CDFW).",
-    "",
-    asstSnapshot(),
-    "",
-    asstRegsTable(),
-    "",
-    asstTipsTable(),
   ].join('\n');
+  return asstFitSections([
+    { text: head },
+    { text: live || '' },
+    { text: asstSnapshot() },
+    { text: asstFocusNotes(userText), trim: true },
+    { text: asstTipsTable(), trim: true },
+    { text: asstRegsTable(), trim: true },
+  ], ASST_PROXY_SYSTEM_CAP);
 }
 
 /* Geocode a place name to coordinates via Open-Meteo's free geocoding API.
@@ -1028,7 +1290,7 @@ export function asstExtractPlaces(t) {
    (reusing the same tool functions the keyed AI uses) and hand the numbers to
    the proxy so it can answer hands-free instead of punting to the app's panels.
    If the user names a place ("weather in Avalon"), geocode it and fetch there. */
-export async function asstProxyLiveContext(userText, botEl) {
+export async function asstProxyLiveContext(userText, botId) {
   const t = (userText || '').toLowerCase();
   const has = (...w) => w.some((x) => t.includes(x));
   const wantWx = has('weather', 'wind', 'windy', 'gust', 'breeze', 'conditions', 'forecast',
@@ -1051,7 +1313,7 @@ export async function asstProxyLiveContext(userText, botEl) {
     // A fish species after "for" ("weather for yellowtail…") is not a place — skip
     // it so we don't geocode "yellowtail" to Yellowtail, Montana.
     if (typeof fishTipsFor === 'function' && fishTipsFor(name)) continue;
-    if (botEl) { botEl.textContent = '⚙️ locating ' + name + '…'; asstScroll(); }
+    asstProgress(botId, 'locating ' + name);
     const g = await asstGeocodeBest(name);
     if (g) {
       loc = { lat: g.lat, lng: g.lng }; forWhere = g.label; named = true;
@@ -1066,7 +1328,7 @@ export async function asstProxyLiveContext(userText, botEl) {
   const blocks = [];
   try {
     if (wantWx) {
-      if (botEl) { botEl.textContent = '⚙️ checking conditions…'; asstScroll(); }
+      asstProgress(botId, 'checking conditions');
       const c = await asstToolConditions(loc);
       if (c && !c.error) {
         let b = 'LIVE CONDITIONS — just fetched for ' + forWhere + ' ' + (c.position || '') +
@@ -1080,7 +1342,7 @@ export async function asstProxyLiveContext(userText, botEl) {
       }
     }
     if (wantTide) {
-      if (botEl) { botEl.textContent = '⚙️ checking tides…'; asstScroll(); }
+      asstProgress(botId, 'checking tides');
       const td = await asstToolTides(loc);
       if (td && !td.error) blocks.push('LIVE TIDES — just fetched for ' + forWhere + ':\n' + JSON.stringify(td));
     }
@@ -1088,12 +1350,12 @@ export async function asstProxyLiveContext(userText, botEl) {
   return blocks.length ? blocks.join('\n\n') : '';
 }
 
-export async function asstAskProxy(userText, botEl) {
-  const live = await asstProxyLiveContext(userText, botEl);
-  if (botEl) { botEl.textContent = '…'; }
+export async function asstAskProxy(userText, botId) {
+  const live = await asstProxyLiveContext(userText, botId);
+  asstProgress(botId, '');
   const messages = ASST.history.map((m) => ({ role: m.role, content: m.content }));
   messages.push({ role: 'user', content: userText });
-  const system = live ? asstProxySystem() + '\n\n' + live : asstProxySystem();
+  const system = asstProxySystem(userText, live);
   const resp = await fetch(asstProxyUrl(), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -1103,21 +1365,32 @@ export async function asstAskProxy(userText, botEl) {
   if (!resp.ok) {
     let msg = 'HTTP ' + resp.status;
     try { const j = await resp.json(); if (j && j.error) msg = j.error; } catch (e) { /* ignore */ }
+    /* 403 = the relay refused this origin (e.g. an older Worker that only knows the website).
+       Retrying every question would show the same error each time, so stop offering the relay
+       for this session: the status drops to Data mode and answers come from the phone.
+       Saving the endpoint setting re-enables it. */
+    if (resp.status === 403) { ASST._proxyBlocked = true; msg = 'the free AI relay refused this app'; }
     const err = new Error(msg); err.status = resp.status; throw err;
   }
   const j = await resp.json();
   return (j.reply || '').trim() || '(no reply)';
 }
 
-/* Adaptive thinking is only on the newer family (Opus 4.6+, Sonnet 5/4.6, Fable 5).
-   Haiku 4.5 — one of the options in the model picker — rejects it with a 400, so this is
-   gated rather than sent unconditionally. Older models used a fixed `budget_tokens`; that
-   parameter is removed on the current models and we deliberately don't reintroduce it. */
+/* Adaptive thinking is on every model in the picker (Opus 5.5, Sonnet 5.5, Haiku 5.5) and on
+   the 4.6+ family. Haiku 4.5 — in the old picker — rejected it with a 400, so this stays gated
+   for any older id still saved somewhere. Fixed `budget_tokens` is removed on the current
+   models and we deliberately don't reintroduce it. */
 export function asstSupportsThinking(model) {
-  return /^claude-(opus-4-(6|7|8)|sonnet-5|sonnet-4-6|fable-5|mythos-5)/.test(model || '');
+  return /^claude-(opus-4-(6|7|8)|opus-5|sonnet-5|sonnet-4-6|haiku-5|fable-5|mythos-5)/.test(model || '');
 }
+/* Server-side refusal fallback ('default' routing). Offered on Opus 5.5 and Sonnet 5.5;
+   Haiku 5.5 has none (sending it would just stay declined). */
+export function asstSupportsFallback(model) {
+  return model === 'claude-opus-5-5' || model === 'claude-sonnet-5-5';
+}
+export const ASST_FALLBACK_BETA = 'server-side-fallback-2026-07-01';
 
-export async function asstApiCall(messages) {
+export async function asstApiCall(messages, system) {
   const model = ASST.model();
   const body = {
     model: model,
@@ -1125,23 +1398,37 @@ export async function asstApiCall(messages) {
        against this, so it needs real headroom. Kept below the streaming threshold since
        these are plain non-streaming requests. */
     max_tokens: 16000,
-    system: asstSystemPrompt(),
+    /* Built ONCE per question by the caller, not per tool round: the snapshot carries a
+       timestamp and the spot list, and changing `system` mid-loop while thinking blocks are
+       replayed breaks the API's preserved-thinking check. */
+    system: system || asstSystemPrompt(),
     tools: asstTools(),
     messages,
   };
   /* Let Claude decide how much to reason per question — a tide lookup stays cheap while
-     "is it too rough to cross tomorrow" gets real thought. Effort is left at its default
-     (high); the reasoning itself isn't displayed, so no `display` opt-in is needed. */
-  if (asstSupportsThinking(model)) body.thinking = { type: 'adaptive' };
+     "is it too rough to cross tomorrow" gets real thought. Effort is pinned to `high` (the
+     legacy default) because Opus 5.5 and Haiku 5.5 now default to `medium`. The reasoning
+     itself isn't displayed, so no `display` opt-in is needed. */
+  if (asstSupportsThinking(model)) {
+    body.thinking = { type: 'adaptive' };
+    body.output_config = { effort: 'high' };
+  }
+  const headers = {
+    'content-type': 'application/json',
+    'x-api-key': ASST.key(),
+    'anthropic-version': '2023-06-01',
+    'anthropic-dangerous-direct-browser-access': 'true',
+  };
+  /* A safety classifier can decline a benign boating question (HTTP 200, stop_reason
+     'refusal'); 'default' fallbacks re-run it on Anthropic's recommended model instead. */
+  if (asstSupportsFallback(model)) {
+    body.fallbacks = 'default';
+    headers['anthropic-beta'] = ASST_FALLBACK_BETA;
+  }
 
   const resp = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': ASST.key(),
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
+    headers,
     body: JSON.stringify(body),
     timeoutMs: 120000,       // thinking + tool rounds are slow; still bounded
   });
@@ -1155,21 +1442,26 @@ export async function asstApiCall(messages) {
 
 /* Agentic loop: let Claude answer, or call tools (which act on the app / fetch
    live data), feed results back, and repeat until it produces a final answer. */
-export async function asstAskOnline(userText, botEl) {
+export async function asstAskOnline(userText, botId) {
   const messages = ASST.history.map((m) => ({ role: m.role, content: m.content }));
   messages.push({ role: 'user', content: userText });
+  const system = asstSystemPrompt();
 
   let finalText = '';
   const didTools = [];      // what actually ran, so a truncated loop can still report
   for (let step = 0; step < 6; step++) {
-    const data = await asstApiCall(messages);
+    const data = await asstApiCall(messages, system);
+    /* A decline (even after the server-side fallback) is not an answer — check it before
+       reading content. asstSend falls back to the offline engine and says the AI declined. */
+    if (data.stop_reason === 'refusal') {
+      const err = new Error('declined'); err.refusal = true; err.didTools = didTools.slice(); throw err;
+    }
     if (data.stop_reason === 'tool_use') {
-      messages.push({ role: 'assistant', content: data.content });
+      messages.push({ role: 'assistant', content: data.content });   // unchanged, thinking blocks included
       const results = [];
       for (const b of data.content) {
         if (b.type !== 'tool_use') continue;
-        botEl.textContent = '⚙️ ' + asstToolLabel(b.name) + '…';
-        asstScroll();
+        asstProgress(botId, asstToolLabel(b.name));
         const out = await asstExecTool(b.name, b.input || {});
         if (!(out && out.error)) didTools.push(asstToolLabel(b.name));
         results.push({
@@ -1211,7 +1503,7 @@ export function asstToolAreaIntel(input) {
   const ll = asstPointFrom(input);
   if (!ll) return { error: 'no position' };
   const a = (typeof areaPackFor === 'function') ? areaPackFor(ll) : null;
-  if (!a || !a.data) return { error: 'no downloaded area pack covers this location — the user can download this area (📊) while online to capture its data.' };
+  if (!a || !a.data) return { error: 'no downloaded area pack covers this location — the user can download this area (Offline charts) while online to capture its data.' };
   return areaPackSummary(a);
 }
 
@@ -1222,7 +1514,7 @@ export function asstTools() {
       input_schema: { type: 'object', properties: { lat: { type: 'number' }, lng: { type: 'number' }, place: { type: 'string', description: 'A place name to look up instead of the boat position' } } } },
     { name: 'get_tides', description: 'Today\'s high/low tide predictions for the nearest tide station. Defaults to the boat\'s position; pass `place` (a place name, geocoded) or lat/lng for somewhere else.',
       input_schema: { type: 'object', properties: { lat: { type: 'number' }, lng: { type: 'number' }, place: { type: 'string', description: 'A place name to look up instead of the boat position' } } } },
-    { name: 'place_waypoint', description: 'Drop and save a named waypoint/spot on the map. Defaults to the boat\'s current position unless lat/lng are given.',
+    { name: 'place_waypoint', description: 'Drop and save a named waypoint/spot on the map. Defaults to the boat\'s current position unless lat/lng are given. Without a GPS fix it falls back to the map center — the result says so (position_source), and you must tell the user.',
       input_schema: { type: 'object', properties: {
         name: { type: 'string', description: 'Waypoint name' },
         type: { type: 'string', enum: ['fish', 'anchor', 'hazard', 'ramp', 'wreck', 'other'], description: 'Marker type (default fish)' },
@@ -1327,14 +1619,30 @@ export async function asstToolTides(input) {
   } catch (e) { return { station: st.n, error: 'could not fetch tide predictions' }; }
 }
 
+/* Where a waypoint lands, in words. Without a fix the tool used to fall back to the map
+   center silently — the user was told "saved" about a pin on whatever water the map showed.
+   voice.js refuses outright (nobody is looking at the screen); here someone is reading the
+   reply, so it saves and SAYS so. */
+export function asstPositionSource(input) {
+  if (input && input.lat != null && input.lng != null) return 'given coordinates';
+  const p = asstPos();
+  if (!p.ll) return null;
+  if (!p.live) return 'map center — no GPS fix yet';
+  if (p.stale) return 'last known GPS fix, ' + asstFixAgeText() + ' — the boat may have moved';
+  return 'live GPS';
+}
 export async function asstToolPlaceWaypoint(input) {
   const ll = asstPointFrom(input);
   if (!ll) return { error: 'no position available — provide lat and lng' };
   const name = (input.name || '').trim();
   if (!name) return { error: 'name is required' };
+  const source = asstPositionSource(input) || 'map center — no GPS fix yet';
   const spot = await asstCreateSpot({ lat: ll.lat, lng: ll.lng, name: name, type: input.type || 'fish', notes: input.notes || '' });
-  if (typeof toast === 'function') toast('📌 ' + name + ' saved');
-  return { ok: true, name: name, type: spot.type, lat: +ll.lat.toFixed(5), lng: +ll.lng.toFixed(5) };
+  const guessed = source !== 'live GPS' && source !== 'given coordinates';
+  if (typeof toast === 'function') toast(name + ' saved' + (guessed ? ' (' + source + ')' : ''));
+  const out = { ok: true, name: name, type: spot.type, lat: +ll.lat.toFixed(5), lng: +ll.lng.toFixed(5), position_source: source };
+  if (guessed) out.note = 'Not placed from a live GPS fix (' + source + ') — tell the user, and suggest moving it in Spots if it is in the wrong place.';
+  return out;
 }
 
 export function asstToolListWaypoints() {
@@ -1348,6 +1656,9 @@ export function asstToolListWaypoints() {
   }) };
 }
 
+/* Deletes the first (partial) name match with NO confirmation of its own, unlike the Spots UI —
+   preserved knowingly (the user asked the AI to do it). If deleteSpot now confirms on its own
+   and the user keeps the spot, report that instead of claiming it's gone. */
 export async function asstToolDeleteWaypoint(input) {
   const q = (input.name || '').toLowerCase().trim();
   if (!q) return { error: 'name required' };
@@ -1356,17 +1667,23 @@ export async function asstToolDeleteWaypoint(input) {
   if (!matches.length) return { error: 'no waypoint matching "' + input.name + '"' };
   const s = matches[0];
   await deleteSpot(s.id);
-  if (typeof toast === 'function') toast('🗑 ' + s.name + ' deleted');
+  if (Spots.all.some((x) => x.id === s.id)) return { error: 'the user kept "' + s.name + '" (deletion cancelled)' };
+  if (typeof toast === 'function') toast(s.name + ' deleted');
   return { deleted: s.name, other_matches: matches.length - 1 };
 }
 
+export const ASST_LAYERS = ['sst', 'rain', 'wind', 'reefs', 'mpa', 'fish'];
 export function asstToolToggleLayer(input) {
-  const map = { sst: 'ovl-sst', rain: 'ovl-rain', wind: 'ovl-wind', reefs: 'ovl-reefs', mpa: 'ovl-mpa', fish: 'ovl-fish' };
-  const cb = document.getElementById(map[input.layer]);
-  if (!cb) return { error: 'unknown layer "' + input.layer + '"' };
+  if (ASST_LAYERS.indexOf(input.layer) < 0) return { error: 'unknown layer "' + input.layer + '"' };
   const want = !!input.on;
-  if (cb.checked !== want) { cb.checked = want; cb.dispatchEvent(new Event('change')); }
-  return { layer: input.layer, on: want };
+  /* Same entry point as the Layers sheet (it replaced ticking the #ovl-* checkbox and firing a
+     synthetic change event), so a module that refuses — SST or rain with no signal — still
+     refuses here and leaves the toggle OFF. Report what actually happened. */
+  if (!!layersStore.getState()[input.layer] !== want) setDataOverlay(input.layer, want);
+  const now = !!layersStore.getState()[input.layer];
+  const out = { layer: input.layer, on: now };
+  if (now !== want) out.note = 'the app could not turn this layer ' + (want ? 'on' : 'off') + ' (it may need an internet connection)';
+  return out;
 }
 
 export function asstToolSetTrip(input) {
@@ -1380,7 +1697,8 @@ export function asstToolSetTrip(input) {
 }
 
 export function asstToolGoTo(input) {
-  if (!window._map) return { error: 'map unavailable' };
+  const map = getMap();
+  if (!map) return { error: 'map unavailable' };
   let ll = null, label = '';
   if (input.lat != null && input.lng != null) { ll = L.latLng(input.lat, input.lng); label = 'coordinates'; }
   else if (input.spot && typeof Spots !== 'undefined') {
@@ -1390,42 +1708,77 @@ export function asstToolGoTo(input) {
   } else { const p = asstPos(); if (p.ll) { ll = p.ll; label = 'your position'; } }
   if (!ll) return { error: 'no target to center on' };
   if (typeof setFollow === 'function') setFollow(false);
-  mapProgrammatic(() => window._map.setView(ll, Math.max(window._map.getZoom(), 14)));
+  mapProgrammatic(() => map.setView(ll, Math.max(map.getZoom(), 14)));
   return { centered_on: label };
 }
 
-/* ================= UI plumbing ================= */
-export function asstScroll() {
-  const box = document.getElementById('asst-messages');
-  if (box) box.scrollTop = box.scrollHeight;
+/* ================= transcript plumbing (store, not DOM) ================= */
+let _msgSeq = 1;
+/* Bot text never carries emoji (DESIGN.md): the offline answers are written clean, and this
+   backstop catches AI replies, species/knot data and anything else. An emoji plus the space
+   after it goes, so "X marks" stays readable; line breaks and indentation are kept. */
+export const ASST_EMOJI_RE = /(?:[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}](?:\u{FE0F}|\u{200D}|\u{20E3})*)+[ \t]?|\u{FE0F}|\u{20E3}/gu;
+export function asstCleanText(text) {
+  return String(text == null ? '' : text).replace(ASST_EMOJI_RE, '');
 }
-export function asstAddMsg(role, text) {
-  const box = document.getElementById('asst-messages');
-  const el = document.createElement('div');
-  el.className = 'asst-msg ' + role;
-  el.textContent = text;
-  box.appendChild(el);
-  asstScroll();
-  return el;
+/** Split a reply into plain and **bold** runs — the only markup the transcript renders. */
+export function asstSplitBold(text) {
+  const out = [];
+  const re = /\*\*([^*\n][^*]*?)\*\*/g;
+  let last = 0, m;
+  const s = String(text == null ? '' : text);
+  while ((m = re.exec(s)) !== null) {
+    if (m.index > last) out.push({ text: s.slice(last, m.index), bold: false });
+    out.push({ text: m[1], bold: true });
+    last = m.index + m[0].length;
+  }
+  if (last < s.length) out.push({ text: s.slice(last), bold: false });
+  return out;
 }
+/** Append a message; returns its id (legacy returned the bubble element). */
+export function asstAddMsg(role, text, extra) {
+  const m = Object.assign({ id: _msgSeq++, role: role, text: role === 'bot' ? asstCleanText(text) : String(text) }, extra || {});
+  asstStore.setState((s) => ({ messages: s.messages.concat([m]) }));
+  return m.id;
+}
+export function asstUpdateMsg(id, patch) {
+  const p = Object.assign({}, patch);
+  if (p.text != null) p.text = asstCleanText(p.text);
+  asstStore.setState((s) => {
+    if (!s.messages.some((m) => m.id === id)) return s;   // cleared meanwhile — nothing to write into
+    return { messages: s.messages.map((m) => (m.id === id ? Object.assign({}, m, p) : m)) };
+  });
+}
+/* What an in-flight reply is doing ("checking conditions"); '' = just thinking. */
+export function asstProgress(botId, label) {
+  if (botId == null) return;
+  asstUpdateMsg(botId, { progress: label || '' });
+}
+
 /* ---- Voice: speak answers (TTS, works offline incl. iPhone) + voice input (STT) ---- */
 export function asstStripForSpeech(text) {
   return String(text)
-    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{2190}-\u{21FF}️⃣]/gu, ' ')
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{2190}-\u{21FF}]|\u{FE0F}|\u{20E3}/gu, ' ')
     .replace(/[*_`#>|]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
 /* Cloud voice is usable only with a proxy configured AND signal — offshore it silently
-   reverts to the device voice, which is the whole reason the device path stays. */
+   reverts to the device voice, which is the whole reason the device path stays. It also
+   needs cloud AI ALLOWED (consent 'yes'), not merely "not refused": the spoken text — which
+   includes hands-free readouts such as "You are at <lat, lng>" from voice.js — goes to the
+   relay, so a user who was never asked (or a legacy build's saved cloudvoice='1') keeps the
+   device voice until they allow cloud AI. */
 export function asstCloudVoiceOn() {
-  return localStorage.getItem('fishapp.asst.cloudvoice') === '1' &&
-    !!asstProxyUrl() && navigator.onLine;
+  return localStorage.getItem('fishapp.asst.cloudvoice') === '1' && asstCloudVoiceUsable();
+}
+export function asstCloudVoiceUsable() {
+  return !!asstProxyUrl() && !ASST._proxyBlocked && navigator.onLine && asstCloudConsent() === 'yes';
 }
 export function asstStopSpeech() {
   /* Clearing this is what actually cancels an in-flight cloud utterance: the /tts
      fetch may still be running, and checking ASST.speak on arrival isn't enough
-     because hands-free legitimately speaks one reply while the button reads 🔇. */
+     because hands-free legitimately speaks one reply while the toggle reads off. */
   ASST._speakWanted = false;
   ASST._speakGen = (ASST._speakGen || 0) + 1;
   try { if ('speechSynthesis' in window) window.speechSynthesis.cancel(); } catch (e) {}
@@ -1433,19 +1786,28 @@ export function asstStopSpeech() {
 }
 export function asstSpeak(text) {
   if (!ASST.speak) return;
+  asstSpeakNow(text);
+}
+/* The ungated path — asstSpeak minus the Speak-toggle check. The settings "This is how I
+   sound" test uses it with the voice being chosen (not yet saved), so the sample plays even
+   with Speak off (legacy only sampled on Save, and silently did nothing with Speak off). */
+export function asstSpeakNow(text, opts) {
   const clean = asstStripForSpeech(text).slice(0, 700);
   if (!clean) return;
   asstStopSpeech();          // clears _speakWanted…
   ASST._speakWanted = true;  // …so re-arm for the utterance we're about to start
-  if (asstCloudVoiceOn()) asstSpeakCloud(clean);
-  else asstSpeakDevice(clean);
+  const o = opts || {};
+  const cloud = o.cloud != null ? (!!o.cloud && asstCloudVoiceUsable()) : asstCloudVoiceOn();
+  if (cloud) asstSpeakCloud(clean, o.voice);
+  else asstSpeakDevice(clean, o.voice);
 }
-export function asstSpeakDevice(clean) {
+export function asstSpeakDevice(clean, voice) {
   if (!('speechSynthesis' in window)) return;
   try {
     const u = new SpeechSynthesisUtterance(clean);
     u.lang = 'en-US'; u.rate = 1; u.pitch = 1;
-    if (ASST._voice) u.voice = ASST._voice;
+    const v = voice || ASST._voice;
+    if (v) u.voice = v;
     /* Hold the mic shut for however long this takes. Only the cloud path used to do
        this, so on the device voice — offline, or with no TTS key — the recogniser
        went live partway through the reply and could hear "OK, fish are…" as the
@@ -1461,7 +1823,7 @@ export function asstSpeakDevice(clean) {
 /* Natural speech via the Worker's /tts route. Every failure path — no key on the Worker
    (501), no signal, blocked autoplay — falls back to the device voice rather than leaving
    the user in silence, which underway is worse than a robotic voice. */
-export async function asstSpeakCloud(clean) {
+export async function asstSpeakCloud(clean, deviceVoice) {
   const gen = ASST._speakGen = (ASST._speakGen || 0) + 1;
   try {
     const r = await fetch(asstProxyUrl().replace(/\/+$/, '') + '/tts', {
@@ -1488,7 +1850,7 @@ export async function asstSpeakCloud(clean) {
     });
     await audio.play();
   } catch (e) {
-    if (gen === ASST._speakGen) asstSpeakDevice(clean);   // never fail silent
+    if (gen === ASST._speakGen) asstSpeakDevice(clean, deviceVoice);   // never fail silent
   }
 }
 /* Rank installed voices by how human they sound.
@@ -1510,6 +1872,7 @@ export function asstVoiceScore(v) {
   if (v.localService) s += 5;                         // local = no network hitch mid-sentence
   return s;
 }
+export const ASST_NATURAL_RE = /enhanced|premium|neural/i;
 export function asstVoiceList() {
   if (!('speechSynthesis' in window)) return [];
   return (window.speechSynthesis.getVoices() || []).filter((v) => /^en/i.test(v.lang));
@@ -1525,54 +1888,45 @@ export function asstPickVoice() {
     asstFillVoicePicker();
   };
   pick();
-  window.speechSynthesis.onvoiceschanged = pick;      // fires once the list is ready
-}
-/* Populate the settings dropdown with whatever this device actually has, best first, and say
-   plainly which voice is live. The app already auto-selects the best installed voice, so the
-   only thing the user ever needs to DO is install a better one — the hint says so explicitly
-   rather than leaving them hunting through a dropdown that can't help. */
-export function asstFillVoicePicker() {
-  const sel = document.getElementById('asst-voice');
-  const hint = document.getElementById('asst-voice-hint');
-  if (!sel) return;
-  const vs = asstVoiceList().slice().sort((a, b) => asstVoiceScore(b) - asstVoiceScore(a));
-  if (!vs.length) {
-    sel.innerHTML = '<option>No voices found on this device</option>';
-    if (hint) hint.textContent = 'This device reports no speech voices yet — reopen this panel in a moment.';
-    return;
+  /* Fires once the list is ready. A listener rather than assigning onvoiceschanged, so it
+     never clobbers (or gets clobbered by) another module's handler. */
+  if (!ASST._voicesHooked) {
+    ASST._voicesHooked = true;
+    const ss = window.speechSynthesis;
+    if (typeof ss.addEventListener === 'function') ss.addEventListener('voiceschanged', pick);
+    else ss.onvoiceschanged = pick;
   }
+}
+/** Which honest hint the voice picker shows (the copy lives in the panel). */
+export function asstVoiceHintKind(names, current, iOS) {
+  if (!names.length) return 'none';
+  if (names.some((n) => ASST_NATURAL_RE.test(n))) return ASST_NATURAL_RE.test(current) ? 'natural' : 'pick-natural';
+  return iOS ? 'ios' : 'no-natural';
+}
+/* Publish whatever this device actually has, best first, and which voice is live. The app
+   already auto-selects the best installed voice, so the only thing the user ever needs to DO
+   is install a better one — the hint says so explicitly rather than leaving them hunting
+   through a dropdown that can't help. Be honest about the platform ceiling: Safari does NOT
+   expose iOS's downloadable Enhanced/Premium voices to the Web Speech API — getVoices()
+   returns only a limited built-in subset — so telling an iPhone user to download a better
+   voice sends them on a chase that cannot work. Only say that where it's actually true. */
+export function asstFillVoicePicker() {
+  const seen = new Set();
+  const vs = asstVoiceList().slice().sort((a, b) => asstVoiceScore(b) - asstVoiceScore(a))
+    .filter((v) => (seen.has(v.name) ? false : (seen.add(v.name), true)));
+  if (!vs.length) { asstStore.setState({ voices: [], voiceName: '', voiceHint: 'none' }); return; }
   const current = (ASST._voice && ASST._voice.name) || vs[0].name;
-  sel.innerHTML = vs.map((v) =>
-    '<option value="' + escapeHtml(v.name) + '"' + (v.name === current ? ' selected' : '') + '>' +
-    escapeHtml(v.name) + (/enhanced|premium|neural/i.test(v.name) ? ' ⭐ natural' : '') + '</option>').join('');
-  if (!hint) return;
-  const good = vs.filter((v) => /enhanced|premium|neural/i.test(v.name));
-  /* Be honest about the platform ceiling. Safari does NOT expose iOS's downloadable
-     Enhanced/Premium voices to the Web Speech API — getVoices() returns only a limited
-     built-in subset — so telling an iPhone user to download a better voice sends them on a
-     chase that cannot work. Only say that where it's actually true. */
   const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  if (good.length) {
-    hint.innerHTML = '🔊 Using <b>' + escapeHtml(current) + '</b>' +
-      (/enhanced|premium|neural/i.test(current) ? ' — this is a natural voice.'
-        : ' — pick one marked ⭐ above for a natural voice.');
-  } else if (iOS) {
-    hint.innerHTML = '🔊 Using <b>' + escapeHtml(current) + '</b>. On iPhone these built-in web ' +
-      'voices are the only ones available — Safari does not let web apps use the natural ' +
-      '“Enhanced” voices you can download in iOS Settings, so downloading one will not change ' +
-      'this. Try the other options above; they vary in how robotic they sound.';
-  } else {
-    hint.innerHTML = '🔊 Using <b>' + escapeHtml(current) + '</b>. No natural (Enhanced/Premium) ' +
-      'voice is installed on this device — installing one at the system level will let it appear here.';
-  }
+  asstStore.setState({
+    voices: vs.map((v) => ({ name: v.name, natural: ASST_NATURAL_RE.test(v.name) })),
+    voiceName: current,
+    voiceHint: asstVoiceHintKind(vs.map((v) => v.name), current, iOS),
+  });
 }
+/* Kept for voice.js, which restores ASST.speak after its one-reply override and calls this. */
 export function asstUpdateSpeakBtn() {
-  const b = document.getElementById('asst-speak');
-  if (!b) return;
-  b.textContent = ASST.speak ? '🔊' : '🔇';
-  b.classList.toggle('on', ASST.speak);
-  b.title = ASST.speak ? 'Voice on — tap to mute' : 'Read answers aloud';
+  asstStore.setState({ speak: !!ASST.speak });
 }
 export function asstToggleSpeak() {
   ASST.speak = !ASST.speak;
@@ -1584,51 +1938,174 @@ export function asstToggleSpeak() {
   if (!ASST.speak) asstStopSpeech();
   else asstSpeak("Voice on. I'll read my answers aloud.");
 }
+/* Settings "This is how I sound": the voice being picked, played even with Speak off. */
+export function asstTestVoice(voiceName, cloud) {
+  const v = voiceName ? asstVoiceList().find((x) => x.name === voiceName) : null;
+  asstSpeakNow('This is how I sound.', { voice: v || null, cloud: !!cloud });
+}
 export function asstStartMic() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { if (typeof toast === 'function') toast("Voice input isn't supported here — tap the mic on your keyboard to talk"); return; }
+  if (ASST._rec) { try { ASST._rec.stop(); } catch (e) {} return; }   // second tap = done talking
   try {
     const r = new SR();
     r.lang = 'en-US'; r.interimResults = false; r.maxAlternatives = 1;
-    const mic = document.getElementById('asst-mic');
-    if (mic) mic.classList.add('listening');
+    ASST._rec = r;
+    asstStore.setState({ micListening: true });
     r.onresult = (e) => { const txt = e.results[0][0].transcript; if (txt) asstSend(txt); };
-    r.onerror = (e) => { if (typeof toast === 'function') toast('Voice: ' + (e.error || 'error')); };
-    r.onend = () => { if (mic) mic.classList.remove('listening'); };
+    r.onerror = (e) => {
+      const why = (e && e.error) || 'error';
+      if (why === 'aborted') return;
+      if (why === 'not-allowed' || why === 'service-not-allowed') {
+        /* Permission refused (or, in the iPhone app, Settings has it off). Say how to fix it and
+           stop offering a mic button that can't work this session. */
+        if (typeof toast === 'function') toast('Microphone or speech recognition is off for FishApp — allow both in Settings, or use the dictation key on your keyboard');
+        asstStore.setState({ micSupported: false });
+        return;
+      }
+      if (why === 'no-speech') { if (typeof toast === 'function') toast("Didn't catch that — tap the mic and try again"); return; }
+      if (typeof toast === 'function') toast('Voice: ' + why);
+    };
+    r.onend = () => { ASST._rec = null; asstStore.setState({ micListening: false }); };
     r.start();
-  } catch (e) { if (typeof toast === 'function') toast('Voice input failed'); }
+  } catch (e) {
+    ASST._rec = null;
+    asstStore.setState({ micListening: false });
+    if (typeof toast === 'function') toast('Voice input failed');
+  }
 }
 
+/* ---------------- cloud-AI consent (App Store guideline 5.1.2(i)) ---------------- */
+/* Before the FIRST cloud call — the free relay or Claude with the user's key — say what is
+   sent and to whom, and remember the answer. Declined (or not asked yet with no answer) means
+   First Mate answers on the phone. The settings switch changes it later. */
+export const ASST_CONSENT_KEY = 'fishapp.asst.cloudConsent';
+export function asstCloudConsent() {
+  let v = null;
+  try { v = localStorage.getItem(ASST_CONSENT_KEY); } catch (e) { /* storage blocked */ }
+  return v === 'yes' || v === 'no' ? v : null;
+}
+export function asstSetCloudConsent(on) {
+  try { localStorage.setItem(ASST_CONSENT_KEY, on ? 'yes' : 'no'); } catch (e) { /* storage blocked */ }
+  if (!on && ASST._audio) asstStopSpeech();
+  asstSetStatus();
+}
+/* What a cloud brain actually receives — keep this in step with asstSnapshot(), the proxy's
+   live block and the Claude tools (list_waypoints hands over every saved spot with its notes),
+   so the consent text and the settings hint (which both use it) never understate it
+   (guideline 5.1.2(i), and the App Privacy answers). */
+export const ASST_CLOUD_DATA = 'your question and the recent conversation, plus the boat data needed to answer it: ' +
+  'your position, speed and heading, local conditions, nearby reefs, your saved spots (names, positions and notes), ' +
+  'your catch log (species, sizes, baits and dates), and trip and anchor-watch status';
+export function asstConsentMessage(brain) {
+  const who = brain === 'claude'
+    ? 'Anthropic (Claude), using your own API key under your account and Anthropic’s terms'
+    : 'Cloudflare Workers AI through the FishApp relay. FishApp doesn’t store it. With your own API key it goes to Anthropic instead';
+  return 'To answer with cloud AI, First Mate sends ' + ASST_CLOUD_DATA + ' to ' + who + '.\n\n' +
+    'If you’d rather not, First Mate answers on this phone from your boat data. You can change this any time in First Mate settings. AI answers can be wrong; never rely on them for safety.';
+}
+/* The question never waits forever. A send waits on it with First Mate busy, and when it is
+   asked while nobody is looking (a hands-free question with the sheet open, the phone out of
+   reach) every later "Hey Fish" only heard "still answering". After this long it is taken
+   down, nothing is saved, and the question is answered on the phone. */
+export const ASST_CONSENT_TIMEOUT_MS = 60000;
+let _consentAsk = null;
+/** Ask once (concurrent callers share the open question). Resolves 'yes' | 'no' as saved, or
+ *  null when no decision was made (timed out) — nothing is saved then. */
+export function asstAskCloudConsent(brain) {
+  if (_consentAsk) return _consentAsk;
+  const answer = confirmDialog({
+    title: 'Use cloud AI?',
+    message: asstConsentMessage(brain),
+    confirmLabel: 'Allow',
+    cancelLabel: 'Don’t allow',
+    dismissible: false,       // a stray backdrop tap must not store a permanent "Don't allow"
+  });
+  /* pushDialog adds the dialog synchronously, so the newest one is this question. */
+  let dialogId = null;
+  try { const ds = uiStore.getState().dialogs; dialogId = ds.length ? ds[ds.length - 1].id : null; } catch (e) { /* no dialog host */ }
+  const asked = new Promise((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      asstCloseDialog(dialogId);
+      resolve(null);
+    }, ASST_CONSENT_TIMEOUT_MS);
+    Promise.resolve(answer).then((ok) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      /* Only an explicit choice is remembered. confirmDialog resolves a backdrop tap as false
+         too (see docs/requests/assistant.md); anything other than true/false is "no decision". */
+      if (ok === true || ok === false) { asstSetCloudConsent(ok); resolve(ok ? 'yes' : 'no'); }
+      else resolve(null);
+    }, () => { if (!settled) { settled = true; clearTimeout(timer); resolve(null); } });
+  });
+  _consentAsk = asked.finally(() => { _consentAsk = null; });
+  return _consentAsk;
+}
+/** Take an in-app dialog down without an answer (it resolves false, which the asker ignores). */
+export function asstCloseDialog(id) {
+  if (id == null) return;
+  try {
+    const d = uiStore.getState().dialogs.find((x) => x.id === id);
+    if (d) d.resolve(false);
+  } catch (e) { /* dialog host gone */ }
+}
+/** Is the First Mate sheet on screen? Sends with it closed come from hands-free voice. */
+export function asstPanelOpen() {
+  try { return !!isPanelOpen('assistant'); } catch (e) { return true; }
+}
+export const ASST_DECLINED_NOTE = '(Answered on this phone from your boat data. To use cloud AI, turn on Allow cloud AI in First Mate settings.)';
+export const ASST_CONSENT_LATER_NOTE = '(Answered on this phone from your boat data. Cloud AI needs your OK on screen first — First Mate will ask the next time you open it.)';
+export const ASST_CONSENT_TIMEOUT_NOTE = '(Answered on this phone from your boat data. The cloud AI question went unanswered — ask again and choose Allow, or turn on Allow cloud AI in First Mate settings.)';
+
+/* ---------------- status / brain ---------------- */
+/** Which brain answers. Cloud only with signal and cloud AI not switched off; consent null
+ *  still picks a cloud brain — asstSend asks first. */
+export function asstPickBrain(o) {
+  const cloudOk = o.consent !== 'no';
+  if (o.online && o.hasKey && cloudOk) return 'claude';
+  if (o.online && o.proxy && cloudOk) return 'proxy';
+  if (!o.online) return 'offline';
+  return 'data';
+}
+export function asstBrainInputs() {
+  return { online: navigator.onLine, hasKey: !!ASST.key(), proxy: !!asstProxyUrl() && !ASST._proxyBlocked, consent: asstCloudConsent() };
+}
 export function asstSetStatus() {
-  const el = document.getElementById('asst-status');
-  if (!el) return;
-  const hasKey = !!ASST.key();
-  const online = navigator.onLine;
-  let dot = 'warn', txt;
-  if (online && hasKey) { dot = 'ok'; txt = 'Full AI chat · ' + asstModelLabel(); }
-  else if (online && asstProxyUrl()) { dot = 'ok'; txt = 'Free AI chat — no key needed 🟢'; }
-  else if (!online) { dot = 'ok'; txt = 'Offline — answering from your boat data 🧭'; }
-  else { dot = 'ok'; txt = 'Data mode — answering from your boat data'; }
-  el.innerHTML = '<span class="dot ' + dot + '"></span>' + txt;
+  const inp = asstBrainInputs();
+  const brain = asstPickBrain(inp);
+  let txt;
+  /* 'Claude' is claimed only with signal AND a key (and cloud AI allowed) — never promise a
+     brain that can't answer. */
+  if (brain === 'claude') txt = 'Claude ' + asstModelLabel() + ' · your key';
+  else if (brain === 'proxy') txt = 'Free AI chat — no key needed';
+  else if (brain === 'offline') txt = 'Offline — answering from your boat data';
+  /* Data mode by choice (cloud AI off) vs because the relay can't be used (refused this app,
+     or no endpoint) — the second used to read the same, as if the user had chosen it. */
+  else if (inp.consent === 'no') txt = 'Data mode — answering from your boat data';
+  else txt = 'Data mode — AI relay unavailable, answering from your boat data';
+  asstStore.setState({
+    brain, statusText: txt, online: inp.online, hasKey: inp.hasKey, consent: inp.consent,
+    model: ASST.model(), modelLabel: asstModelLabel(),
+    cloudVoice: localStorage.getItem('fishapp.asst.cloudvoice') === '1',
+    proxyUrl: asstProxyUrl(), proxyIsDefault: !asstProxyOverride(),
+  });
 }
 export function asstModelLabel() {
   const m = ASST.model();
-  if (m.indexOf('opus') >= 0) return 'Opus 4.8';
-  if (m.indexOf('sonnet') >= 0) return 'Sonnet 5';
-  if (m.indexOf('haiku') >= 0) return 'Haiku 4.5';
-  return m;
+  const hit = ASST_MODELS.find((x) => x.id === m);
+  return hit ? hit.short : m;
 }
 
+/* ---------------- send ---------------- */
 export async function asstSend(text) {
   text = (text || '').trim();
   if (!text || ASST.streaming) return;
-  const input = document.getElementById('asst-input');
-  if (input) { input.value = ''; input.style.height = 'auto'; }
   asstAddMsg('user', text);
 
-  const online = navigator.onLine;
-  const useClaude = online && !!ASST.key();          // personal key → full Claude + tools
-  const useProxy = online && !useClaude && !!asstProxyUrl();  // no key → free hosted proxy chat
   ASST.streaming = true;
   asstSetSending(true);
 
@@ -1638,16 +2115,34 @@ export async function asstSend(text) {
      every later message, the Enter key and every suggestion chip until a reload. */
   const gen = ASST._gen || 0;
   try {
+    let brain = asstPickBrain(asstBrainInputs());
+    let note = '';                                 // why this was answered on the phone (shown, not spoken)
+    if ((brain === 'claude' || brain === 'proxy') && asstCloudConsent() == null) {
+      if (!asstPanelOpen()) {
+        /* Hands-free with the sheet closed (voice.js): nobody may be looking, and a question
+           waiting on screen kept First Mate busy for every later "Hey Fish". Answer on the
+           phone now, decide nothing, and ask when First Mate is next opened (asstOnOpen). */
+        ASST._consentPending = true;
+        note = ASST_CONSENT_LATER_NOTE;
+      } else {
+        const choice = await asstAskCloudConsent(brain);
+        if (gen !== (ASST._gen || 0)) return;      // chat was cleared while the question was up
+        if (choice === 'no') note = ASST_DECLINED_NOTE;
+        else if (choice == null) note = ASST_CONSENT_TIMEOUT_NOTE;
+        brain = asstPickBrain(asstBrainInputs());  // re-check: signal, key and setting can change meanwhile
+      }
+    }
+    const allowed = asstCloudConsent() === 'yes';
+    const useClaude = brain === 'claude' && allowed;   // personal key → full Claude + tools
+    const useProxy = brain === 'proxy' && allowed;     // no key → free hosted proxy chat
+
     if (useClaude || useProxy) {
-      const botEl = asstAddMsg('bot', '…');
-      botEl.classList.add('thinking');
+      const botId = asstAddMsg('bot', '', { thinking: true, progress: '' });
       try {
-        const reply = useClaude ? await asstAskOnline(text, botEl) : await asstAskProxy(text, botEl);
+        const reply = useClaude ? await asstAskOnline(text, botId) : await asstAskProxy(text, botId);
         if (gen !== (ASST._gen || 0)) return;      // chat was cleared while we waited
-        botEl.classList.remove('thinking');
-        botEl.textContent = reply;
-        asstScroll();
-        asstSpeak(reply);
+        asstUpdateMsg(botId, { text: reply, thinking: false, progress: '' });
+        asstSpeak(asstCleanText(reply));
         ASST.history.push({ role: 'user', content: text });
         ASST.history.push({ role: 'assistant', content: reply });
         if (ASST.history.length > 24) ASST.history = ASST.history.slice(-24);
@@ -1656,19 +2151,23 @@ export async function asstSend(text) {
         let off;
         try { off = await asstOffline(text); } catch (e2) { off = 'No offline answer for that one.'; }
         if (gen !== (ASST._gen || 0)) return;
-        botEl.classList.remove('thinking');
-        botEl.classList.add('err');
-        const why = useClaude ? (e.status === 401 ? 'bad API key' : (e.message || 'network')) : (e.message || 'network');
-        botEl.textContent = "⚠️ Couldn't reach the AI (" + why + "). Offline answer:\n\n" + off;
+        let head;
+        if (e && e.refusal) {
+          const done = (e.didTools || []).filter((v, i, a) => a.indexOf(v) === i);
+          head = "The AI wouldn't answer that one" + (done.length ? ' (before stopping it did: ' + done.join(', ') + ')' : '') + '. Offline answer:';
+        } else {
+          const why = useClaude ? (e.status === 401 ? 'bad API key' : (e.message || 'network')) : (e.message || 'network');
+          head = "Couldn't reach the AI (" + why + "). Offline answer:";
+        }
+        asstUpdateMsg(botId, { thinking: false, progress: '', error: true, text: head + '\n\n' + off });
         asstSpeak(off);
       }
     } else {
-      const botEl = asstAddMsg('bot', '');
+      const botId = asstAddMsg('bot', '', { thinking: true, progress: '' });
       let ans;
-      try { ans = await asstOffline(text); } catch (e) { ans = '⚠️ Something went wrong working that out offline.'; }
+      try { ans = await asstOffline(text); } catch (e) { ans = 'Something went wrong working that out offline.'; }
       if (gen !== (ASST._gen || 0)) return;
-      botEl.textContent = ans;
-      asstScroll();
+      asstUpdateMsg(botId, { text: note ? ans + '\n\n' + note : ans, thinking: false });
       asstSpeak(ans);
     }
   } finally {
@@ -1679,8 +2178,7 @@ export async function asstSend(text) {
 }
 
 export function asstSetSending(on) {
-  const btn = document.getElementById('asst-send');
-  if (btn) btn.disabled = on;
+  asstStore.setState({ busy: !!on });
 }
 
 export const ASST_CHIPS = [
@@ -1688,99 +2186,105 @@ export const ASST_CHIPS = [
   'Tides today', "What should I throw for calico bass?", 'Best lure for yellowtail at Catalina?',
   "What's biting at Catalina?", 'How do I fish a dropper loop?', 'Drop a waypoint here',
 ];
-export function asstRenderChips() {
-  const box = document.getElementById('asst-suggest');
-  if (!box) return;
-  box.innerHTML = '';
-  ASST_CHIPS.forEach((c) => {
-    const b = document.createElement('button');
-    b.className = 'asst-chip';
-    b.textContent = c;
-    b.onclick = () => asstSend(c);
-    box.appendChild(b);
-  });
-}
+export const ASST_GREETING = "Ahoy! I'm First Mate.\nNo signal needed for most of what you'll ask — best days to fish, is it too rough, tides, weather outlook, water temp, reefs, fish limits, knots, or dropping a waypoint. With signal I'll also chat freely, and with your own API key I can take actions. Tap a suggestion to start.";
 
+/* Called by the panel when it opens (mount). Refreshes status and voices; greets if the
+   transcript is empty. */
 export function asstOnOpen() {
   asstSetStatus();
   /* iOS fills getVoices() asynchronously and fires voiceschanged once — often long before
      this panel is first opened, leaving the picker empty when the user finally looks at it.
      Refill on every open. */
   if (typeof asstFillVoicePicker === 'function') asstFillVoicePicker();
-  const box = document.getElementById('asst-messages');
-  if (box && !box.children.length) {
-    asstAddMsg('bot', "Ahoy! I'm First Mate 🎣\nNo signal needed for most of what you'll ask — best days to fish, is it too rough, tides, weather outlook, water temp, reefs, fish limits, knots, or dropping a waypoint. With a key + signal I'll also chat freely and take actions. Tap a suggestion to start.");
-    asstRenderChips();
+  const st = asstStore.getState();
+  if (!st.messages.length) {
+    asstAddMsg('bot', ASST_GREETING, { greeting: true });
+    asstStore.setState({ showChips: true });
+  } else if (!st.showChips) {
+    /* The first question came hands-free with the panel closed: the transcript isn't empty,
+       but the suggestions were never offered. Offer them now (they stay once shown). */
+    asstStore.setState({ showChips: true });
+  }
+  /* A hands-free question was answered on the phone because cloud AI hadn't been asked about
+     yet (asstSend) — ask now that someone is looking. Not while a reply is in flight; a
+     question nobody answers (timeout) stays pending for the next open. */
+  if (ASST._consentPending && asstCloudConsent() == null && !ASST.streaming) {
+    const b = asstPickBrain(asstBrainInputs());
+    if (b === 'claude' || b === 'proxy') {
+      ASST._consentPending = false;
+      void asstAskCloudConsent(b).then((choice) => { if (choice == null) ASST._consentPending = true; });
+    }
   }
 }
 
-export function asstInit() {
-  // settings
-  const keyIn = document.getElementById('asst-key');
-  const modelIn = document.getElementById('asst-model');
-  const proxyIn = document.getElementById('asst-proxy');
-  if (keyIn) keyIn.value = ASST.key();
-  if (modelIn) modelIn.value = ASST.model();
-  if (proxyIn) proxyIn.value = localStorage.getItem('fishapp.asst.proxy') || '';
-  const cloudIn = document.getElementById('asst-cloudvoice');
-  if (cloudIn) cloudIn.checked = localStorage.getItem('fishapp.asst.cloudvoice') === '1';
+/* Clear chat. */
+export function asstClearChat() {
+  /* Bump the generation so a request still in flight can't write its reply into
+     a detached bubble and push the "cleared" exchange back onto the history —
+     which then got shipped to Claude on the next message. */
+  ASST._gen = (ASST._gen || 0) + 1;
+  ASST.history = [];
+  ASST.lastLoc = null;          // "what's the swell?" must not still mean the old place
+  asstStopSpeech();
+  asstStore.setState({ messages: [], showChips: false });
+  asstOnOpen();
+}
 
-  document.getElementById('asst-save').onclick = () => {
-    if (keyIn) localStorage.setItem('fishapp.asst.key', keyIn.value.trim());
-    if (modelIn) localStorage.setItem('fishapp.asst.model', modelIn.value);
-    if (proxyIn) localStorage.setItem('fishapp.asst.proxy', proxyIn.value.trim());
-    const cloudIn = document.getElementById('asst-cloudvoice');
-    if (cloudIn) localStorage.setItem('fishapp.asst.cloudvoice', cloudIn.checked ? '1' : '0');
-    const voiceIn = document.getElementById('asst-voice');
-    if (voiceIn && voiceIn.value) {
-      localStorage.setItem('fishapp.asst.voice', voiceIn.value);
-      const v = asstVoiceList().find((x) => x.name === voiceIn.value);
-      if (v) ASST._voice = v;
-    }
-    // Speak a sample so the choice is immediately auditable — routed through asstSpeak so
-    // it exercises whichever path (cloud or device) was just selected.
-    if (voiceIn || cloudIn) asstSpeak('This is how I sound.');
-    asstSetStatus();
-    if (typeof toast === 'function') toast('Assistant settings saved');
-    const det = document.getElementById('asst-settings'); if (det) det.open = false;
+/* Save the settings form. Returns false (and says why) if the endpoint is invalid. */
+export function asstSaveSettings(s) {
+  s = s || {};
+  if (s.proxy != null) {
+    const p = asstNormalizeProxy(s.proxy);
+    if (p.error) { if (typeof toast === 'function') toast(p.error); return false; }
+    if (p.value) localStorage.setItem('fishapp.asst.proxy', p.value);
+    else localStorage.removeItem('fishapp.asst.proxy');
+    ASST._proxyBlocked = false;     // a (re)saved endpoint gets a fresh chance
+  }
+  if (s.key != null) localStorage.setItem('fishapp.asst.key', String(s.key).trim());
+  if (s.model) localStorage.setItem('fishapp.asst.model', asstMigrateModel(s.model));
+  if (s.cloudVoice != null) localStorage.setItem('fishapp.asst.cloudvoice', s.cloudVoice ? '1' : '0');
+  if (s.voiceName) {
+    localStorage.setItem('fishapp.asst.voice', s.voiceName);
+    const v = asstVoiceList().find((x) => x.name === s.voiceName);
+    if (v) ASST._voice = v;
+    asstFillVoicePicker();
+  }
+  // Speak a sample so the choice is immediately auditable — routed through asstSpeak so
+  // it exercises whichever path (cloud or device) was just selected.
+  asstSpeak('This is how I sound.');
+  asstSetStatus();
+  if (typeof toast === 'function') toast('Assistant settings saved');
+  return true;
+}
+/* What the settings form starts from. The key is read here (not kept in the store). */
+export function asstReadSettings() {
+  return {
+    key: ASST.key(),
+    model: ASST.model(),
+    proxy: asstProxyUrl(),
+    cloudVoice: localStorage.getItem('fishapp.asst.cloudvoice') === '1',
+    voiceName: (ASST._voice && ASST._voice.name) || localStorage.getItem('fishapp.asst.voice') || '',
   };
-  document.getElementById('asst-clear').onclick = () => {
-    /* Bump the generation so a request still in flight can't write its reply into
-       a detached bubble and push the "cleared" exchange back onto the history —
-       which then got shipped to Claude on the next message. */
-    ASST._gen = (ASST._gen || 0) + 1;
-    ASST.history = [];
-    ASST.lastLoc = null;          // "what's the swell?" must not still mean the old place
-    asstStopSpeech();
-    const box = document.getElementById('asst-messages');
-    if (box) box.innerHTML = '';
-    asstOnOpen();
-  };
+}
+
+export function asstInit() {
+  // A saved model id from the old picker becomes the closest current one.
+  const saved = localStorage.getItem('fishapp.asst.model');
+  if (saved && saved !== asstMigrateModel(saved)) localStorage.setItem('fishapp.asst.model', asstMigrateModel(saved));
 
   // voice: speak answers (TTS) + voice input (STT)
   ASST.speak = localStorage.getItem('fishapp.asst.speak') === '1';
   asstPickVoice();
   asstUpdateSpeakBtn();
-  const speakBtn = document.getElementById('asst-speak');
-  if (speakBtn) speakBtn.onclick = asstToggleSpeak;
-  const micBtn = document.getElementById('asst-mic');
-  if (micBtn) {
-    if (window.SpeechRecognition || window.webkitSpeechRecognition) micBtn.onclick = asstStartMic;
-    else micBtn.style.display = 'none';   // e.g. iOS Safari has no web speech recognition — use keyboard dictation
+  asstStore.setState({
+    // e.g. iOS Safari / the iOS app's web view have no web speech recognition — keyboard dictation instead
+    micSupported: !!(window.SpeechRecognition || window.webkitSpeechRecognition),
+    ttsSupported: 'speechSynthesis' in window,
+  });
+  if (!ASST._netHooked) {
+    ASST._netHooked = true;
+    window.addEventListener('online', asstSetStatus);
+    window.addEventListener('offline', asstSetStatus);
   }
-
-  const send = document.getElementById('asst-send');
-  const input = document.getElementById('asst-input');
-  if (send) send.onclick = () => asstSend(input ? input.value : '');
-  if (input) {
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); asstSend(input.value); }
-    });
-    input.addEventListener('input', () => {   // auto-grow
-      input.style.height = 'auto';
-      input.style.height = Math.min(input.scrollHeight, 120) + 'px';
-    });
-  }
-  window.addEventListener('online', asstSetStatus);
-  window.addEventListener('offline', asstSetStatus);
+  asstSetStatus();
 }

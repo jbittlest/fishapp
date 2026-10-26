@@ -79,5 +79,7 @@
 }
 @keyframes toast-in { from { transform: translate(-50%, 8px); opacity: .6; } to { transform: translateX(-50%); opacity: 1; } }
 .ui-toast__msg { flex: 1; padding-right: 8px; }
+.ui-toast--alert { box-shadow: var(--e3), inset 0 0 0 1.5px var(--alert); padding-left: 12px; }
+.ui-toast__icon { color: var(--alert-text); flex-shrink: 0; }
 .ui-toast__action { flex-shrink: 0; height: 32px; padding: 0 12px; border-radius: var(--r-pill); color: var(--signal-fg); font: 600 14px/1 var(--font-ui); }
 .ui-toast__action:active { background: var(--control); }

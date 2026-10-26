@@ -6,7 +6,7 @@ How to make FishApp talk to the motor, using only an iPhone and a Windows PC. No
 
 A trolling motor is a propeller that this code can start. Everything below is done with the
 **prop out of the water**, on the trailer or a stand, with the foot pedal in reach. The
-software interlocks in `js/motor.js` (arm gate, deadman, auto-stop on backgrounding) are real,
+software interlocks in `src/engine/motor.js` (arm gate, deadman, auto-stop on backgrounding) are real,
 but they run in a browser on a phone that can lock or be killed without warning — they are
 best-effort, not a guarantee. The foot pedal and the physical remote are the only true kill.
 
@@ -128,17 +128,21 @@ characteristic UUID, and the service it sits under.
 ## Step 6 — Load it into FishApp
 
 Open FishApp in **Bluefy** (free, App Store — Safari has no Web Bluetooth and never has), then
-**More → Trolling Motor**:
+**More → Trolling motor** (the web app only — the FishApp iPhone app has no Web Bluetooth):
 
 1. Paste the **service**, **write** and **notify** UUIDs into section 3, save.
 2. Tap **Connect**. The log should now print the full GATT tree and subscribe to every notify
    characteristic. Frames start streaming.
 3. Drive the motor with the *real remote* while watching the log — that's how you decode
-   telemetry. Use **⏺ Record frames** and **★ Mark what I just did** to timestamp your actions
-   against the bytes, then **⇩ Export session** to study it later.
-4. Add each decoded command with **➕ Add captured command**. Answer **yes** to "can this move
+   telemetry. Use **Record frames** and **Mark what I just did** to timestamp your actions
+   against the bytes, then **Export session** to study it later.
+4. Add each decoded command with **Add captured command**. Answer **yes** to "can this move
    the boat" for anything that touches prop or steering — that flags it so it can only fire
-   when the link is armed, and only after a confirm.
+   when the link is armed, and only after a confirm. (If you're unsure, answer yes: dismissing
+   the question never saves a command as harmless.)
+5. **Name your stop command exactly `STOP`.** The STOP button, the deadman, backgrounding and a
+   manual disarm or disconnect all send the command whose name is exactly STOP (any case). A
+   command named e.g. "Spot-Lock stop" is never treated as the emergency stop.
 
 ## Step 7 — First live test
 
@@ -156,7 +160,7 @@ In this order, no skipping:
 
 ## Current status
 
-`js/motor.js` ships with **no protocol knowledge at all** — no UUIDs, no frames, nothing
+`src/engine/motor.js` ships with **no protocol knowledge at all** — no UUIDs, no frames, nothing
 invented. It is the transport, the recon workbench, and the safety cage. Everything it sends is
 something you captured and saved yourself. That's deliberate: the alternative is guessed frames
 going to a machine that moves a boat.

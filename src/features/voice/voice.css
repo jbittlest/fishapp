@@ -1,0 +1,16 @@
+/* Hey Fish tab item — additions to shell.css's .shell-tab--voice. Tokens only. */
+
+/* The label can be a heard command: keep it on one line inside the tab cell. min-width:0 stops
+   the long label from widening its grid column (1fr has an automatic min-content minimum). */
+.voice-tab { min-width: 0; }
+.voice-tab__label { display: block; max-width: calc(100% - 6px); overflow: hidden; text-overflow: ellipsis; }
+.voice-tab--heard .voice-tab__label { color: var(--signal-fg); }
+
+/* Hands-free was on before this launch: a small signal dot on the disc says "tap anywhere to
+   resume" (with the toast and the button's label) — shape, not colour alone. */
+.voice-tab__resume {
+  position: absolute; top: 6px; left: calc(50% + 11px);
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--signal); box-shadow: 0 0 0 2px var(--chrome-solid);
+}
+.voice-tab:focus-visible { outline: 2px solid var(--signal); outline-offset: -2px; }

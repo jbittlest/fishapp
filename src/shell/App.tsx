@@ -65,8 +65,9 @@ export function App() {
   const kbOpen = useLayoutVars(persistRef, bottomRef, desktop);
   const short = typeof window !== 'undefined' && window.innerHeight < 640;
   const sheetOpen = !!panel;
-  // With a sheet open on a phone the Go-To card collapses into the nav pill up top.
-  const showPill = gotoActive && sheetOpen && !desktop;
+  // With a sheet (phone) or a map card open, the Go-To card is covered or hidden, so the glanceable
+  // nav pill keeps distance, bearing, ETA and the steer cue on screen in the persistent layer.
+  const showPill = gotoActive && ((sheetOpen && !desktop) || !!card);
 
   return (
     <div className={'shell' + (desktop ? ' is-desktop' : ' is-phone') + (sheetOpen ? ' has-sheet' : '') + (card ? ' has-card' : '') + (isNativeShell() ? ' is-native' : '')}>

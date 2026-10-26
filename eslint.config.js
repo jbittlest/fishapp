@@ -11,7 +11,7 @@ export default [
     languageOptions: {
       ecmaVersion: 2023,
       sourceType: 'module',
-      globals: { ...globals.browser },
+      globals: { ...globals.browser, __APP_BUILD__: 'readonly' },
     },
     rules: {
       ...js.configs.recommended.rules,

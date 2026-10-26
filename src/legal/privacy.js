@@ -26,9 +26,9 @@ export const POLICY = [
     title: 'First Mate, the AI assistant',
     body: [
       'With no internet, or until you allow cloud AI, First Mate answers on your device from your own boat data.',
-      'If you allow cloud AI, your question, the recent conversation and the context needed to answer it (your position, local conditions, and the names of nearby spots and reefs) are sent to the FishApp AI relay, which runs on Cloudflare Workers AI. It is processed to produce the reply and is not stored by FishApp.',
+      'If you allow cloud AI (the app asks first), your question, the recent conversation and the boat data needed to answer it — your position, speed and heading, local conditions, nearby reefs, your saved spots with their names, positions and notes, your catch log entries, and trip and anchor-watch status — are sent to the FishApp AI relay, which runs on Cloudflare Workers AI. It is processed to produce the reply and is not stored by FishApp.',
       'If you add your own Anthropic API key, the same information is sent directly from your device to Anthropic under your account and Anthropic’s terms. Your key is stored only on your device.',
-      'If you turn on the natural cloud voice, the text of each answer is sent to the relay to be turned into speech.',
+      'If you turn on the natural cloud voice, and only if you have allowed cloud AI, the text of each answer is sent to the relay to be turned into speech.',
       'You can turn cloud AI off at any time in First Mate settings. AI answers can be wrong; never rely on them for safety.',
     ],
   },

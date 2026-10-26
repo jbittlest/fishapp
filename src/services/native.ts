@@ -29,15 +29,35 @@ function post(cmd: string, extra?: Record<string, unknown>): boolean {
  *  track recording, an active Go-To). App Review expects background location to be purposeful. */
 export function backgroundLocation(on: boolean): void { post('backgroundLocation', { on }); }
 
+/** Arm/disarm the NATIVE anchor monitor (iOS app only). While the app is in the background it checks
+ *  each fix against the watch circle itself and raises a notification + alarm tone, because iOS can
+ *  suspend the web view's JavaScript with the phone locked. In the foreground the web watch owns it. */
+export function nativeAnchorWatch(w: { on: false } | { on: true; lat: number; lng: number; radiusM: number }): void {
+  post('anchorWatch', w as Record<string, unknown>);
+}
+/** The user silenced the alarm in the app: snooze the native one too (5 minutes, like the web). */
+export function nativeAnchorSilence(): void { post('anchorSilence'); }
+
 /** Light warning haptic (alarms, arming). No-op on the web. */
 export function haptic(): void { post('haptic'); }
 
 /** Open a link outside the app (Safari / Phone / Messages in the iOS shell; a new tab on the web). */
 export function openExternal(url: string): void {
   if (post('openURL', { url })) return;
+  // tel:/sms:/mailto: hand off to another app; the page itself stays loaded.
   if (/^(tel|sms|mailto):/i.test(url)) { window.location.href = url; return; }
-  const w = window.open(url, '_blank', 'noopener,noreferrer');
-  if (!w) window.location.href = url;
+  /* NEVER assign location.href for http(s): the app may be running an anchor alarm, a voyage, a
+     track or the hands-free mic, and offshore the new page would be a browser error with no way
+     back (an installed PWA has no back button). Note window.open with 'noopener' in its features
+     always returns null by spec, so it can't be used to detect a blocked popup. */
+  let w: Window | null = null;
+  try { w = window.open(url, '_blank'); } catch { w = null; }
+  if (w) { try { w.opener = null; } catch { /* cross-origin */ } return; }
+  try {
+    const a = document.createElement('a');
+    a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+    document.body.appendChild(a); a.click(); a.remove();
+  } catch { /* nothing else is safe to try */ }
 }
 
 /** Copy text. The iOS shell uses UIPasteboard (a custom-scheme page may not get the async

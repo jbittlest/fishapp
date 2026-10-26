@@ -3,6 +3,7 @@ import { Group, Hint, Notice, RadioRow, Section, Segmented, Sheet, ToggleRow, us
 import { BASES, layersStore, setBase, setDataOverlay, setOverlay } from '../../engine/layers.js';
 import { WakeLock, wakeStore } from '../../engine/gps.js';
 import { Awake, awakeSetEnabled, awakeStore } from '../../engine/awake.js';
+import { fishStore } from '../../engine/fish.js';
 import { setThemeMode, useTheme, type ThemeMode } from '../../services/theme';
 import { isNativeShell } from '../../services/native';
 
@@ -10,7 +11,17 @@ const BASE_ICON: Record<string, IconName> = { ocean: 'waves', sat: 'satellite', 
 
 function useLayer(id: string) { return useStoreValue(layersStore, (s) => !!(s as Record<string, unknown>)[id]); }
 
-function DataToggle({ id, icon, title, detail }: { id: string; icon: IconName; title: string; detail?: string }) {
+const FISH_STATUS: Record<string, string> = { loading: 'Loading sightings…', zoom: 'Zoom in to load sightings', offline: 'Needs internet', error: 'Couldn’t load sightings' };
+function FishStatus() {
+  const on = useStoreValue(fishStore, (s) => s.on);
+  const status = useStoreValue(fishStore, (s) => s.status);
+  const count = useStoreValue(fishStore, (s) => s.count);
+  if (!on) return 'iNaturalist sightings · online';
+  if (status === 'ready') return count === 1 ? '1 sighting shown' : count + ' sightings shown';
+  return FISH_STATUS[status] ?? 'iNaturalist sightings · online';
+}
+
+function DataToggle({ id, icon, title, detail }: { id: string; icon: IconName; title: string; detail?: React.ReactNode }) {
   const on = useLayer(id);
   return <ToggleRow icon={icon} title={title} detail={detail} checked={on} onChange={(v) => setDataOverlay(id, v)} />;
 }
@@ -23,6 +34,7 @@ export default function LayersPanel() {
   const wakeText = useStoreValue(wakeStore, (s) => s.text as string);
   const wakeKind = useStoreValue(wakeStore, (s) => s.kind as string);
   const kaText = useStoreValue(awakeStore, (s) => s.keepAliveText as string);
+  const kaKind = useStoreValue(awakeStore, (s) => s.keepAliveKind as string);
   const [wakeOn, setWakeOn] = useState<boolean>(!!WakeLock.enabled);
   const [kaOn, setKaOn] = useState<boolean>(!!Awake.enabled);
   const native = isNativeShell();
@@ -57,7 +69,7 @@ export default function LayersPanel() {
         <Group>
           <DataToggle id="reefs" icon="reef" title="Artificial reefs" detail="Works offline" />
           <DataToggle id="mpa" icon="no-fishing" title="Marine Protected Areas" detail="No-take and limited fishing zones" />
-          <DataToggle id="fish" icon="fish" title="Recent saltwater catches" detail="iNaturalist sightings · online" />
+          <DataToggle id="fish" icon="fish" title="Recent saltwater catches" detail={<FishStatus />} />
         </Group>
       </Section>
 
@@ -71,10 +83,13 @@ export default function LayersPanel() {
         <Group>
           <ToggleRow icon="sun" title="Keep screen awake while the app is open" detail={wakeText || undefined}
             checked={wakeOn} onChange={(v) => { setWakeOn(v); WakeLock.setEnabled(v); }} />
-          <ToggleRow icon="power" title="Keep running in the background during a watch" detail={kaText || undefined}
-            checked={kaOn} onChange={(v) => { setKaOn(v); awakeSetEnabled(v); }} />
+          {kaKind !== 'native' && !native && (
+            <ToggleRow icon="power" title="Keep running in the background during a watch" detail={kaText || undefined}
+              checked={kaOn} onChange={(v) => { setKaOn(v); awakeSetEnabled(v); }} />
+          )}
         </Group>
         {wakeKind === 'warn' && <Hint>The screen may still sleep — keep an eye on it during an anchor watch.</Hint>}
+        {kaKind === 'warn' && !native && <Hint>A watch or recording is running but the background keep-alive isn't playing yet — tap anywhere on the screen to start it.</Hint>}
         {native ? (
           <Notice title="Screen-off GPS">
             In the FishApp iPhone app, GPS keeps running with the screen locked while an anchor watch, a track

@@ -82,9 +82,12 @@ export const Astro = (function () {
     return { fraction: (1 + Math.cos(inc)) / 2, phase: 0.5 + 0.5 * inc * (angle < 0 ? -1 : 1) / Math.PI };
   }
 
+  /* Plain names (the legacy strings led with a moon emoji; the app carries no emoji in
+     copy any more — DESIGN.md §0.6 — and First Mate speaks these aloud). Catch records saved
+     by the legacy app still hold the emoji form in cond.moon; see cleanMoonName in catch.js. */
   function moonPhaseName(phase) {
-    const names = ['🌑 New Moon', '🌒 Waxing Crescent', '🌓 First Quarter', '🌔 Waxing Gibbous',
-      '🌕 Full Moon', '🌖 Waning Gibbous', '🌗 Last Quarter', '🌘 Waning Crescent'];
+    const names = ['New Moon', 'Waxing Crescent', 'First Quarter', 'Waxing Gibbous',
+      'Full Moon', 'Waning Gibbous', 'Last Quarter', 'Waning Crescent'];
     return names[Math.round(phase * 8) % 8];
   }
 

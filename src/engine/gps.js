@@ -69,12 +69,15 @@ export function gpsIsStale() { return !GPS.lastFixTs || (Date.now() - GPS.lastFi
 /* Reject fixes that would poison everything downstream. One bogus (0,0) used to
    pan the map to the Atlantic, add thousands of nm to the trip and track, and set
    off the anchor alarm — all from a single bad callback. */
-export function gpsFixIsSane(c) {
+export function gpsFixIsSane(c, ts) {
   if (!c || !isFinite(c.latitude) || !isFinite(c.longitude)) return false;
   if (Math.abs(c.latitude) > 90 || Math.abs(c.longitude) > 180) return false;
   if (c.latitude === 0 && c.longitude === 0) return false;             // null island
   if (GPS.lastLatLng && GPS.lastFixTs) {
-    const dt = (Date.now() - GPS.lastFixTs) / 1000;
+    /* Compare FIX times when we have them. Fixes delivered in a burst (the iOS app resuming
+       after the web view was suspended) arrive within milliseconds of each other in wall-clock
+       time, so a wall-clock dt would reject every one of them as a teleport. */
+    const dt = (Number.isFinite(ts) && GPS.lastFixPosTs ? (ts - GPS.lastFixPosTs) : (Date.now() - GPS.lastFixTs)) / 1000;
     if (dt > 0 && dt < 60) {
       const m = L.latLng(c.latitude, c.longitude).distanceTo(GPS.lastLatLng);
       if (m / dt > GPS_MAX_MPS) return false;                          // teleport
@@ -110,7 +113,7 @@ export function gpsStart(map) {
 
 export function gpsOnFix(map, pos) {
   const c = pos && pos.coords;
-  if (!gpsFixIsSane(c)) return;          // drop it before it reaches any consumer
+  if (!gpsFixIsSane(c, pos && pos.timestamp)) return;   // drop it before it reaches any consumer
   GPS.last = pos;
   const ll = L.latLng(c.latitude, c.longitude);
   GPS.accuracy = isFinite(c.accuracy) ? c.accuracy : null;
@@ -171,8 +174,9 @@ export function gpsOnFix(map, pos) {
   GPS._hadFirstFix = true;
   GPS.lastLatLng = ll;
   GPS.lastFixTs = now;
+  GPS.lastFixPosTs = Number.isFinite(pos.timestamp) ? pos.timestamp : 0;
 
-  trackOnFix(ll, pos.timestamp, kn); // feed track recorder
+  try { trackOnFix(ll, pos.timestamp, kn); } catch (e) { console.error(e); } // feed track recorder — never let it skip the anchor check below
   if (typeof navOnFix === 'function') navOnFix(ll, kn); // feed trip stats + anchor alarm
   refreshSpotDistances();
 }

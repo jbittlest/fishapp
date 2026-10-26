@@ -38,14 +38,17 @@
 }
 .ui-btn:active:not(:disabled) { transform: scale(.98); }
 .ui-btn:disabled { opacity: .4; }
-.ui-btn--compact { min-height: 40px; padding: 0 14px; font-size: 14px; }
+.ui-btn--compact { position: relative; min-height: 40px; padding: 0 14px; font-size: 14px; }
+.ui-btn--compact::before { content: ''; position: absolute; inset: -2px 0; }   /* 44px hit area */
 .ui-btn--block { display: flex; width: 100%; }
 .ui-btn--primary { background: var(--signal); color: var(--signal-ink); }
+/* a disabled primary must read as "not yet", not as a muddy amber: neutral fill, quiet text */
+.ui-btn--primary:disabled, .ui-btn--destructive:disabled { background: var(--control); color: var(--text-3); opacity: 1; }
 .ui-btn--primary:active:not(:disabled) { background: var(--signal-press); }
 .ui-btn--secondary { background: var(--control); color: var(--text-1); }
 .ui-btn--secondary:active:not(:disabled) { background: var(--selected); }
 .ui-btn--ghost { background: transparent; color: var(--text-1); box-shadow: inset 0 0 0 1px var(--line-2); }
-.ui-btn--destructive { background: var(--alert); color: #fff; }
+.ui-btn--destructive { background: var(--alert); color: var(--alert-ink); }
 .ui-btn__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .ui-ibtn {
@@ -177,7 +180,7 @@
 .ui-badge { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px; border-radius: var(--r-pill); font: 600 12px/1 var(--font-ui); letter-spacing: .02em; white-space: nowrap; }
 .ui-badge--neutral { background: var(--control); color: var(--text-2); }
 .ui-badge--signal { background: var(--signal-soft); color: var(--signal-fg); }
-.ui-badge--alert { background: var(--alert); color: #fff; }
+.ui-badge--alert { background: var(--alert); color: var(--alert-ink); }
 .ui-badge--ok { background: var(--control); color: var(--text-1); }
 .ui-badge--ok::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
 .ui-notice { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: var(--r-lg); background: var(--raised); box-shadow: inset 0 0 0 1px var(--line); color: var(--text-2); font: 400 14px/20px var(--font-ui); margin: 0 0 12px; }

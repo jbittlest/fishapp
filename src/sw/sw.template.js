@@ -36,9 +36,11 @@ self.addEventListener('install', (e) => {
 });
 
 self.addEventListener('activate', (e) => {
+  /* Caches are shared by every worker on the origin: leave the /classic/ fallback's cache alone
+     (it is namespaced 'fishapp-classic-…'), delete every other old build. */
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE && !k.startsWith('fishapp-classic-')).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });

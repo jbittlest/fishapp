@@ -15,7 +15,7 @@ import { loadTidesTimes, tidesInit } from './tides.js';
 import { catchInit } from './catch.js';
 import { Awake, awakeSetEnabled } from './awake.js';
 import { Nav, anchorRestore, navHandleClick, navInit } from './nav.js';
-import { Goto } from './goto.js';
+import { Goto, navUnsavedInMemory } from './goto.js';
 import { areaDataInit } from './areadata.js';
 import { watchCheck } from './bite.js';
 import { asstInit } from './assistant.js';
@@ -247,7 +247,10 @@ function updateWouldInterrupt() {
     /* An anchor watch is the one thing people go to sleep trusting. Reloading
        under it wiped the watch silently — no circle, no alarm, no warning. */
     (Nav && Nav.anchor && Nav.anchor.watching) ||
-    (Voice && (Voice.on || Voice._wantOn))
+    (Voice && (Voice.on || Voice._wantOn)) ||
+    /* A track or voyage whose save failed lives only in memory until it is retried or saved
+       as a file — a reload would silently throw it away. */
+    navUnsavedInMemory()
   );
 }
 /** DEFER, never discard: called when a voyage/track/watch ends; reloads into the waiting update. */
@@ -307,7 +310,7 @@ function registerServiceWorker() {
    quota-exceeded write) by clearing the bad key and returning the fallback — a bad value
    used to throw and brick startup before the map was even built. */
 export function readJSON(key, fallback) {
-  let raw = null;
+  let raw;
   try { raw = localStorage.getItem(key); } catch (e) { return fallback; }
   if (raw == null) return fallback;
   try { return JSON.parse(raw); }

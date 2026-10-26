@@ -46,6 +46,10 @@ svg { flex-shrink: 0; }
   background: #0e2a40;
 }
 :root[data-theme="night"] #map { background: #050101; }
+/* Night: a bright chart destroys dark adaptation. Dim the whole tile pane (a filter on the PANE is
+   safe: no fixed UI lives inside it, and the blend modes composite within it). The US bathymetry
+   base is skipped — its own #lut-night table already renders it dark with shallow water brightest. */
+:root[data-theme="night"]:not([data-base="bluetint"]) .leaflet-tile-pane { filter: brightness(.42) saturate(.55); }
 /* Smoothly upscale tiles past their native zoom so relief reads as soft shading, not blocks. */
 .leaflet-tile-pane img { image-rendering: auto; }
 .leaflet-container { font: inherit; background: transparent; }

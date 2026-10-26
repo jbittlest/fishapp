@@ -1,0 +1,192 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`KnotArt (knot-diagrams.js) > matches the stored snapshot (catches any drift in the SVG strings) 1`] = `
+{
+  "Albright Knot": [
+    {
+      "cap": "Loop in the heavier leader; pass the lighter line through it.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><path d="M20 52 q60 0 60 8 q0 8 -60 8" fill="none" stroke="#e8b23d" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M200 60 H80" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M 91 54 L 80 60 L 91 66" fill="none" stroke="#e8b23d" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+    {
+      "cap": "Wrap the light line back over itself and both leader strands ~10×.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><path d="M20 52 q60 0 60 8 q0 8 -60 8" fill="none" stroke="#e8b23d" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M 80 60 Q 85.9375 47 91.875 60 Q 97.8125 47 103.75 60 Q 109.6875 47 115.625 60 Q 121.5625 47 127.5 60 Q 133.4375 47 139.375 60 Q 145.3125 47 151.25 60 Q 157.1875 47 163.125 60 Q 169.0625 47 175 60" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+    {
+      "cap": "Feed the tag back out the loop, same side; wet and seat.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><path d="M20 52 q52 0 52 8 q0 8 -52 8" fill="none" stroke="#e8b23d" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M 72 60 Q 77.57142857142857 47 83.14285714285714 60 Q 88.71428571428571 47 94.28571428571428 60 Q 99.85714285714286 47 105.42857142857143 60 Q 111 47 116.57142857142857 60 Q 122.14285714285714 47 127.71428571428571 60 Q 133.28571428571428 47 138.85714285714286 60 Q 144.42857142857144 47 150 60" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M150 60 H210" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M 199 66 L 210 60 L 199 54" fill="none" stroke="#e8b23d" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+  ],
+  "Arbor Knot": [
+    {
+      "cap": "Line around the spool; overhand knot around the standing line.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><circle cx="60" cy="60" r="30" fill="none" stroke="#9fb3c8" stroke-width="5"/><path d="M60 30 q40 -6 40 30" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M100 60 H210" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M180 60 q12 -14 18 0" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+    {
+      "cap": "A second overhand in the tag itself.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><circle cx="60" cy="60" r="30" fill="none" stroke="#9fb3c8" stroke-width="5"/><path d="M60 30 q40 -6 40 30" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M100 60 H170" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M170 60 q10 -12 16 0 q-8 12 -16 0" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M186 60 q10 -10 14 0 q-6 10 -14 0" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+    {
+      "cap": "Pull — the first knot slides to the spool, the second jams it. Trim.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><circle cx="60" cy="60" r="30" fill="none" stroke="#9fb3c8" stroke-width="5"/><path d="M60 30 q40 -6 40 30" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M100 60 H175" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M175 60 q10 -10 16 0 q-8 10 -16 0" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M 111 54 L 100 60 L 111 66" fill="none" stroke="#e8b23d" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+  ],
+  "Blood Knot": [
+    {
+      "cap": "Overlap the two lines.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><path d="M20 60 H140" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M100 60 H220" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+    {
+      "cap": "Wrap each tag around the other line 5–6×, back to the middle.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><path d="M20 60 H150" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M90 60 H220" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M 105 60 Q 110.625 47 116.25 60 Q 121.875 47 127.5 60 Q 133.125 47 138.75 60 Q 144.375 47 150 60" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M 90 60 Q 95.625 73 101.25 60 Q 106.875 73 112.5 60 Q 118.125 73 123.75 60 Q 129.375 73 135 60" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+    {
+      "cap": "Pass both tags through the centre gap in opposite directions; seat.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><path d="M20 60 H120" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M120 60 H220" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M120 60 q0 12 -10 12" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M120 60 q0 -12 10 -12" fill="none" stroke="#4aa3e0" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+  ],
+  "Double Uni Knot": [
+    {
+      "cap": "Overlap the two line ends.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><path d="M20 52 H150" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M90 68 H220" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+    {
+      "cap": "Tie a uni knot with each tag around the OTHER line.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><path d="M20 52 H150" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M90 68 H220" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M 60 52 Q 66.25 39 72.5 52 Q 78.75 39 85 52 Q 91.25 39 97.5 52 Q 103.75 39 110 52" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M 150 68 Q 156.25 81 162.5 68 Q 168.75 81 175 68 Q 181.25 81 187.5 68 Q 193.75 81 200 68" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+    {
+      "cap": "Wet, then pull the standing lines to slide the knots together.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><path d="M20 60 H100" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M140 60 H220" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M 100 60 Q 105 47 110 60 Q 115 47 120 60 Q 125 47 130 60" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M 110 60 Q 115 73 120 60 Q 125 73 130 60 Q 135 73 140 60" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+  ],
+  "Dropper Loop": [
+    {
+      "cap": "Form a loop in the middle of the line.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><path d="M20 60 H90" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M150 60 H220" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M90 60 q30 -40 60 0" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+    {
+      "cap": "Wrap the loop side around 5–6×, keeping an opening in the middle.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><path d="M20 60 H80" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M160 60 H220" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M 80 60 Q 86.66666666666666 47 93.33333333333333 60 Q 100 47 106.66666666666667 60 Q 113.33333333333334 47 120 60 Q 126.66666666666667 47 133.33333333333334 60 Q 140 47 146.66666666666669 60 Q 153.33333333333334 47 160 60" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M120 60 q0 -34 0 -34 q-14 0 0 34" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+    {
+      "cap": "Push the loop up through that opening; hold, wet, and pull tight.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><path d="M20 60 H90" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M150 60 H220" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M 90 60 Q 96 47 102 60 Q 108 47 114 60 Q 120 47 126 60 Q 132 47 138 60 Q 144 47 150 60" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M120 60 q0 -30 0 -30" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M 126 41 L 120 30 L 114 41" fill="none" stroke="#e8b23d" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+  ],
+  "FG Knot": [
+    {
+      "cap": "Keep the leader taut; lay the braid across it.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><path d="M20 60 H220" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M120 20 L60 100" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+    {
+      "cap": "Weave the braid over-and-under the leader ~20× in tight coils.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><path d="M20 60 H220" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M60 30 C120 40 120 80 180 90 M180 30 C120 40 120 80 60 90" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+    {
+      "cap": "Lock with half-hitches, trim the leader, finish over the braid.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><path d="M20 60 H160" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M 60 60 Q 65.625 47 71.25 60 Q 76.875 47 82.5 60 Q 88.125 47 93.75 60 Q 99.375 47 105 60 Q 110.625 47 116.25 60 Q 121.875 47 127.5 60 Q 133.125 47 138.75 60 Q 144.375 47 150 60" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M150 60 q14 0 14 -12" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M150 60 q14 0 14 12" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+  ],
+  "Improved Clinch Knot": [
+    {
+      "cap": "Pass the line through the eye.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><circle cx="36" cy="60" r="11" fill="none" stroke="#9fb3c8" stroke-width="4.5"/><path d="M47 60 H175" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M175 60 h18" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M 182 66 L 193 60 L 182 54" fill="none" stroke="#e8b23d" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+    {
+      "cap": "Wrap the tag around the standing line 5–7 times.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><circle cx="36" cy="60" r="11" fill="none" stroke="#9fb3c8" stroke-width="4.5"/><path d="M47 60 H185" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M 90 60 Q 97.08333333333334 47 104.16666666666667 60 Q 111.25 47 118.33333333333333 60 Q 125.41666666666666 47 132.5 60 Q 139.58333333333331 47 146.66666666666666 60 Q 153.75 47 160.83333333333331 60 Q 167.91666666666666 47 175 60" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M90 60 q-8 20 6 22" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+    {
+      "cap": "Tag up through the loop by the eye, then back through the big loop.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><circle cx="36" cy="60" r="11" fill="none" stroke="#9fb3c8" stroke-width="4.5"/><path d="M47 60 H185" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M 90 60 Q 96.25 47 102.5 60 Q 108.75 47 115 60 Q 121.25 47 127.5 60 Q 133.75 47 140 60 Q 146.25 47 152.5 60 Q 158.75 47 165 60" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M78 60 q-6 -16 8 -16 q10 0 8 14" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M 103.40037730129781 66.28449796869097 L 94 58 L 92.12406585186692 70.388739688599" fill="none" stroke="#e8b23d" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+    {
+      "cap": "Wet and snug the coils tight against the eye.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><circle cx="36" cy="60" r="11" fill="none" stroke="#9fb3c8" stroke-width="4.5"/><path d="M47 60 H150" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M 95 60 Q 99.58333333333334 47 104.16666666666667 60 Q 108.75 47 113.33333333333333 60 Q 117.91666666666666 47 122.5 60 Q 127.08333333333333 47 131.66666666666666 60 Q 136.25 47 140.83333333333331 60 Q 145.41666666666666 47 150 60" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="150" cy="60" r="4.5" fill="#e8b23d"/></svg>",
+    },
+  ],
+  "Non-Slip Loop Knot": [
+    {
+      "cap": "Tie a loose overhand knot a few inches up the line.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><path d="M40 60 q30 -26 44 0 q-16 22 -30 6" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M84 60 H150" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M 139 66 L 150 60 L 139 54" fill="none" stroke="#e8b23d" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+    {
+      "cap": "Tag through the eye, then back through the overhand loop.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><circle cx="180" cy="60" r="11" fill="none" stroke="#9fb3c8" stroke-width="4.5"/><path d="M40 60 q30 -26 44 0 q-16 22 -30 6" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M84 60 H169" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M191 60 q18 0 -40 -22" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+    {
+      "cap": "Wrap the standing line 4–5×, back through the loop, wet & seat.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><circle cx="180" cy="60" r="11" fill="none" stroke="#9fb3c8" stroke-width="4.5"/><path d="M40 60 q30 -26 44 0" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M 95 46 Q 102.5 33 110 46 Q 117.5 33 125 46 Q 132.5 33 140 46 Q 147.5 33 155 46" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M90 40 q-8 8 6 20" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+  ],
+  "Palomar Knot": [
+    {
+      "cap": "Double the line and pass the loop through the eye.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><circle cx="36" cy="60" r="11" fill="none" stroke="#9fb3c8" stroke-width="4.5"/><path d="M47 55 H150" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M47 65 H150" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M150 55 a16 10 0 1 0 0 20" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="150" cy="75" r="4.5" fill="#4aa3e0"/></svg>",
+    },
+    {
+      "cap": "Tie a loose overhand knot with the doubled line.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><circle cx="36" cy="60" r="11" fill="none" stroke="#9fb3c8" stroke-width="4.5"/><path d="M47 60 H120" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M120 60 q30 -30 55 0 q-25 30 -55 0" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M175 60 h20" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+    {
+      "cap": "Pass the loop down over the whole hook, wet, and pull tight.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><circle cx="36" cy="60" r="11" fill="none" stroke="#9fb3c8" stroke-width="4.5"/><path d="M 150 38 L 150 72 q 0 16 16 16 q 14 0 14 -14" fill="none" stroke="#9fb3c8" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M60 60 q40 -34 90 -10" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M 143.47372055837118 60.69615242270663 L 150 50 L 137.47372055837118 50.30384757729337" fill="none" stroke="#e8b23d" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M47 60 H60" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+  ],
+  "San Diego Jam Knot": [
+    {
+      "cap": "Through the eye; pull a long tag and hold it beside the line.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><circle cx="36" cy="60" r="11" fill="none" stroke="#9fb3c8" stroke-width="4.5"/><path d="M47 60 H185" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M185 60 q14 0 14 -16" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M 205 55 L 199 44 L 193 55" fill="none" stroke="#e8b23d" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+    {
+      "cap": "Wrap the tag UP around both, back toward the eye, 5–7 times.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><circle cx="36" cy="60" r="11" fill="none" stroke="#9fb3c8" stroke-width="4.5"/><path d="M47 60 H190" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M 80 60 Q 87.5 73 95 60 Q 102.5 73 110 60 Q 117.5 73 125 60 Q 132.5 73 140 60 Q 147.5 73 155 60 Q 162.5 73 170 60" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+    {
+      "cap": "Tag through the loop by the eye, then the big loop. Wet and seat.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><circle cx="36" cy="60" r="11" fill="none" stroke="#9fb3c8" stroke-width="4.5"/><path d="M47 60 H170" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M 80 60 Q 86.66666666666666 73 93.33333333333333 60 Q 100 73 106.66666666666667 60 Q 113.33333333333334 73 120 60 Q 126.66666666666667 73 133.33333333333334 60 Q 140 73 146.66666666666669 60 Q 153.33333333333334 73 160 60" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M70 60 q-6 -14 6 -14" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M 87.40037730129781 56.28449796869097 L 78 48 L 76.12406585186692 60.388739688599" fill="none" stroke="#e8b23d" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+  ],
+  "Snell Knot": [
+    {
+      "cap": "Tag through the eye and along the shank, leaving a loop.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><circle cx="46" cy="46" r="11" fill="none" stroke="#9fb3c8" stroke-width="4.5"/><path d="M 46 38 L 46 72 q 0 16 16 16 q 14 0 14 -14" fill="none" stroke="#9fb3c8" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M46 60 H150" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M 139 66 L 150 60 L 139 54" fill="none" stroke="#e8b23d" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+    {
+      "cap": "Wrap the tag around shank + line 6–8×, toward the eye.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><circle cx="46" cy="46" r="11" fill="none" stroke="#9fb3c8" stroke-width="4.5"/><path d="M 46 38 L 46 72 q 0 16 16 16 q 14 0 14 -14" fill="none" stroke="#9fb3c8" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M46 60 H150" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M 60 60 Q 65.83333333333334 47 71.66666666666667 60 Q 77.5 47 83.33333333333333 60 Q 89.16666666666666 47 95 60 Q 100.83333333333333 47 106.66666666666666 60 Q 112.5 47 118.33333333333333 60 Q 124.16666666666666 47 130 60" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+    {
+      "cap": "Pull the standing line to tighten the coils against the shank.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><circle cx="46" cy="46" r="11" fill="none" stroke="#9fb3c8" stroke-width="4.5"/><path d="M 46 38 L 46 72 q 0 16 16 16 q 14 0 14 -14" fill="none" stroke="#9fb3c8" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M 56 60 Q 60.5 47 65 60 Q 69.5 47 74 60 Q 78.5 47 83 60 Q 87.5 47 92 60 Q 96.5 47 101 60 Q 105.5 47 110 60" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M 139 66 L 150 60 L 139 54" fill="none" stroke="#e8b23d" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M110 60 H150" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+  ],
+  "Surgeon’s Knot": [
+    {
+      "cap": "Lay the line and leader parallel, overlapping.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><path d="M20 54 H160" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M80 66 H220" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+    {
+      "cap": "Form a loop with both and pass both ends through it… twice.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><path d="M30 60 q60 -34 110 0 q-40 26 -80 6" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M40 60 q60 -30 105 2" fill="none" stroke="#e8b23d" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M 137.611260311401 61.8759341481331 L 150 60 L 141.71550203130903 50.59962269870219" fill="none" stroke="#e8b23d" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+    {
+      "cap": "Wet and pull all four ends tight.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><path d="M20 60 H100" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M140 60 H220" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M100 60 q20 -18 40 0 q-20 18 0 0" fill="none" stroke="#4aa3e0" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+  ],
+  "Uni Knot (Grinner)": [
+    {
+      "cap": "Through the eye, double back parallel to form a loop.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><circle cx="36" cy="60" r="11" fill="none" stroke="#9fb3c8" stroke-width="4.5"/><path d="M47 60 H180" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M180 60 q0 -22 -60 -22 H70" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+    {
+      "cap": "Wrap the tag through the loop and around both lines 5–6 times.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><circle cx="36" cy="60" r="11" fill="none" stroke="#9fb3c8" stroke-width="4.5"/><path d="M47 60 H180" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M180 60 q0 -22 -60 -22 H80" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M 85 49 Q 93 36 101 49 Q 109 36 117 49 Q 125 36 133 49 Q 141 36 149 49 Q 157 36 165 49" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+    {
+      "cap": "Wet, pull the tag to snug the coils, then slide down to the eye.",
+      "svg": "<svg viewBox="0 0 240 120" class="knot-svg"><rect x="0" y="0" width="240" height="120" rx="8" fill="rgba(255,255,255,0.04)"/><circle cx="36" cy="60" r="11" fill="none" stroke="#9fb3c8" stroke-width="4.5"/><path d="M47 60 H150" fill="none" stroke="#4aa3e0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M 90 60 Q 96 47 102 60 Q 108 47 114 60 Q 120 47 126 60 Q 132 47 138 60 Q 144 47 150 60" fill="none" stroke="#e8b23d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M 139 66 L 150 60 L 139 54" fill="none" stroke="#e8b23d" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>",
+    },
+  ],
+}
+`;

@@ -1,0 +1,114 @@
+/* Trolling motor link (features/motor). Tokens only; every class is prefixed motor-.
+   The mono stack is the legacy one, behind a --font-mono token requested in
+   docs/requests/motor-helm.md (not a colour, so no theme work is needed). */
+
+.motor-intro { margin: 0 0 20px; }
+.motor-code {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: .92em; padding: 1px 5px; border-radius: var(--r-xs);
+  background: var(--control); color: var(--text-1);
+}
+
+/* ------------------------------------------------------------ connection */
+.motor-status { margin-bottom: 4px; }
+.motor-stack { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.motor-stack > .ui-hint { margin: 0; }
+.motor-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+
+/* Two-column tool buttons wrap instead of ellipsising (legacy tool buttons wrapped). At 375 px a
+   column is ~110 px: "Mark what I just did", "Show all devices" and user-captured command labels
+   would otherwise be cut — and two danger commands with the same prefix would look identical. */
+.motor-pair .ui-btn, .motor-cmds .ui-btn, .motor-recon .ui-btn, .ui-btn.motor-legacy-stop {
+  height: auto; padding-top: 6px; padding-bottom: 6px;
+}
+.motor-pair .ui-btn__label, .motor-cmds .ui-btn__label, .motor-recon .ui-btn__label, .motor-legacy-stop .ui-btn__label {
+  white-space: normal; overflow: visible; text-overflow: clip; text-align: center;
+  overflow-wrap: anywhere; word-break: break-word;
+}
+
+/* ---------------------------------------------------------------- safety
+   The arm button is the only control in the app that can start a propeller, so it is styled to
+   look like nothing else: amber when disarmed, red and pulsing when live. It should be
+   impossible to glance at the panel and be unsure which state you are in. */
+.motor-arm { position: relative; min-height: 56px; font-size: 16px; font-weight: 700; letter-spacing: .01em; }
+.motor-arm:not(.is-armed) {
+  background: var(--signal-soft); color: var(--signal-fg); box-shadow: inset 0 0 0 1.5px var(--signal);
+}
+.motor-arm:not(.is-armed):active:not(:disabled) { background: var(--selected); }
+
+/* The ARMED pulse. Marked .keep-motion in the markup: a safety signal animates even under
+   prefers-reduced-motion. Drawn on a pseudo-element ring so it never moves the layout. */
+.motor-pulse { position: relative; }
+.motor-pulse::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  box-shadow: 0 0 0 0 var(--alert); animation: motor-pulse 1.6s ease-out infinite;
+}
+@keyframes motor-pulse {
+  0% { box-shadow: 0 0 0 0 var(--alert); opacity: .8; }
+  100% { box-shadow: 0 0 0 8px var(--alert); opacity: 0; }
+}
+
+.motor-deadman {
+  display: flex; align-items: center; gap: 10px; margin-top: 10px; padding: 6px 6px 6px 14px;
+  border-radius: var(--r-lg); background: var(--raised); box-shadow: inset 0 0 0 1.5px var(--alert);
+}
+.motor-deadman > .ui-icon { color: var(--alert-text); flex-shrink: 0; }
+/* Disarmed but connected with a STOP command: STOP stays reachable, without the armed red ring. */
+.motor-deadman--idle { box-shadow: inset 0 0 0 1px var(--line); min-height: 60px; }
+.motor-deadman__text { flex: 1; min-width: 0; font: 500 14px/19px var(--font-ui); color: var(--text-2); }
+.motor-deadman__warn { display: block; margin-top: 2px; color: var(--alert-text); font-weight: 600; }
+.motor-deadman__stop { flex-shrink: 0; min-width: 104px; }
+.motor-safety-note { margin-top: 12px; }
+.ui-btn.motor-legacy-stop { margin-top: 10px; }
+
+/* --------------------------------------------------------------- profile */
+.motor-mono {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 16px;   /* ≥16px: iOS never zooms on focus */
+  letter-spacing: 0;
+}
+
+/* -------------------------------------------------------------- commands */
+.motor-cmds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+.motor-cmds .ui-btn { padding-left: 12px; padding-right: 12px; }
+
+/* ----------------------------------------------------------------- recon */
+.motor-recon { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.motor-count { margin: 10px 2px 0; font: 500 13px/18px var(--font-ui); color: var(--text-2); }
+.motor-count .ui-num { color: var(--text-1); }
+
+/* Frame log. Monospace and horizontally scrollable — hex columns only read as columns if they
+   actually line up, and wrapping a 20-byte frame destroys the one thing you are looking for.
+   Every line is a text node: log lines carry device-controlled text. Colour is never the only
+   signal — rx/tx carry "<-" / "->" and warnings / errors say so in words. */
+.motor-log {
+  margin-top: 10px; padding: 10px 12px; max-height: 280px; overflow: auto;
+  overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  background: var(--raised); border-radius: var(--r-md); box-shadow: inset 0 0 0 1px var(--line);
+  font: 400 11.5px/1.5 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-variant-numeric: tabular-nums; white-space: pre; color: var(--text-2);
+}
+.motor-log__line { display: block; min-height: 1.5em; }
+.motor-log__line--hdr { color: var(--text-1); font-weight: 700; }
+.motor-log__line--ok, .motor-log__line--tx { color: var(--text-1); }
+.motor-log__line--rx { color: var(--text-2); }
+.motor-log__line--warn { color: var(--signal-fg); }
+.motor-log__line--err { color: var(--alert-text); font-weight: 600; }
+.motor-log__empty { font: 500 13px/18px var(--font-ui); color: var(--text-3); white-space: normal; }
+
+/* ------------------------------------------------- persistent armed band */
+.motor-band {
+  position: relative; display: flex; align-items: center; gap: 8px;
+  padding: 6px 6px 6px 12px; border-radius: var(--r-lg);
+  background: var(--chrome); box-shadow: var(--e1), inset 0 0 0 1.5px var(--alert);
+}
+.motor-band__info {
+  flex: 1; min-width: 0; min-height: 44px; display: flex; align-items: center; gap: 10px;
+  text-align: left; color: var(--text-1); background: transparent;
+}
+.motor-band__icon { display: grid; place-items: center; color: var(--alert-text); flex-shrink: 0; }
+.motor-band__text { min-width: 0; font: 500 14px/18px var(--font-ui); color: var(--text-2); }
+.motor-band__text b { color: var(--alert-text); font-weight: 700; letter-spacing: .02em; }
+/* Wraps, never ellipsised: this is safety copy. */
+.motor-band__warn { display: block; margin-top: 2px; font: 600 13px/17px var(--font-ui); color: var(--alert-text); overflow-wrap: anywhere; }
+.motor-band__stop { flex-shrink: 0; min-width: 96px; }

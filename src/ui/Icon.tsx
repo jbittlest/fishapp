@@ -3,6 +3,7 @@
  * Lucide covers most of the set; the marine-specific glyphs are drawn here in the same style. */
 import type { SVGProps } from 'react';
 import {
+  CalendarDays, CornerUpLeft, CornerUpRight, Eye, EyeOff, LifeBuoy, Lightbulb,
   Activity, Anchor, ArrowDown, ArrowRight, ArrowUp, Ban, BookOpen, Bluetooth, BluetoothOff, Camera, Check,
   ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Circle, CircleDot, Clock, Cloud, CloudDrizzle, CloudFog,
   CloudLightning, CloudOff, CloudRain, CloudSnow, CloudSun, CloudSunRain, Compass, Copy, Crosshair, Download,
@@ -89,6 +90,8 @@ const LUCIDE = {
   target: Target, thermo: Thermometer, timer: Timer, trash: Trash2, alert: TriangleAlert, 'undo-2': Undo2,
   upload: Upload, volume: Volume2, 'volume-x': VolumeX, waves: Waves, wifi: Wifi, 'wifi-off': WifiOff, wind: Wind,
   x: X, zap: Zap,
+  calendar: CalendarDays, 'corner-up-left': CornerUpLeft, 'corner-up-right': CornerUpRight, eye: Eye, 'eye-off': EyeOff,
+  'life-buoy': LifeBuoy, lightbulb: Lightbulb,
 } satisfies Record<string, LucideIcon>;
 
 const CUSTOM = { tide: Tide, propeller: Propeller, reef: Reef, hull: Hull, knot: Knot, record: Record, 'no-fishing': NoFishing };

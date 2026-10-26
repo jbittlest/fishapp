@@ -1,0 +1,127 @@
+/* Tides & bite times, catch log, catch modal and catch card. Prefix: tide-. Tokens only. */
+
+.tide-time { font-family: var(--font-inst); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ---------------------------------------------------------------- bite windows */
+.tide-bite__caveat { margin: 0 2px 10px; }
+.tide-bite__cta { margin-top: 10px; }
+.tide-bw { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.tide-bw__item {
+  padding: 12px 14px; border-radius: var(--r-lg); background: var(--raised);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.tide-bw__item.is-top { box-shadow: inset 0 0 0 1.5px var(--line-2); }
+.tide-bw__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.tide-bw__when { font: 600 15px/20px var(--font-ui); color: var(--text-1); font-variant-numeric: tabular-nums; min-width: 0; overflow-wrap: anywhere; }
+.tide-bw__score { display: inline-flex; align-items: baseline; gap: 1px; flex-shrink: 0; }
+.tide-bw__pct { font: 500 12px/16px var(--font-ui); color: var(--text-2); }
+.tide-bw__tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.tide-bw__why { margin-top: 6px; font: 500 13px/18px var(--font-ui); color: var(--text-2); }
+
+/* -------------------------------------------------------------------- solunar */
+.tide-sol .ui-row__title { display: inline-flex; align-items: center; gap: 8px; }
+.tide-sol .ui-badge { height: 20px; padding: 0 7px; font-size: 11px; }
+.tide-sol.is-active { background: var(--signal-soft); }
+.tide-sol.is-active .ui-row__lead { color: var(--signal-fg); }
+/* past solunar periods and the high/low that just went by: dimmed (scoped — never a bare .ui-row rule) */
+.tide-sol.is-past, .tide-hilo__row.is-past { opacity: .45; }
+
+/* ----------------------------------------------------------------- sun & moon */
+.tide-kv-k { display: inline-flex; align-items: center; gap: 8px; }
+.tide-kv-k .ui-icon { color: var(--text-3); }
+.tide-kv-unit { margin-left: 1px; font: 500 13px/18px var(--font-ui); color: var(--text-2); }
+
+/* ----------------------------------------------------------------------- tide */
+.tide-station { display: flex; align-items: center; gap: 12px; margin: 0 2px 10px; }
+.tide-station__icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--r-md); background: var(--raised); color: var(--text-2); box-shadow: inset 0 0 0 1px var(--line); flex-shrink: 0; }
+.tide-station__text { flex: 1; min-width: 0; }
+.tide-station__name { font: 600 16px/21px var(--font-ui); color: var(--text-1); overflow-wrap: anywhere; }
+
+.tide-now { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; margin: 0 2px 8px; }
+.tide-now__label { color: var(--text-3); }
+.tide-now__dir { display: inline-flex; align-items: center; gap: 4px; font: 600 14px/18px var(--font-ui); color: var(--text-1); align-self: center; }
+.tide-now__next { margin-left: auto; font: 500 13px/18px var(--font-ui); color: var(--text-2); }
+
+.tide-chart {
+  margin: 0 0 12px; padding: 4px 0 6px; border-radius: var(--r-lg); background: var(--raised);
+  box-shadow: inset 0 0 0 1px var(--line); overflow: hidden;
+}
+.tide-chart__plot { position: relative; margin: 0 8px; }
+.tide-chart__svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.tide-chart__grid { stroke: var(--line-2); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.tide-chart__area { fill: var(--series); fill-opacity: .45; stroke: none; }
+.tide-chart__line { fill: none; stroke: var(--text-2); stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.tide-chart__now { stroke: var(--signal); stroke-width: 1.5; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
+.tide-chart__mark { position: absolute; width: 0; height: 0; }
+.tide-chart__dot {
+  position: absolute; left: -4px; top: -4px; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--text-1); box-shadow: 0 0 0 2px var(--raised);
+}
+.tide-chart__lbl {
+  position: absolute; left: 0; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; white-space: nowrap;
+  font: 500 11px/13px var(--font-inst); font-variant-numeric: tabular-nums; color: var(--text-2);
+}
+.tide-chart__t { font-weight: 600; font-size: 12px; line-height: 14px; color: var(--text-1); }
+.tide-chart__mark.is-high .tide-chart__lbl { bottom: 8px; }
+.tide-chart__mark.is-low .tide-chart__lbl { top: 8px; flex-direction: column-reverse; }
+.tide-chart__mark.is-start .tide-chart__lbl { transform: translateX(-6px); align-items: flex-start; }
+.tide-chart__mark.is-end .tide-chart__lbl { transform: translateX(calc(-100% + 6px)); align-items: flex-end; }
+.tide-chart__nowdot {
+  position: absolute; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%;
+  background: var(--signal); box-shadow: 0 0 0 2px var(--raised);
+}
+.tide-chart__axis { position: relative; height: 16px; margin: 2px 8px 0; }
+.tide-chart__axis > span {
+  position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap;
+  font: 500 11px/16px var(--font-inst); font-variant-numeric: tabular-nums; color: var(--text-3);
+}
+.tide-hilo .ui-row__trail { gap: 14px; color: var(--text-1); }
+.tide-hilo .ui-row__trail .tide-time { min-width: 66px; text-align: right; }
+
+/* ------------------------------------------------------------------ catch log */
+.tide-catch__stats { margin: 0 2px 12px; font: 500 14px/20px var(--font-ui); color: var(--text-2); overflow-wrap: anywhere; }
+.tide-catch__stats b { color: var(--text-1); font-weight: 700; }
+.tide-catch__list { margin-top: 14px; }
+.tide-catch__month + .tide-catch__month { margin-top: 12px; }
+.tide-catch__monthlabel { margin: 0 2px 8px; color: var(--text-3); }
+.tide-catch__row { display: flex; align-items: center; gap: 4px; padding-right: 8px; min-height: 64px; }
+.ui-group > .tide-catch__row + .tide-catch__row { box-shadow: inset 0 1px 0 var(--line); }
+.tide-catch__main {
+  display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; min-height: 64px;
+  padding: 8px 6px 8px 12px; text-align: left; color: var(--text-1);
+}
+.tide-catch__main:active { background: var(--control); }
+.tide-catch__thumb {
+  display: grid; place-items: center; width: 44px; height: 44px; border-radius: var(--r-sm); overflow: hidden;
+  flex-shrink: 0; background: var(--control); color: var(--text-2);
+}
+.tide-catch__thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tide-catch__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tide-catch__title { font: 600 15px/20px var(--font-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tide-catch__sub { font: 500 13px/18px var(--font-ui); color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tide-catch__acts { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }   /* ≥12 px: Navigate vs Delete */
+
+/* ---------------------------------------------------------------- catch modal */
+.tide-form__pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.tide-photo { display: flex; flex-direction: column; gap: 10px; }
+.tide-photo__img { display: block; max-width: 100%; max-height: 220px; width: auto; border-radius: var(--r-md); object-fit: cover; align-self: flex-start; }
+.tide-photo__btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.tide-photo__btns > .ui-btn { flex: 1 1 auto; }
+.tide-photo__pick { position: relative; cursor: pointer; }
+.tide-photo__pick:focus-within { outline: 2px solid var(--signal); outline-offset: 2px; }
+.tide-form .ui-notice { margin: 8px 0 0; }
+.tide-form__pos { display: flex; align-items: flex-start; gap: 8px; margin: 10px 0 0; font: 500 13px/18px var(--font-ui); color: var(--text-2); }
+.tide-form__pos .ui-icon { flex-shrink: 0; margin-top: 1px; color: var(--text-3); }
+
+/* --------------------------------------------- state + full-size Retry (RetryState) */
+.tide-retry { display: flex; flex-direction: column; align-items: center; padding-bottom: 22px; }
+.tide-retry > .ui-state { align-self: stretch; padding-bottom: 0; }
+.tide-retry__btn { margin-top: 12px; }
+
+/* ----------------------------------------------------------------- catch card */
+.tide-card__photo { display: block; width: 100%; max-height: 220px; object-fit: cover; border-radius: var(--r-md); margin: 0 0 10px; }
+.tide-card__kv { margin-bottom: 10px; }
+.tide-card__label { margin: 4px 2px 8px; color: var(--text-3); }
+.tide-card__notes { margin: 0 2px 8px; font: 400 15px/21px var(--font-ui); color: var(--text-1); overflow-wrap: anywhere; white-space: pre-wrap; }
+.tide-card__pos { margin: 0 2px; }

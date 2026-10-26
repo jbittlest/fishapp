@@ -1,7 +1,136 @@
+/* Tap-to-inspect card: chart depth, wind, swell and water temperature at any tapped point,
+ * each filling in independently (engine/inspect.js → inspectStore). Offline it says
+ * "needs internet" straight away instead of spinning. */
+import type { ReactNode } from 'react';
 import { MapCard } from '../../shell/MapCard';
 import type { CardProps } from '../../shell/registry';
+import { Button, DirectionDial, Icon, Num, Spinner, useStoreValue, type IconName } from '../../ui';
+import { useUi } from '../../services/ui';
+import { formatCoord } from '../../engine/gps.js';
+import { compass } from '../../engine/weather.js';
+import { depthInfo, inspectAreaForecast, inspectAt, inspectNavigate, inspectSaveSpot, inspectStore } from '../../engine/inspect.js';
+import './weather.css';
 
-/* PLACEHOLDER — replaced by the feature port. */
-export default function Card({ data }: CardProps) {
-  return <MapCard eyebrow="Tap to inspect" title={String(data?.title ?? data?.name ?? 'Tap to inspect')} />;
+type Reading = unknown;
+
+/** The shared non-value states, in the legacy wording. */
+function pending(v: Reading, nodata: string): ReactNode | null {
+  if (v === 'loading') return <Spinner size="sm" label="Loading" />;
+  if (v === 'offline') return <span className="wx-ins__muted">needs internet</span>;
+  if (v === 'nodata') return <span className="wx-ins__muted">{nodata}</span>;
+  if (v === 'error' || v == null) return <span className="wx-ins__muted">unavailable</span>;
+  return null;
+}
+
+function Row({ icon, label, children }: { icon: IconName; label: string; children: ReactNode }) {
+  return (
+    <div className="wx-ins__row">
+      <span className="wx-ins__ic" aria-hidden><Icon name={icon} size={18} /></span>
+      <span className="wx-ins__lbl">{label}</span>
+      <span className="wx-ins__val">{children}</span>
+    </div>
+  );
+}
+
+function Depth({ v }: { v: Reading }) {
+  const p = pending(v, 'no survey data here');
+  if (p) return <>{p}</>;
+  const d = depthInfo(v as number);
+  if (!d) return <span className="wx-ins__muted">unavailable</span>;
+  if (d.land) return <span className="wx-ins__muted">land ({d.aboveFt} ft above sea)</span>;
+  return (
+    <span className="wx-ins__main">
+      <Num size="s" value={d.ft} digits={d.ft! < 100 ? 1 : 0} unit="ft" />
+      <span className="wx-ins__alt">{d.m!.toFixed(1)} m · {d.fathoms!.toFixed(1)} fathoms</span>
+    </span>
+  );
+}
+
+function Wind({ v }: { v: Reading }) {
+  const w = v as Record<string, number | null> | null;
+  const p = pending(v, 'unavailable');
+  if (p) return <>{p}</>;
+  if (!w || typeof w !== 'object' || w.wind_speed_10m == null) return <span className="wx-ins__muted">unavailable</span>;
+  const from = w.wind_direction_10m;
+  const ok = from != null && Number.isFinite(from);
+  return (
+    <>
+      <span className="wx-ins__main">
+        <Num size="s" value={w.wind_speed_10m} unit="kn" />
+        <span className="wx-ins__alt">{ok ? 'from ' + compass(from) + ' · ' : ''}gust <Num size="row" value={w.wind_gusts_10m} unit="kn" /></span>
+      </span>
+      {ok && <DirectionDial size={30} towardDeg={(from! + 180) % 360} label={'Wind from ' + compass(from)} />}
+    </>
+  );
+}
+
+function Swell({ v }: { v: Reading }) {
+  const s = v as Record<string, number | null> | null;
+  const p = pending(v, 'no marine data (inland?)');
+  if (p) return <>{p}</>;
+  const h = s && typeof s === 'object' ? s.swell_wave_height : null;
+  if (h == null || !Number.isFinite(h)) return <span className="wx-ins__muted">unavailable</span>;
+  const per = s!.swell_wave_period, dir = s!.swell_wave_direction;
+  const extra = [per != null && Number.isFinite(per) ? `@ ${Math.round(per)}s` : '', dir != null && Number.isFinite(dir) ? 'from ' + compass(dir) : '']
+    .filter(Boolean).join(' ');
+  return (
+    <span className="wx-ins__main">
+      <Num size="s" value={h * 3.28084} digits={1} unit="ft" />
+      {extra && <span className="wx-ins__alt">{extra}</span>}
+    </span>
+  );
+}
+
+function Water({ v }: { v: Reading }) {
+  const p = pending(v, 'no data');
+  if (p) return <>{p}</>;
+  return <Num size="s" value={typeof v === 'number' ? v : null} digits={1} deg="°F" />;
+}
+
+export default function InspectCard({ data }: CardProps) {
+  const reqId = useStoreValue(inspectStore, (s) => s.reqId);
+  const sLat = useStoreValue(inspectStore, (s) => s.lat);
+  const sLng = useStoreValue(inspectStore, (s) => s.lng);
+  const distNm = useStoreValue(inspectStore, (s) => s.distNm);
+  const brgDeg = useStoreValue(inspectStore, (s) => s.brgDeg);
+  const r = useStoreValue(inspectStore, (s) => s.results);
+  const online = useUi((s) => s.online);
+
+  const lat: number = sLat ?? data?.lat;
+  const lng: number = sLng ?? data?.lng;
+  if (lat == null || lng == null) return <MapCard eyebrow="Tap to inspect" title="No point selected" />;
+  const current = data?.reqId == null || data.reqId === reqId;
+  const vals = Object.values(r);
+  const canRetry = online && vals.some((x) => x === 'offline' || x === 'error');
+
+  const subtitle = distNm != null
+    ? <><Num size="row" value={distNm} digits={2} unit="nm" /> · <Num size="row" value={brgDeg} deg="°T" /> from you</>
+    : 'Distance from you needs a GPS fix';
+
+  return (
+    <MapCard eyebrow="Tap to inspect" title={formatCoord(lat, 'lat') + '  ' + formatCoord(lng, 'lon')}
+      subtitle={subtitle}
+      actions={
+        <>
+          <Button icon="pin-plus" onClick={inspectSaveSpot}>Save spot</Button>
+          <Button variant="primary" icon="navigation" onClick={() => { void inspectNavigate(); }}>Navigate here</Button>
+          <Button variant="ghost" icon="cloud-sun" block onClick={inspectAreaForecast}>10-day forecast for this area</Button>
+        </>
+      }>
+      <div className="wx-ins" aria-busy={vals.includes('loading') || undefined}>
+        {current ? (
+          <>
+            <Row icon="anchor" label="Chart depth"><Depth v={r.depth} /></Row>
+            <Row icon="wind" label="Wind"><Wind v={r.wind} /></Row>
+            <Row icon="waves" label="Swell"><Swell v={r.swell} /></Row>
+            <Row icon="thermo" label="Water"><Water v={r.sst} /></Row>
+          </>
+        ) : <Row icon="info" label="Updating"><Spinner size="sm" /></Row>}
+        <p className="wx-ins__note">Chart depth is from survey data, not your sounder. Conditions are model estimates.</p>
+        {canRetry && (
+          <Button variant="ghost" compact icon="refresh" className="wx-ins__retry wx-hit44" onClick={() => inspectAt({ lat, lng })}>Retry</Button>
+        )}
+      </div>
+    </MapCard>
+  );
 }

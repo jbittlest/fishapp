@@ -4,3 +4,5 @@ tools/out/
 test-results/
 playwright-report/
 .claude/
+tools/out/
+test-results/

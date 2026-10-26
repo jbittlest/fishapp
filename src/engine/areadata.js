@@ -19,20 +19,41 @@ export async function areaDataInit() {
 }
 export async function areaDataRefresh() { await areaDataInit(); }
 
-/* Most-recently-captured pack whose bounds contain a point (or null). */
+/* Most-recently-captured pack whose bounds contain a point (or null).
+   A pack where nothing usable was captured (areaPackHealth level 'none' — e.g. the signal
+   dropped during the data phase) is skipped: First Mate used to be told "an area pack covers
+   this location" and then read an empty one. An older pack with real data still serves. */
 export function areaPackFor(ll) {
   if (!ll || !AreaData.packs) return null;
-  const inside = AreaData.packs.filter((a) => a.data && a.bounds &&
-    ll.lat <= a.bounds.n && ll.lat >= a.bounds.s && ll.lng <= a.bounds.e && ll.lng >= a.bounds.w);
+  const inside = AreaData.packs.filter((a) => a.data && !a.data.cancelled && a.bounds &&
+    ll.lat <= a.bounds.n && ll.lat >= a.bounds.s && ll.lng <= a.bounds.e && ll.lng >= a.bounds.w &&
+    areaPackHealth(a.data).level !== 'none');
   if (!inside.length) return null;
   inside.sort((a, b) => (b.data.capturedTs || b.ts) - (a.data.capturedTs || a.ts));
   return inside[0];
 }
 
-/* ---------- Build the pack (called by download.js while online) ---------- */
-export async function buildAreaPack(bounds, onProgress) {
+/* ---------- Build the pack (called by download.js while online) ----------
+   `isCancelled` (optional) is checked between sections: Cancel used to be ignored once the
+   pack phase began, leaving the user watching six more network calls finish. A cancelled
+   build resolves `{ cancelled: true }`; download.js discards it (never stored as data). */
+export async function buildAreaPack(bounds, onProgress, isCancelled) {
   const c = bounds.getCenter();
-  const step = (m) => { if (onProgress) onProgress(m); };
+  const stop = () => !!(isCancelled && isCancelled());
+  const step = (m) => {
+    if (stop()) throw new PackCancelled();
+    if (onProgress) onProgress(m);
+  };
+  try {
+    return await buildAreaPackSections(bounds, c, step, stop);
+  } catch (e) {
+    if (e instanceof PackCancelled) return { cancelled: true, capturedTs: Date.now() };
+    throw e;
+  }
+}
+export class PackCancelled extends Error { constructor() { super('cancelled'); this.name = 'PackCancelled'; } }
+
+async function buildAreaPackSections(bounds, c, step, stop) {
   const pack = {
     capturedTs: Date.now(),
     center: { lat: c.lat, lng: c.lng },
@@ -46,11 +67,14 @@ export async function buildAreaPack(bounds, onProgress) {
       '&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m,precipitation_probability' +
       '&wind_speed_unit=kn&temperature_unit=fahrenheit&forecast_days=7&timezone=auto');
     const j = await r.json();
+    /* An error body (HTTP 400/429 → {error, reason}) has no hourly block: flag it, never
+       store a forecast with no hours in it as if it had been captured. */
+    if (!j || !j.hourly || !nonEmpty(j.hourly.time)) throw new Error((j && j.reason) || 'no forecast in the response');
     pack.forecast = {
       time: j.hourly.time, wind: j.hourly.wind_speed_10m, gust: j.hourly.wind_gusts_10m,
       dir: j.hourly.wind_direction_10m, temp: j.hourly.temperature_2m, precip: j.hourly.precipitation_probability,
     };
-  } catch (e) { pack.forecastError = true; }
+  } catch (e) { if (e instanceof PackCancelled) throw e; pack.forecastError = true; }
 
   // 7-day hourly seas + water temp
   try {
@@ -58,17 +82,18 @@ export async function buildAreaPack(bounds, onProgress) {
     const r = await fetch('https://marine-api.open-meteo.com/v1/marine?latitude=' + c.lat + '&longitude=' + c.lng +
       '&hourly=wave_height,wave_period,wave_direction,sea_surface_temperature&temperature_unit=fahrenheit&forecast_days=7&timezone=auto');
     const j = await r.json();
+    if (!j || !j.hourly || !nonEmpty(j.hourly.time)) throw new Error((j && j.reason) || 'no marine forecast in the response');
     pack.marine = {
       time: j.hourly.time, wave_m: j.hourly.wave_height, period: j.hourly.wave_period,
       wdir: j.hourly.wave_direction, sst: j.hourly.sea_surface_temperature,
     };
-  } catch (e) { pack.marineError = true; }
+  } catch (e) { if (e instanceof PackCancelled) throw e; pack.marineError = true; }
 
   /* Flag these like every other section. Swallowed silently, a partly-failed pack was
      indistinguishable from a complete one — First Mate just omitted water temp or
      depth, and nothing ever prompted a re-download. */
-  try { step('sea-temperature grid'); pack.sstGrid = await fetchSstGrid(bounds); } catch (e) { pack.sstError = true; }
-  try { step('depth grid'); pack.depthGrid = await fetchDepthGrid(bounds); } catch (e) { pack.depthError = true; }
+  try { step('sea-temperature grid'); pack.sstGrid = await fetchSstGrid(bounds); } catch (e) { if (e instanceof PackCancelled) throw e; pack.sstError = true; }
+  try { step('depth grid'); pack.depthGrid = await fetchDepthGrid(bounds); } catch (e) { if (e instanceof PackCancelled) throw e; pack.depthError = true; }
 
   // A week of tide highs/lows at the nearest station
   try {
@@ -80,6 +105,9 @@ export async function buildAreaPack(bounds, onProgress) {
         const r = await fetch('https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=predictions&interval=hilo&datum=MLLW&units=english&time_zone=lst_ldt&format=json&station=' +
           st.id + '&begin_date=' + fmt(new Date()) + '&end_date=' + fmt(new Date(Date.now() + 7 * 864e5)));
         const j = await r.json();
+        /* NOAA answers a bad request with HTTP 200 and {error: {message}} — no predictions.
+           That used to be stored as a tide section with zero turns and counted as captured. */
+        if (!j || !nonEmpty(j.predictions)) throw new Error((j && j.error && j.error.message) || 'no tide predictions in the response');
         pack.tides = {
           station: st.n, id: st.id,
           dist_nm: +nmBetween(L.latLng(c.lat, c.lng), L.latLng(st.la, st.lo)).toFixed(0),
@@ -87,7 +115,7 @@ export async function buildAreaPack(bounds, onProgress) {
         };
       }
     }
-  } catch (e) { pack.tidesError = true; }
+  } catch (e) { if (e instanceof PackCancelled) throw e; pack.tidesError = true; }
 
   // Recent fish-sighting history in the bounds (iNaturalist)
   try {
@@ -97,6 +125,9 @@ export async function buildAreaPack(bounds, onProgress) {
         '&nelat=' + bounds.getNorth() + '&nelng=' + bounds.getEast() + '&swlat=' + bounds.getSouth() + '&swlng=' + bounds.getWest() +
         '&per_page=100&order_by=observed_on&order=desc&geo=true&quality_grade=research&geoprivacy=open');
       const j = await r.json();
+      /* An error body has no results array. It used to become {total: 0} — "no fish seen
+         here", stated as fact — instead of "the sightings could not be fetched". */
+      if (!j || !Array.isArray(j.results)) throw new Error('no sightings in the response');
       const tally = {}, recent = [];
       (j.results || []).forEach((o) => {
         const n = (o.taxon && (o.taxon.preferred_common_name || o.taxon.name)) || 'unknown';
@@ -109,7 +140,7 @@ export async function buildAreaPack(bounds, onProgress) {
       const sampled = (j.results || []).length;
       pack.fish = { total: (j.total_results != null ? j.total_results : sampled), sampled, tally, recent };
     }
-  } catch (e) { pack.fishError = true; }
+  } catch (e) { if (e instanceof PackCancelled) throw e; pack.fishError = true; }
 
   // Protected-area closures intersecting the bounds (bundled data)
   try {
@@ -123,7 +154,7 @@ export async function buildAreaPack(bounds, onProgress) {
       if (bb && bboxIntersect(bb, bounds)) inb.push({ n: m.n || m.name, t: m.t || m.type });
     }
     pack.mpas = inb;
-  } catch (e) { /* ignore */ }
+  } catch (e) { if (e instanceof PackCancelled) throw e; /* ignore */ }
 
   // Reef count inside the bounds (reefs are bundled globally; just note how many)
   try {
@@ -133,6 +164,7 @@ export async function buildAreaPack(bounds, onProgress) {
     }
   } catch (e) { /* ignore */ }
 
+  if (stop()) throw new PackCancelled();
   return pack;
 }
 
@@ -148,9 +180,12 @@ export async function fetchSstGrid(bounds) {
   const arr = Array.isArray(j) ? j : [j];
   const pts = [];
   arr.forEach((o, k) => {
-    const v = o.current && o.current.sea_surface_temperature;
+    const v = o && o.current && o.current.sea_surface_temperature;
     if (v != null) pts.push({ lat: +lats[k], lng: +lngs[k], f: Math.round(v) });
   });
+  /* An error body ({error, reason}) or an all-land box yields no points. Returned as [] it
+     counted as a captured grid; throwing makes buildAreaPack flag sstError like any failure. */
+  if (!pts.length) throw new Error((j && !Array.isArray(j) && j.reason) || 'no sea-temperature data in the response');
   return pts;
 }
 
@@ -163,6 +198,7 @@ export async function fetchDepthGrid(bounds) {
     });
   }
   const out = [];
+  let failed = 0;
   await Promise.all(jobs.map(async (p) => {
     try {
       const r = await fetch('https://gis.ngdc.noaa.gov/arcgis/rest/services/DEM_mosaics/DEM_all/ImageServer/identify' +
@@ -173,8 +209,12 @@ export async function fetchDepthGrid(bounds) {
       if (d.value === 'NoData' || isNaN(v)) return;
       if (v >= 0) out.push({ lat: p.lat, lng: p.lng, land: true });
       else out.push({ lat: p.lat, lng: p.lng, ft: Math.round(Math.abs(v) * 3.28084) });
-    } catch (e) { /* skip point */ }
+    } catch (e) { failed++; /* skip point */ }
   }));
+  /* One bad point is skipped, but a grid with NO points is not a depth grid. Every point
+     failing (the signal dropped mid-capture) used to return [] — never an error — so
+     depthError could not be set and a dead pack still scored "some data". */
+  if (!out.length) throw new Error(failed ? 'depth service unreachable (' + failed + ' of ' + jobs.length + ' points failed)' : 'no depth data for this area');
   return out;
 }
 
@@ -205,14 +245,26 @@ export function bboxIntersect(bb, bounds) {
 }
 
 /* ---------- Readers (shared by the offline engine and the online tool) ---------- */
-export function areaFcstIndex(fc, whenMs) {
+/* Index of the forecast hour nearest `whenMs`, or -1 when the pack does not cover that time.
+   With no limit, an expired pack (captured over a week ago) reported its LAST hour as "now",
+   and First Mate gave a go/no-go read from week-old wind. The data is hourly, so inside the
+   captured window the nearest sample is never more than 30 min away; beyond `maxGapMs` the
+   pack simply does not know, and callers fall back to live/cached weather. */
+export const AREA_FCST_MAX_GAP_MS = 90 * 60 * 1000;
+export function areaFcstIndex(fc, whenMs, maxGapMs) {
   if (!fc || !fc.time) return -1;
+  const limit = maxGapMs == null ? AREA_FCST_MAX_GAP_MS : maxGapMs;
   let best = -1, bd = Infinity;
   for (let i = 0; i < fc.time.length; i++) {
     const d = Math.abs(new Date(fc.time[i]).getTime() - whenMs);
     if (d < bd) { bd = d; best = i; }
   }
-  return best;
+  return bd <= limit ? best : -1;
+}
+
+/** Local calendar date YYYY-MM-DD. */
+export function areaLocalYmd(d) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
 
 export function areaDailyForecast(d, fromYmd) {
@@ -242,7 +294,9 @@ export function areaDailyForecast(d, fromYmd) {
      day the pack knew nothing about collected the full light-wind bonus and was
      recommended as the best day to fish. Non-finite must become null. */
   const fin = (v) => (isFinite(v) ? Math.round(v) : null);
-  const today = fromYmd || new Date().toISOString().slice(0, 10);
+  /* LOCAL today. toISOString() is the UTC date, which from late afternoon on in the US is
+     already tomorrow — so "today" was dropped from the outlook every evening. */
+  const today = fromYmd || areaLocalYmd(new Date());
   return Object.keys(days).sort()
     // the pack keeps its whole captured window, so drop days that have already gone by
     .filter((day) => day >= today)
@@ -275,6 +329,36 @@ export function areaSstStats(d) {
   let min = g[0], max = g[0], sum = 0;
   g.forEach((p) => { if (p.f < min.f) min = p; if (p.f > max.f) max = p; sum += p.f; });
   return { avg: Math.round(sum / g.length), min: min.f, max: max.f, warmest: max, coolest: min, span: max.f - min.f };
+}
+
+/* ---------- Pack health (what the toast and the saved-areas list report) ----------
+   Each section that was attempted and failed carries a *Error flag (see buildAreaPack).
+   A pack where every section failed is "charts only", not "charts + data".
+   A section only counts as captured when it holds something usable (`has`): packs saved
+   before the builders flagged empty answers carry `depthGrid: []`, `sstGrid: []` or a tide
+   section with no turns and no error flag, and those must not score as data either. */
+/** @param {unknown} a */
+function nonEmpty(a) { return Array.isArray(a) && a.length > 0; }
+/** @type {Array<{ key: string, err: string, label: string, has: (v: any) => boolean }>} */
+export const AREA_PACK_SECTIONS = [
+  { key: 'forecast', err: 'forecastError', label: 'weather forecast', has: (v) => !!v && nonEmpty(v.time) },
+  { key: 'marine', err: 'marineError', label: 'wave & water-temp forecast', has: (v) => !!v && nonEmpty(v.time) },
+  { key: 'sstGrid', err: 'sstError', label: 'sea-temperature grid', has: nonEmpty },
+  { key: 'depthGrid', err: 'depthError', label: 'depth grid', has: nonEmpty },
+  { key: 'tides', err: 'tidesError', label: 'tide predictions', has: (v) => !!v && nonEmpty(v.preds) },
+  // zero sightings is a real answer (tally {}); an error body is caught at build time (fishError)
+  { key: 'fish', err: 'fishError', label: 'recent fish sightings', has: (v) => !!v && typeof v === 'object' && v.tally != null },
+];
+/** @returns {{ level: 'none'|'partial'|'full', failed: string[], ok: number, total: number }} */
+export function areaPackHealth(data) {
+  const total = AREA_PACK_SECTIONS.length;
+  if (!data || data.cancelled) return { level: 'none', failed: AREA_PACK_SECTIONS.map((s) => s.label), ok: 0, total };
+  const usable = (s) => !data[s.err] && s.has(data[s.key]);
+  // failed = flagged, or present but empty (a tide section skipped for want of a station is absent, not failed)
+  const failed = AREA_PACK_SECTIONS.filter((s) => data[s.err] || (data[s.key] != null && !usable(s))).map((s) => s.label);
+  const ok = AREA_PACK_SECTIONS.filter(usable).length;
+  const level = ok === 0 ? 'none' : (failed.length ? 'partial' : 'full');
+  return { level, failed, ok, total };
 }
 
 export function areaPackSummary(a) {

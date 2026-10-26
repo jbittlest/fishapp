@@ -1,44 +1,63 @@
 import L from 'leaflet';
-import { GPS, bearingBetween, formatCoord, nmBetween } from './gps.js';
+import { createStore } from 'zustand/vanilla';
+import { GPS, bearingBetween, nmBetween } from './gps.js';
 import { openSpotModal } from './spots.js';
-import { compass, dirArrow, showAreaForecast, windColor } from './weather.js';
+import { compass, showAreaForecast } from './weather.js';
 import { gotoStart } from './goto.js';
+import { closeCard, openCard } from '../services/ui';
 
 /* Tap-to-inspect: single-tap the map to get depth, wind and swell at that point */
 'use strict';
 
 export const Inspect = {
-  popup: null,
+  ll: null,       // L.LatLng of the open card (lng normalised)
   reqId: 0,
 };
 
 export const M_TO_FT = 3.28084;
 export const M_TO_FATHOM = 0.546807;
 
+/* What the `inspect` map card (features/weather/InspectCard) renders. Each result fills in
+   independently: 'loading' | 'offline' | 'nodata' | 'error' | the value (depth: metres, +up;
+   wind / swell: the Open-Meteo `current` object; sst: °F). */
+/** @typedef {'loading'|'offline'|'nodata'|'error'} PointState */
+/**
+ * @typedef {{ depth: PointState|number, wind: PointState|Record<string, any>,
+ *   swell: PointState|Record<string, any>, sst: PointState|number }} PointResults
+ */
+/**
+ * @typedef {{ reqId: number, lat: number|null, lng: number|null, distNm: number|null, brgDeg: number|null,
+ *   results: PointResults }} InspectView
+ */
+/** @type {import('zustand/vanilla').StoreApi<InspectView>} */
+export const inspectStore = createStore(() => /** @type {InspectView} */ ({
+  reqId: 0, lat: null, lng: null, distNm: null, brgDeg: null,
+  results: { depth: 'loading', wind: 'loading', swell: 'loading', sst: 'loading' },
+}));
+
 export function inspectAt(latlng) {
   const id = ++Inspect.reqId;         // cancels stale responses if you tap again fast
-  const ll = L.latLng(latlng.lat, ((latlng.lng + 540) % 360) - 180);
+  const ll = L.latLng(latlng.lat, ((latlng.lng + 540) % 360) - 180);   // worldCopyJump can hand us lng outside ±180
+  Inspect.ll = ll;
 
-  let distLine = '';
+  let distNm = null, brgDeg = null;
   if (GPS.lastLatLng) {
-    distLine = `<div class="ins-dist">${nmBetween(GPS.lastLatLng, ll).toFixed(2)} nm · ` +
-      `${Math.round(bearingBetween(GPS.lastLatLng, ll))}° from you</div>`;
+    distNm = nmBetween(GPS.lastLatLng, ll);
+    brgDeg = Math.round(bearingBetween(GPS.lastLatLng, ll));
   }
 
+  // Offline shows "needs internet" straight away rather than a spinner that never resolves
   const online = navigator.onLine;
   const s = online ? 'loading' : 'offline';
+  /** @type {PointResults} */
   const results = { depth: s, wind: s, swell: s, sst: s };
 
-  Inspect.popup = L.popup({ className: 'ins-popup', maxWidth: 250, autoPan: true })
-    .setLatLng(ll)
-    .setContent(inspectHtml(results, ll, distLine))
-    .openOn(window._map);
-  bindMarkButton(ll);
+  inspectStore.setState({ reqId: id, lat: ll.lat, lng: ll.lng, distNm, brgDeg, results: { ...results } });
+  openCard('inspect', { reqId: id, lat: ll.lat, lng: ll.lng }, { lat: ll.lat, lng: ll.lng });
 
   const update = () => {
-    if (id !== Inspect.reqId || !Inspect.popup) return;
-    Inspect.popup.setContent(inspectHtml(results, ll, distLine));
-    bindMarkButton(ll);   // setContent rebuilds the DOM, so re-wire the button each time
+    if (id !== Inspect.reqId) return;          // a newer tap owns the card now
+    inspectStore.setState({ results: { ...results } });
   };
 
   if (!online) { update(); return; }
@@ -86,82 +105,83 @@ export function queryPointData(ll, results, onUpdate) {
     .catch(() => { results.swell = 'error'; results.sst = 'error'; onUpdate(); });
 }
 
-export function sstText(v) {
-  if (v === 'loading') return '<span class="ins-load">…</span>';
-  if (v === 'offline') return '<span class="ins-muted">needs internet</span>';
-  if (v === 'nodata') return '<span class="ins-muted">no data</span>';
-  if (v === 'error' || v === null || v === undefined) return '<span class="ins-muted">unavailable</span>';
-  return '<b>' + v.toFixed(1) + '°F</b>';
+/* ---- Card actions (legacy bindMarkButton): close the card, then act ---- */
+export function inspectSaveSpot() {
+  const ll = Inspect.ll; if (!ll) return;
+  closeCard('inspect');
+  openSpotModal({ lat: ll.lat, lng: ll.lng });
+}
+/** Resolves to gotoStart's answer (false when the user kept a voyage already in progress). */
+export async function inspectNavigate() {
+  const ll = Inspect.ll; if (!ll) return false;
+  closeCard('inspect');
+  return await Promise.resolve(gotoStart(ll, 'Pin ' + ll.lat.toFixed(3) + ', ' + ll.lng.toFixed(3)));
+}
+export function inspectAreaForecast() {
+  const ll = Inspect.ll; if (!ll) return;
+  closeCard('inspect');
+  showAreaForecast(ll);
 }
 
-export function bindMarkButton(ll) {
-  const el = Inspect.popup && Inspect.popup.getElement();
-  if (!el) return;
-  const btn = el.querySelector('.ins-mark');
-  if (btn) btn.onclick = () => {
-    window._map.closePopup(Inspect.popup);
-    openSpotModal({ lat: ll.lat, lng: ll.lng });
-  };
-  const nav = el.querySelector('.ins-nav');
-  if (nav && typeof gotoStart === 'function') nav.onclick = () => {
-    window._map.closePopup(Inspect.popup);
-    gotoStart(ll, 'Pin ' + ll.lat.toFixed(3) + ', ' + ll.lng.toFixed(3));
-  };
-  const fc = el.querySelector('.ins-fc');
-  if (fc && typeof showAreaForecast === 'function') fc.onclick = () => {
-    window._map.closePopup(Inspect.popup);
-    showAreaForecast(ll);
-  };
+/* ---- Readings as plain text (reefs.js and the cards). The legacy versions returned HTML
+   fragments; these return the same words with no markup, and never "0" for a missing value. */
+
+/** The non-value states, in the legacy wording. Returns null for a real value. */
+function stateText(v, nodataText) {
+  if (v === 'loading') return '…';
+  if (v === 'offline') return 'needs internet';
+  if (v === 'nodata') return nodataText;
+  if (v === 'error' || v === null || v === undefined) return 'unavailable';
+  return null;
+}
+
+export function sstText(v) {
+  const st = stateText(v, 'no data');
+  if (st != null) return st;
+  if (!isFinite(v)) return 'unavailable';
+  return Number(v).toFixed(1) + '°F';
+}
+
+/** Depth parts: land is ≥ 0 (height above sea), water is negative metres. */
+export function depthInfo(v) {
+  if (typeof v !== 'number' || !isFinite(v)) return null;
+  if (v >= 0) return { land: true, aboveFt: Math.round(v * M_TO_FT), ft: null, m: null, fathoms: null };
+  const m = Math.abs(v);
+  return { land: false, aboveFt: null, ft: m * M_TO_FT, m, fathoms: m * M_TO_FATHOM };
 }
 
 export function depthText(v) {
-  if (v === 'loading') return '<span class="ins-load">…</span>';
-  if (v === 'offline') return '<span class="ins-muted">needs internet</span>';
-  if (v === 'nodata') return '<span class="ins-muted">no survey data here</span>';
-  if (v === 'error') return '<span class="ins-muted">unavailable</span>';
-  if (v >= 0) return '<span class="ins-muted">land (' + Math.round(v * M_TO_FT) + ' ft above sea)</span>';
-  const ft = Math.abs(v) * M_TO_FT;
-  const fath = Math.abs(v) * M_TO_FATHOM;
-  return '<b>' + ft.toFixed(ft < 100 ? 1 : 0) + ' ft</b> ' +
-    '<span class="ins-alt">(' + Math.abs(v).toFixed(1) + ' m · ' + fath.toFixed(1) + ' fa)</span>';
+  const st = stateText(v, 'no survey data here');
+  if (st != null) return st;
+  const d = depthInfo(v);
+  if (!d) return 'unavailable';
+  if (d.land) return 'land (' + d.aboveFt + ' ft above sea)';
+  return d.ft.toFixed(d.ft < 100 ? 1 : 0) + ' ft (' + d.m.toFixed(1) + ' m · ' + d.fathoms.toFixed(1) + ' fa)';
 }
 
 export function windText(w) {
-  if (w === 'loading') return '<span class="ins-load">…</span>';
-  if (w === 'offline') return '<span class="ins-muted">needs internet</span>';
-  if (w === 'error' || !w || w.wind_speed_10m == null) return '<span class="ins-muted">unavailable</span>';
+  if (w === 'loading') return '…';
+  if (w === 'offline') return 'needs internet';
+  if (w === 'error' || !w || w.wind_speed_10m == null) return 'unavailable';
   const kn = Math.round(w.wind_speed_10m);
-  return '<b style="color:' + windColor(w.wind_speed_10m) + '">' + kn + ' kn</b> ' +
-    compass(w.wind_direction_10m) + ' ' + dirArrow(w.wind_direction_10m) +
-    ' <span class="ins-alt">gust ' + Math.round(w.wind_gusts_10m) + '</span>';
+  // a missing gust reads "gust —", never "gust 0" (or NaN)
+  const gust = w.wind_gusts_10m == null || !isFinite(w.wind_gusts_10m) ? '—' : Math.round(w.wind_gusts_10m);
+  /* compass words only: the legacy arrow glyph (dirArrow) has emoji forms on some
+     platforms, and the cards draw a real direction dial instead */
+  const dir = w.wind_direction_10m == null ? '' : ' from ' + compass(w.wind_direction_10m);
+  return kn + ' kn' + dir + ' gust ' + gust;
 }
 
 export function swellText(s) {
-  if (s === 'loading') return '<span class="ins-load">…</span>';
-  if (s === 'offline') return '<span class="ins-muted">needs internet</span>';
-  if (s === 'nodata') return '<span class="ins-muted">no marine data (inland?)</span>';
-  if (s === 'error' || !s) return '<span class="ins-muted">unavailable</span>';
+  if (s === 'loading') return '…';
+  if (s === 'offline') return 'needs internet';
+  if (s === 'nodata') return 'no marine data (inland?)';
+  if (s === 'error' || !s) return 'unavailable';
   const h = s.swell_wave_height;
-  if (h === null || h === undefined) return '<span class="ins-muted">unavailable</span>';
+  if (h === null || h === undefined || !isFinite(h)) return 'unavailable';
   const ft = h * M_TO_FT;
-  return '<b>' + ft.toFixed(1) + ' ft</b> ' +
-    '<span class="ins-alt">@ ' + Math.round(s.swell_wave_period) + 's ' + compass(s.swell_wave_direction) + '</span>';
-}
-
-export function inspectHtml(r, ll, distLine) {
-  return '<div class="ins">' +
-    '<div class="ins-coord">' + formatCoord(ll.lat, 'lat') + ' &nbsp; ' + formatCoord(ll.lng, 'lon') + '</div>' +
-    distLine +
-    '<div class="ins-row"><span class="ins-ic">⚓</span><span class="ins-lbl">Depth</span>' +
-      '<span class="ins-val">' + depthText(r.depth) + '</span></div>' +
-    '<div class="ins-row"><span class="ins-ic">💨</span><span class="ins-lbl">Wind</span>' +
-      '<span class="ins-val">' + windText(r.wind) + '</span></div>' +
-    '<div class="ins-row"><span class="ins-ic">🌊</span><span class="ins-lbl">Swell</span>' +
-      '<span class="ins-val">' + swellText(r.swell) + '</span></div>' +
-    '<div class="ins-row"><span class="ins-ic">🌡️</span><span class="ins-lbl">Water</span>' +
-      '<span class="ins-val">' + sstText(r.sst) + '</span></div>' +
-    '<div class="ins-btns"><button class="ins-mark">📌 Save spot</button>' +
-    '<button class="ins-nav">🧭 Navigate here</button></div>' +
-    '<button class="ins-fc">📅 See 10-Day forecast for this area</button>' +
-    '</div>';
+  // period / direction are separately nullable — never "@ 0s"
+  const per = s.swell_wave_period != null && isFinite(s.swell_wave_period) ? ' @ ' + Math.round(s.swell_wave_period) + 's' : '';
+  const dir = s.swell_wave_direction != null && isFinite(s.swell_wave_direction) ? ' ' + compass(s.swell_wave_direction) : '';
+  return ft.toFixed(1) + ' ft' + per + dir;
 }

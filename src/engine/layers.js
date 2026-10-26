@@ -32,12 +32,32 @@ function loadPrefs() {
   return p;
 }
 
-export const layersStore = createStore(() => ({ ...loadPrefs(), tileBusy: false }));
+const _initialPrefs = loadPrefs();
+export const layersStore = createStore(() => ({ ..._initialPrefs, tileBusy: false }));
 
+/* What the USER chose. The live store can differ when a module refuses (SST offline): the toggle
+   then shows off, but the saved choice survives so the overlay comes back next time there is
+   signal (legacy only unticked the box and never saved it). */
+const persisted = { ..._initialPrefs };
 function savePrefs() {
   const s = layersStore.getState();
-  const prefs = { base: s.base, enc: !!s.enc, seamark: !!s.seamark, wind: !!s.wind, sst: !!s.sst, rain: !!s.rain, reefs: !!s.reefs, mpa: !!s.mpa, fish: !!s.fish };
+  ['base', 'enc', 'seamark'].forEach((k) => { persisted[k] = s[k]; });
+  const p = persisted;
+  const prefs = { base: p.base, enc: !!p.enc, seamark: !!p.seamark, wind: !!p.wind, sst: !!p.sst, rain: !!p.rain, reefs: !!p.reefs, mpa: !!p.mpa, fish: !!p.fish };
   try { localStorage.setItem('fishapp.layers', JSON.stringify(prefs)); } catch (e) {}
+}
+
+/** The chart layers the map shows for a layer state — the base, its companions (labels, relief
+ *  detail) and the chart overlays. The offline downloader uses this so a downloaded area always
+ *  holds exactly what the chart displays. */
+export function chartLayerIds(state) {
+  const s = state || layersStore.getState();
+  const ids = [s.base];
+  if (s.base === 'gmrt' || s.base === 'bluetint' || s.base === 'sat') ids.push('labels');
+  if (RELIEF_DETAIL[s.base]) ids.push(RELIEF_DETAIL[s.base]);
+  if (s.enc) ids.push('enc');
+  if (s.seamark) ids.push('seamark');
+  return ids;
 }
 
 let map = null;
@@ -107,6 +127,7 @@ export function setBase(id, isUserAction) {
     live[want]._container.style.mixBlendMode = (want === 'reliefhi') ? 'multiply' : 'overlay';
   }
   layersStore.setState({ base: id });
+  document.documentElement.dataset.base = id;   // night-mode chart dimming keys off the base (base.css)
   savePrefs();
   /* NAVIONICS-STYLE relief: the base is blue depth-shading, and the NOAA vector chart is drawn
      on top with 'multiply' blend — that turns the chart's white deep-water transparent while
@@ -143,6 +164,14 @@ export function updateChartFilter() {
        contrast(3) is visibly flat; contrast(9) starts amplifying survey-track striping. */
     live.blueshade._container.style.filter = 'brightness(0.70) contrast(6)';
   }
+  /* Night over the US bathymetry base: the base is already dark through #lut-night, so the
+     whole-pane dim in base.css is skipped for it — but the chart overlays drawn on top (labels,
+     NOAA chart, seamarks) would stay glaring white. Dim those layer containers individually. */
+  const nightOverBluetint = document.documentElement.dataset.theme === 'night' && layersStore.getState().base === 'bluetint';
+  ['labels', 'enc', 'seamark'].forEach((id) => {
+    const c = live[id] && live[id]._container;
+    if (c) c.style.filter = nightOverBluetint ? 'brightness(0.45) saturate(0.6)' : '';
+  });
 }
 
 export function setOverlay(id, on) {
@@ -151,6 +180,7 @@ export function setOverlay(id, on) {
   layersStore.setState({ [id]: !!on });
   savePrefs();
   if (id === 'enc') updateEncBlend();
+  updateChartFilter();   // a newly added overlay picks up the night dim
 }
 
 /* Multiply-blend the chart onto the blue relief base; normal blend over other bases. */
@@ -175,16 +205,17 @@ const ENABLERS = {
 export function setDataOverlay(id, on) {
   if (!ENABLERS[id]) return;
   layersStore.setState({ [id]: !!on });
+  persisted[id] = !!on;
   savePrefs();
   try { ENABLERS[id](!!on); } catch (e) { console.error('overlay ' + id, e); }
 }
 
-/** A module corrects the state without re-running its enabler — e.g. SST refusing to turn on
- *  offline must leave the toggle OFF (legacy unchecked its box). */
+/** A module corrects the SHOWN state without re-running its enabler — e.g. SST refusing to turn on
+ *  offline must leave the toggle OFF (legacy unchecked its box). Synchronous, and never persisted:
+ *  only a user toggle (setDataOverlay) changes the saved choice. */
 export function reportDataOverlay(id, on) {
   if (layersStore.getState()[id] === !!on) return;
   layersStore.setState({ [id]: !!on });
-  savePrefs();
 }
 
 /** Boot: switch on whatever the saved prefs say. Reefs/MPAs apply the CURRENT state once their

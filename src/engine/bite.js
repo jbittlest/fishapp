@@ -1,12 +1,13 @@
 import L from 'leaflet';
+import { createStore } from 'zustand/vanilla';
 import { GPS, nmBetween } from './gps.js';
-import { escapeHtml } from './spots.js';
 import { MS_TO_FT, compass } from './weather.js';
 import { Astro } from './astro.js';
-import { Tides, nearestTideStation, ymd } from './tides.js';
+import { Tides, nearestTideStation, ymd, noaaTimeMs } from './tides.js';
 import { Catch } from './catch.js';
 import { Voice, voiceSay } from './voice.js';
-import { loadingHTML, readJSON, toast } from './app.js';
+import { getMap, readJSON } from './app.js';
+import { toast } from '../services/ui';
 
 /* Personal bite-pattern engine.
 
@@ -296,8 +297,11 @@ export async function biteTides(ll) {
       '&time_zone=lst_ldt&units=english&format=json&product=predictions&interval=hilo&station=' + st.id +
       '&begin_date=' + ymd(now) + '&end_date=' + ymd(end);
     const r = await fetch(url).then((x) => x.json());
-    const hl = (r.predictions || []).map((p) => ({ t: new Date(p.t.replace(' ', 'T')).getTime(), type: p.type }));
-    if (hl.length) localStorage.setItem(Bite.TIDE_CACHE, JSON.stringify({ hl, ts: Date.now(), lat: ll.lat, lng: ll.lng }));
+    // NOAA lst_ldt, parsed device-local (see noaaTimeMs in tides.js — never UTC)
+    const hl = (r.predictions || []).map((p) => ({ t: noaaTimeMs(p.t), type: p.type }));
+    /* Its own try: a full localStorage (quota) used to throw into the outer catch and
+       hand back the stale/empty fallback instead of the tides just fetched. */
+    if (hl.length) { try { localStorage.setItem(Bite.TIDE_CACHE, JSON.stringify({ hl, ts: Date.now(), lat: ll.lat, lng: ll.lng })); } catch (e) { /* use them uncached */ } }
     return hl;
   } catch (e) { return fallback; }
 }
@@ -305,7 +309,8 @@ export async function biteTides(ll) {
 /* ---- 4. Rank upcoming windows ---- */
 export async function biteWindows(opts) {
   opts = opts || {};
-  const ll = opts.at || (typeof GPS !== 'undefined' && GPS.lastLatLng) || (window._map && window._map.getCenter());
+  const map = getMap();
+  const ll = opts.at || (typeof GPS !== 'undefined' && GPS.lastLatLng) || (map && map.getCenter());
   if (!ll) return { error: 'no position' };
 
   const catches = biteCatches(opts);
@@ -324,8 +329,17 @@ export async function biteWindows(opts) {
      the wind, pressure, cloud and SST of somewhere hundreds of miles away, under a
      confident percentage. */
   const fc = biteForecast(ll);
+  /* Check the forecast BEFORE waiting on tides: with no forecast the answer is "no forecast"
+     either way, and the tide call is an 11-day NOAA request on a boat's one bar of signal.
+     But still WARM the bite tide cache in the background, as legacy did on every open with
+     signal: a later run with a cached forecast and no signal falls back to that cache, and
+     without it the three tide dimensions go unscored (coverage drops, windows vanish or
+     re-rank). biteTides is a no-op offline and serves its own 12 h cache. */
+  if (!fc) {
+    if (navigator.onLine) biteTides(ll).catch(() => { /* background warm-up only */ });
+    return { error: 'no forecast', confidence: conf };
+  }
   const tideHiLo = await biteTides(ll);
-  if (!fc) return { error: 'no forecast', confidence: conf };
 
   // Score each future hour out to the end of the forecast (cap ~7 days: beyond that the
   // forecast itself is model noise, as the 10-day tab already warns).
@@ -402,43 +416,71 @@ export function biteFmtWindow(w) {
   const t = (d) => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   return day + ', ' + t(s) + '–' + t(e);
 }
-/* ---- Panel rendering ---- */
+/* ---- Panel view state ----
+   The legacy renderBiteWindows wrote #bite-windows. It now publishes plain data and the Tides
+   panel (features/tides/TidesPanel) renders the copy. Statuses map 1:1 onto the legacy
+   branches: too few catches · no forecast · everything else → "nothing" · ranked windows. */
+/**
+ * @typedef {Object} BiteWindowView
+ * @property {number} startMs
+ * @property {number} endMs
+ * @property {number} score      0–1 (the best hour in the window)
+ * @property {number} pct        Math.round(score * 100)
+ * @property {string} label      biteFmtWindow — "Sat, Oct 25, 5:00 AM–8:00 AM"
+ * @property {string[]} reasons  up to 3 plain-English supporting reasons (biteReason)
+ */
+/**
+ * @typedef {Object} BiteView
+ * @property {'idle'|'loading'|'too-few'|'no-forecast'|'nothing'|'ready'} status
+ * @property {number} n           catches used (too-few: catches so far)
+ * @property {number} need        Bite.MIN_CATCHES
+ * @property {{ level: string, label: string }|null} confidence
+ * @property {BiteWindowView[]} windows   ranked by score, not time
+ */
+/** @type {import('zustand/vanilla').StoreApi<BiteView>} */
+export const biteStore = createStore(() => /** @type {BiteView} */ ({
+  status: 'idle', n: 0, need: Bite.MIN_CATCHES, confidence: null, windows: [],
+}));
+
+/* biteWindows() result → panel view. Pure. */
+/** @returns {BiteView} */
+export function biteViewFromResult(res) {
+  const base = { n: 0, need: Bite.MIN_CATCHES, confidence: null, windows: [] };
+  if (!res) return { ...base, status: 'nothing' };
+  if (res.error === 'too few') return { ...base, status: 'too-few', n: res.n || 0 };
+  if (res.error === 'no forecast') return { ...base, status: 'no-forecast' };
+  if (res.error || !res.windows || !res.windows.length) return { ...base, status: 'nothing' };
+  return {
+    ...base,
+    status: 'ready',
+    n: res.n,
+    /* Lead with the confidence caveat rather than burying it — with a handful of catches these
+       rankings are suggestive at best, and the UI should say so before the numbers. */
+    confidence: res.confidence ? { level: res.confidence.level, label: res.confidence.label } : null,
+    windows: res.windows.map((w) => ({
+      startMs: w.startMs, endMs: w.endMs, score: w.score,
+      pct: Math.round(w.score * 100),
+      label: biteFmtWindow(w),
+      reasons: w.best.hits.slice(0, 3).map(biteReason),
+    })),
+  };
+}
+
+/* Overlapping calls (panel open + a catch logged + StrictMode's double mount) used to race,
+   and whichever finished LAST painted — not whichever was asked for last. Each call takes a
+   ticket; only the newest one may publish. */
+let _biteReq = 0;
 export async function renderBiteWindows(opts) {
-  const box = document.getElementById('bite-windows');
-  if (!box) return;
   opts = opts || {};
-  box.innerHTML = (typeof loadingHTML === 'function') ? loadingHTML('Reading your catch history…') : 'Loading…';
+  const req = ++_biteReq;
+  biteStore.setState({ status: 'loading' });   // "Reading your catch history…"
   let res;
   try { res = await biteWindows({ days: 7, limit: 4, species: opts.species }); }
   catch (e) { res = { error: 'failed' }; }
-
-  if (res.error === 'too few') {
-    box.innerHTML = '<p class="hint">Log <b>' + Bite.MIN_CATCHES + '</b> or more catches and I\'ll learn the conditions that work for you, then rank the next week against them. You have <b>' +
-      res.n + '</b> so far.</p>';
-    return;
-  }
-  if (res.error === 'no forecast') {
-    box.innerHTML = '<p class="hint">Open the 10-day tab once with signal — I need a forecast to score against.</p>';
-    return;
-  }
-  if (res.error || !res.windows || !res.windows.length) {
-    box.innerHTML = '<p class="hint">Nothing in the next week closely matches your logged catches.</p>';
-    return;
-  }
-  /* Lead with the confidence caveat rather than burying it — with a handful of catches these
-     rankings are suggestive at best, and the UI should say so before the numbers. */
-  let html = '<p class="hint" style="margin-bottom:6px">Ranked against <b>' + res.n +
-    '</b> logged catches · ' + escapeHtml(res.confidence.label) + '</p>';
-  res.windows.forEach((w, i) => {
-    const pct = Math.round(w.score * 100);
-    const reasons = w.best.hits.slice(0, 3).map(biteReason).map(escapeHtml).join(' · ');
-    html += '<div class="bite-win' + (i === 0 ? ' top' : '') + '">' +
-      '<div class="bw-head"><b>' + escapeHtml(biteFmtWindow(w)) + '</b>' +
-      '<span class="bw-score">' + pct + '%</span></div>' +
-      (reasons ? '<div class="bw-why">' + reasons + '</div>' : '') + '</div>';
-  });
-  box.innerHTML = html;
+  if (req !== _biteReq) return;                // superseded by a newer call
+  biteStore.setState(biteViewFromResult(res));
 }
+export { renderBiteWindows as refreshBiteWindows };
 
 /* ---- Proactive conditions watch ----
    Speaks up unprompted when the sea is about to turn on you, instead of waiting to be asked.
@@ -514,10 +556,13 @@ export function biteForecast(ll) {
   return fc;
 }
 
+/* Words in place of the legacy warning emoji on the conditions-watch toast (see watchCheck). */
+export const WATCH_TOAST_PREFIX = 'Warning: ';
+
 export function watchCheck() {
   // Only relevant if we're actually out there: no fix, nothing to warn about.
   if (typeof GPS === 'undefined' || !GPS.lastLatLng) return null;
-  if (document.hidden) return null;
+  if (document.hidden) return null;   // page visibility (document-level, not app DOM)
   /* A safety warning has to be about HERE and about NOW. Unchecked, this could
      announce "wind is building, 22 knots by 4 PM" out loud, hands-free, from a
      three-day-old forecast for a different part of the coast. */
@@ -528,8 +573,14 @@ export function watchCheck() {
   if (Date.now() - last < Watch.COOLDOWN_MS) return null;      // already said this recently
   Watch._last[alert.type] = Date.now();
   // Speak it when hands-free is on (you're driving, not reading); otherwise toast it.
-  if (typeof Voice !== 'undefined' && Voice.on && typeof voiceSay === 'function') voiceSay(alert.msg);
-  else if (typeof toast === 'function') toast('⚠️ ' + alert.msg);
+  // (Never both.) The toast stays up long enough to read a two-sentence warning at the helm
+  // — the shared toast default is ~3 s.
+  /* The legacy toast led with a warning emoji, so a safety warning never looked like "Catch
+     logged". The app carries no emoji, so the signifier is a word (DESIGN.md §0.4: a glyph
+     and/or words), and `tone: 'alert'` asks the toast host for the alert icon, alert styling
+     and role="alert" (docs/requests/tides-bite-catch.md #8 — ignored until it lands). */
+  if (typeof Voice !== 'undefined' && Voice.on && typeof voiceSay === 'function') voiceSay(alert.msg, { ms: 9000 });   // on a device with no speech engine the text stays up as long as the toast would
+  else if (typeof toast === 'function') toast(WATCH_TOAST_PREFIX + alert.msg, { ms: 9000, tone: 'alert' });
   return alert;
 }
 

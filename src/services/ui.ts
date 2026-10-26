@@ -14,7 +14,7 @@ export type PanelId =
 
 export type Detent = 'medium' | 'full';
 
-export interface ToastState { id: number; msg: string; action?: { label: string; run: () => void }; ms: number }
+export interface ToastState { id: number; msg: string; action?: { label: string; run: () => void }; ms: number; tone?: 'alert'; until: number }
 
 /** A map selection shown as a docked card (tap-to-inspect, a reef, a spot, a catch, a sighting…).
  *  `kind` selects the renderer registered in shell/cards.ts; `data` is that renderer's props. */
@@ -29,6 +29,8 @@ export interface DialogState {
   confirmLabel?: string;
   cancelLabel?: string;
   destructive?: boolean;
+  /** false: a backdrop tap does nothing (a decision that must be made on purpose, e.g. AI consent) */
+  dismissible?: boolean;
   fields?: DialogField[];
   resolve: (v: any) => void;
 }
@@ -111,7 +113,10 @@ export function normalizePanelId(id: string): PanelId {
 
 /* ----------------------------------------------------------------- cards */
 export function openCard(kind: string, data: any, latlng?: { lat: number; lng: number }): void {
-  uiStore.setState({ card: { id: seq++, kind, data, latlng } });
+  /* On a phone the card docks where an open sheet is, so the sheet steps aside (the legacy app
+     closed panels when it flew to a reef/catch/spot too). On desktop they sit side by side. */
+  const phone = typeof window !== 'undefined' && window.innerWidth < 900;
+  uiStore.setState(phone ? { card: { id: seq++, kind, data, latlng }, panel: null, panelData: null } : { card: { id: seq++, kind, data, latlng } });
 }
 export function closeCard(kind?: string): void {
   const c = uiStore.getState().card;
@@ -137,10 +142,13 @@ export function closeModal(name?: string): void {
 
 /* ----------------------------------------------------------------- toast */
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
-/** One slot, last writer wins (legacy behaviour — boot notices relied on it). */
-export function toast(msg: string, opts: { action?: ToastState['action']; ms?: number } = {}): void {
-  const ms = opts.ms ?? (opts.action ? 5000 : 3200);
-  const t: ToastState = { id: seq++, msg: stripEmoji(String(msg)), action: opts.action, ms };
+/** One slot, last writer wins (legacy behaviour — boot notices relied on it) — EXCEPT that a plain
+ *  toast never replaces a safety warning (tone 'alert') that is still on screen. */
+export function toast(msg: string, opts: { action?: ToastState['action']; ms?: number; tone?: 'alert' } = {}): void {
+  const ms = opts.ms ?? (opts.action ? 5000 : opts.tone === 'alert' ? 9000 : 3200);
+  const cur = uiStore.getState().toast;
+  if (cur && cur.tone === 'alert' && opts.tone !== 'alert' && Date.now() < cur.until) return;
+  const t: ToastState = { id: seq++, msg: stripEmoji(String(msg)), action: opts.action, ms, tone: opts.tone, until: Date.now() + ms };
   uiStore.setState({ toast: t });
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { if (uiStore.getState().toast?.id === t.id) uiStore.setState({ toast: null }); }, ms);
@@ -169,7 +177,7 @@ function pushDialog<T>(d: Omit<DialogState, 'id' | 'resolve'>): Promise<T> {
 
 /** In-app replacement for window.confirm(). ASYNC: callers must re-check any state they rely on
  *  after the await (a GPS fix, a connection, an arm state can all change while it is open). */
-export function confirmDialog(opts: { title: string; message?: string; confirmLabel?: string; cancelLabel?: string; destructive?: boolean }): Promise<boolean> {
+export function confirmDialog(opts: { title: string; message?: string; confirmLabel?: string; cancelLabel?: string; destructive?: boolean; dismissible?: boolean }): Promise<boolean> {
   return pushDialog<boolean>({ kind: 'confirm', ...opts });
 }
 

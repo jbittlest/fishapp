@@ -1,0 +1,75 @@
+/* Guides panel (knots, fish ID & limits). Tokens only. */
+
+.guide-seg { margin: 2px 0 14px; }
+.guide-intro { margin: 0 2px 10px; }
+
+/* ---- accordion rows (ui Disclosure inside a ui Group) ---- */
+.guide-row .ui-disc__sum { min-height: 56px; padding: 8px 14px; }
+.guide-sum { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.guide-sum__lead { display: grid; place-items: center; width: 28px; flex-shrink: 0; color: var(--text-2); }
+.guide-sum__main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.guide-sum__title { font: 600 15px/20px var(--font-ui); color: var(--text-1); overflow-wrap: anywhere; }
+.guide-sum__sub { font: 500 13px/18px var(--font-ui); color: var(--text-2); overflow-wrap: anywhere; }
+.guide-row.is-open .guide-sum__lead, .guide-row.is-open .guide-sum__title { color: var(--signal-fg); }
+.guide-row .ui-disc__body { padding: 2px 14px 16px; }
+
+.guide-level { margin: 0 0 12px; font: 600 12px/16px var(--font-ui); letter-spacing: .02em; color: var(--text-2); }
+
+/* ---- illustrated steps ---- */
+.guide-frames {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 14px 12px;
+}
+.guide-frame { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.guide-art { border-radius: var(--r-sm); overflow: hidden; }
+.guide-art svg { display: block; width: 100%; height: auto; aspect-ratio: 2 / 1; }
+.guide-cap { display: flex; gap: 6px; align-items: baseline; margin: 0; font: 400 14px/20px var(--font-ui); color: var(--text-1); }
+.guide-cap__n { flex-shrink: 0; color: var(--signal-fg); }
+.guide-cap__n .ui-num { color: inherit; }
+.guide-steps { margin: 0; padding-left: 20px; font: 400 15px/22px var(--font-ui); color: var(--text-1); }
+.guide-steps li { margin-bottom: 6px; }
+
+/* KnotArt (engine/knot-diagrams.js) draws with fixed colours as SVG attributes, and its strings
+   must stay byte-identical (they are snapshot-tested). CSS properties beat presentation
+   attributes, so the colours are remapped to the theme here by matching those attributes:
+   blue = standing line, orange = tag end, grey = hook eye / spool, faint rect = frame. */
+.guide-art rect[fill="rgba(255,255,255,0.04)"] { fill: var(--sheet); }
+.guide-art [stroke="#4aa3e0"], .guide-sw--line { stroke: var(--text-1); }
+.guide-art [fill="#4aa3e0"] { fill: var(--text-1); }
+.guide-art [stroke="#e8b23d"], .guide-sw--tag { stroke: var(--signal-fg); }
+.guide-art [fill="#e8b23d"] { fill: var(--signal-fg); }
+.guide-art [stroke="#9fb3c8"], .guide-sw--eye { stroke: var(--text-3); }
+/* Night is red monochrome: the standing line and the tag would be the same red, so the
+   standing line is told apart by luminance instead (the key below matches). */
+:root[data-theme="night"] .guide-art [stroke="#4aa3e0"], :root[data-theme="night"] .guide-sw--line { stroke-opacity: .45; }
+:root[data-theme="night"] .guide-art [fill="#4aa3e0"] { fill-opacity: .45; }
+
+/* ---- diagram key ---- */
+.guide-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 2px 16px; font: 500 12.5px/16px var(--font-ui); color: var(--text-2); }
+.guide-legend__item { display: inline-flex; align-items: center; gap: 6px; }
+.guide-legend svg { width: 22px; height: 8px; flex-shrink: 0; overflow: visible; }
+.guide-sw { fill: none; stroke-width: 3.5; stroke-linecap: round; }
+
+/* ---- tips and notes ---- */
+.guide-tip {
+  display: flex; gap: 8px; align-items: flex-start; margin: 14px 0 0; padding: 10px 12px;
+  border-radius: var(--r-md); background: var(--control); font: 400 14px/20px var(--font-ui); color: var(--text-1);
+}
+.guide-tip > .ui-icon { flex-shrink: 0; margin-top: 2px; color: var(--text-2); }
+.guide-tip--legal > .ui-icon { color: var(--signal-fg); }
+
+/* ---- fish ---- */
+.guide-id { margin: 0 0 12px; font: 400 15px/22px var(--font-ui); color: var(--text-1); }
+.guide-facts { margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.guide-facts__cell { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.guide-facts dd { margin: 0; font: 600 15px/20px var(--font-inst); font-variant-numeric: tabular-nums; color: var(--text-1); overflow-wrap: anywhere; }
+
+/* Inline link inside the notice sentence. Its text line is ~20 px tall, so an invisible hit
+   extension takes the target to the 44 px minimum (DESIGN.md §3) without changing the layout. */
+.guide-link {
+  position: relative; display: inline; padding: 0; margin: 0; background: none; border: 0;
+  font: inherit; font-weight: 600; color: var(--signal-fg); text-decoration: underline; text-underline-offset: 2px;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.guide-link::after { content: ''; position: absolute; inset: -12px -6px; }
+.guide-regs-btn { display: block; margin-top: 10px; }

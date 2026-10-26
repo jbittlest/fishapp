@@ -1,6 +1,7 @@
 /* Modal, in-app dialogs (confirm/prompt/alert) and the toast. */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button, Field, TextInput } from './primitives';
+import { Icon } from './Icon';
 import { dismissToast, useUi, type DialogState } from '../services/ui';
 
 export interface ModalProps {
@@ -48,7 +49,7 @@ function DialogView({ d }: { d: DialogState }) {
   const cancel = () => d.resolve(d.kind === 'confirm' ? false : d.kind === 'prompt' ? null : undefined);
   const ok = () => d.resolve(d.kind === 'confirm' ? true : d.kind === 'prompt' ? vals : undefined);
   return (
-    <div className="ui-modal-wrap" onClick={(e) => { if (e.target === e.currentTarget) cancel(); }}>
+    <div className="ui-modal-wrap" onClick={(e) => { if (e.target === e.currentTarget && d.dismissible !== false) cancel(); }}>
       <div className="ui-modal surface-paper" role="alertdialog" aria-modal="true" aria-label={d.title}>
         <h2 className="ui-title-1 ui-modal__title">{d.title}</h2>
         {d.message && <p className="ui-modal__msg">{d.message}</p>}
@@ -82,7 +83,8 @@ export function ToastHost() {
   const t = useUi((s) => s.toast);
   if (!t) return null;
   return (
-    <div className="ui-toast" role="status" aria-live="polite" key={t.id}>
+    <div className={'ui-toast' + (t.tone === 'alert' ? ' ui-toast--alert' : '')} role={t.tone === 'alert' ? 'alert' : 'status'} aria-live={t.tone === 'alert' ? 'assertive' : 'polite'} key={t.id}>
+      {t.tone === 'alert' && <Icon name="alert" size={18} className="ui-toast__icon" />}
       <span className="ui-toast__msg">{t.msg}</span>
       {t.action && <button type="button" className="ui-toast__action" onClick={() => { t.action!.run(); dismissToast(); }}>{t.action.label}</button>}
     </div>

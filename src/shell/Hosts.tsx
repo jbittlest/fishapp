@@ -28,7 +28,9 @@ export function SheetHost() {
     <Boundary resetKey={panel} fallback={(reset, e) => (
       <Sheet title={title}><StateBox icon="alert" tone="alert" onRetry={reset}>This section hit a problem: {errText(e)}</StateBox></Sheet>
     )}>
-      <Suspense fallback={<Sheet title={title}><LoadingRow /></Sheet>}>
+      {/* keyed per panel: switching panels drops the old sheet at once instead of React keeping it
+          mounted-but-hidden while the next panel's chunk loads */}
+      <Suspense key={panel} fallback={<Sheet title={title}><LoadingRow /></Sheet>}>
         <P key={panel} />
       </Suspense>
     </Boundary>

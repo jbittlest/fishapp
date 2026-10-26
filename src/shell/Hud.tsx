@@ -14,7 +14,7 @@ import { Num, Spinner, useStoreValue } from '../ui';
 import { gpsStore, formatCoord, GPS_STALE_MS } from '../engine/gps.js';
 import { conditionsStore } from '../engine/weather.js';
 import { layersStore } from '../engine/layers.js';
-import { useUi } from '../services/ui';
+import { openPanel, useUi } from '../services/ui';
 
 function useNow(ms: number) {
   const [now, setNow] = useState(() => Date.now());
@@ -103,10 +103,20 @@ export function Hud({ compact }: { compact?: boolean }) {
           <span className="ui-label">COG</span>
           <Num value={cogShown} digits={0} deg="°T" stale={stale || cogNoisy} />
         </div>
-        <div className="shell-hud__cell">
-          <span className="ui-label">Water</span>
-          <Num value={waterOk ? waterF : null} digits={0} deg="°F" />
-        </div>
+        {waterOk ? (
+          <div className="shell-hud__cell">
+            <span className="ui-label">Water</span>
+            <Num value={waterF} digits={0} deg="°F" />
+          </div>
+        ) : (
+          /* Water temp is only fetched while a weather feature is in use (privacy: the boat's
+             position isn't sent anywhere until you ask). The dash is a door to Weather, not a fault. */
+          <button type="button" className="shell-hud__cell shell-hud__cell--btn" onClick={() => openPanel('weather')}
+            aria-label="Water temperature not loaded — open Weather">
+            <span className="ui-label">Water</span>
+            <Num value={null} digits={0} empty="—" />
+          </button>
+        )}
       </div>
     </div>
   );
