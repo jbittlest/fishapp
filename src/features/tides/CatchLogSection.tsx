@@ -46,7 +46,7 @@ export function CatchLogSection() {
   } else if (!loaded && !items.length) {
     list = <LoadingRow>Loading your catches…</LoadingRow>;
   } else if (!items.length) {
-    list = <StateBox icon="fish">No catches logged yet. Land one and tap Log a catch.</StateBox>;
+    list = <div className="tide-catch__empty"><StateBox icon="fish">No catches logged yet. Land one and tap Log a catch.</StateBox></div>;
   } else {
     list = groupByMonth(items).map((g) => (
       <div key={g.key} className="tide-catch__month">

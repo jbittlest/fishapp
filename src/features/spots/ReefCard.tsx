@@ -1,7 +1,7 @@
 /* Map card for an artificial reef (replaces the Leaflet popup): name, reef depth and make-up from
  * the bundled CDFW data, then live wind / swell / water / seabed fetched for the reef's position
  * (engine openReefCard → inspect.js queryPointData, results pushed into this card's data). */
-import { Button, DirectionDial, KeyValues, Num, Spinner, StatTile, type IconName } from '../../ui';
+import { Button, DirectionDial, Num, Spinner, StatTile, type IconName } from '../../ui';
 import { MapCard } from '../../shell/MapCard';
 import type { CardProps } from '../../shell/registry';
 import { useUi } from '../../services/ui';
@@ -36,12 +36,10 @@ export default function ReefCard({ data }: CardProps) {
 
   const subtitle = distNm != null && brgDeg != null ? (
     <span className="spot-meta">
-      <Num value={distNm} digits={2} unit="nm" size="row" stale={!fix.live} /> · <Num value={brgDeg} deg="°T" size="row" stale={!fix.live} /> {fromText(fix)}
+      <Num value={distNm} digits={2} unit="nm" size="row" stale={!fix.live} /><span className="spot-meta__sep">·</span><Num value={brgDeg} deg="°T" size="row" stale={!fix.live} /> <span className="spot-meta__from">{fromText(fix)}</span>
     </span>
   ) : 'No GPS fix — distance unknown';
 
-  const facts = [] as Array<{ k: string; v: React.ReactNode; key: string }>;
-  if (r.d) facts.push({ key: 'd', k: 'Reef depth', v: <Num value={r.d} unit="ft" size="row" /> });
 
   return (
     <MapCard eyebrow="Artificial reef" title={r.n} subtitle={subtitle}
@@ -51,14 +49,21 @@ export default function ReefCard({ data }: CardProps) {
           <Button icon="pin-plus" onClick={() => saveReefAsSpot(r)}>Save as spot</Button>
         </>
       )}>
-      {facts.length > 0 && <KeyValues className="spot-facts" items={facts} />}
-      {r.c && <p className="spot-card__notes">{r.c}</p>}
+      {/* The bundled CDFW facts in one line (depth, then what the reef is made of), so the four
+          live tiles fit a phone card without scrolling. */}
+      {(r.d || r.c) && (
+        <p className="spot-reef__facts">
+          {r.d ? <span className="spot-reef__depth"><Num value={r.d} unit="ft" size="row" /> reef depth</span> : null}
+          {r.d && r.c ? <span className="spot-meta__sep">·</span> : null}
+          {r.c && <span>{r.c}</span>}
+        </p>
+      )}
 
       <div className="spot-live">
         <LiveTile icon="wind" label="Wind" c={wind}
           value={() => <Num value={wind.kn} unit="kn" size="s" />}
           detail={wind.dir + (wind.gustKn != null ? ' · gust ' + wind.gustKn : '')}
-          dial={<DirectionDial towardDeg={wind.towardDeg} size={30} label={wind.towardDeg != null ? `wind toward ${Math.round(wind.towardDeg)}°` : undefined} />} />
+          dial={<DirectionDial towardDeg={wind.towardDeg} size={26} label={wind.towardDeg != null ? `wind toward ${Math.round(wind.towardDeg)}°` : undefined} />} />
         <LiveTile icon="waves" label="Swell" c={swell}
           value={() => <Num value={swell.ft} digits={1} unit="ft" size="s" />}
           detail={(swell.periodS != null ? swell.periodS + ' s · ' : '') + (swell.dir ?? '')} />
@@ -69,7 +74,7 @@ export default function ReefCard({ data }: CardProps) {
           detail={seabed.m != null ? `${seabed.m.toFixed(1)} m · ${(seabed.fa ?? 0).toFixed(1)} fa` : undefined} />
       </div>
       {canRetry && (
-        <Button className="spot-live__retry" icon="refresh" onClick={() => openReefCard(r)}>Retry live conditions</Button>
+        <Button className="spot-live__retry" variant="ghost" compact block icon="refresh" onClick={() => openReefCard(r)}>Retry live conditions</Button>
       )}
     </MapCard>
   );

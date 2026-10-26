@@ -669,7 +669,30 @@ export function asstAnsTides(q) {
     const lines = show.map((p) => (p.type === 'High' ? 'High' : 'Low ') + '  ' + p.time + '   ' + p.ft + ' ft');
     return 'Tides — ' + a.data.tides.station + ' (' + when.label + ', downloaded ' + asstAgo(a.data.capturedTs) + '):\n' + lines.join('\n');
   }
+  /* No downloaded area here — but the Tides panel caches the nearest station's NOAA high/low
+     predictions on the phone. They're astronomical, so a saved copy stays right for days:
+     answer from it before telling the user to go and fetch tides. */
+  const cachedAnswer = asstTidesFromPanelCache(q);
+  if (cachedAnswer) return cachedAnswer;
   return "I don't have tide predictions offline for here. Download this area while online — it now captures a week of tides — or open the Tides panel with signal.";
+}
+export function asstTidesFromPanelCache(q) {
+  const pos = asstPos();
+  const st = pos && pos.ll && typeof nearestTideStation === 'function' ? nearestTideStation(pos.ll) : null;
+  if (!st || !st.id) return null;
+  let cached;
+  try { cached = JSON.parse(localStorage.getItem('fishapp.tides.' + st.id) || 'null'); } catch (e) { cached = null; }
+  const hl = cached && Array.isArray(cached.hl) ? cached.hl : [];
+  if (!hl.length) return null;
+  const ms = (p) => new Date(String(p.t).replace(' ', 'T')).getTime();   // station-local, parsed as device-local (same assumption as tides.js)
+  const t = (q || '').toLowerCase();
+  const when = asstParseWhen(t);
+  const day = asstYmd(new Date(when.ms));
+  let rows = /tomorrow|tonight|today|this /.test(t) ? hl.filter((p) => String(p.t).slice(0, 10) === day) : [];
+  if (!rows.length) rows = hl.filter((p) => ms(p) >= when.ms).slice(0, 4);
+  if (!rows.length) return null;
+  const lines = rows.map((p) => (p.type === 'H' ? 'High' : 'Low ') + '  ' + String(p.t).slice(11, 16) + '   ' + p.v + ' ft');
+  return 'Tides — ' + (st.n || 'nearest station') + ' (' + when.label + ', saved ' + asstAgo(cached.ts) + '):\n' + lines.join('\n');
 }
 export function asstAnsFishHistory(t) {
   const a = asstAreaPack();

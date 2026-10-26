@@ -34,7 +34,7 @@ export function MotorBand() {
         </span>
       </button>
       {hasStop ? (
-        <Button variant="destructive" icon="stop" className="motor-band__stop" onClick={() => motorStop('stop button')}>STOP</Button>
+        <Button variant="destructive" icon="stop" className="motor-band__stop motor-stopglyph" onClick={() => motorStop('stop button')}>STOP</Button>
       ) : (
         <Button variant="destructive" icon="lock" className="motor-band__stop" onClick={() => motorStop('user')}>Disarm</Button>
       )}

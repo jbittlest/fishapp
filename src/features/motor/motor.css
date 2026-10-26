@@ -35,6 +35,10 @@
   background: var(--signal-soft); color: var(--signal-fg); box-shadow: inset 0 0 0 1.5px var(--signal);
 }
 .motor-arm:not(.is-armed):active:not(:disabled) { background: var(--selected); }
+/* Can't arm yet (not connected): read as "not yet", not as a muddy 40% amber. */
+.motor-arm:not(.is-armed):disabled {
+  opacity: 1; background: var(--control); color: var(--text-3); box-shadow: inset 0 0 0 1px var(--line-2);
+}
 
 /* The ARMED pulse. Marked .keep-motion in the markup: a safety signal animates even under
    prefers-reduced-motion. Drawn on a pseudo-element ring so it never moves the layout. */
@@ -58,7 +62,20 @@
 .motor-deadman__text { flex: 1; min-width: 0; font: 500 14px/19px var(--font-ui); color: var(--text-2); }
 .motor-deadman__warn { display: block; margin-top: 2px; color: var(--alert-text); font-weight: 600; }
 .motor-deadman__stop { flex-shrink: 0; min-width: 104px; }
+/* STOP wears a solid square (the universal stop mark); the outline square read as a checkbox */
+.motor-stopglyph .ui-icon { fill: currentColor; }
 .motor-safety-note { margin-top: 12px; }
+.motor-safety-note .ui-notice { margin-bottom: 0; }
+/* safety copy reads at full strength, not as secondary grey */
+.motor-safety-note--limits .ui-notice__body { color: var(--text-1); }
+/* What STOP does (or that there is no STOP): a glyph-led note under the limits notice. */
+.motor-stopnote {
+  display: flex; gap: 12px; align-items: flex-start; margin-top: 10px; padding: 12px 14px;
+  border-radius: var(--r-lg); background: var(--raised); box-shadow: inset 0 0 0 1px var(--line);
+}
+.motor-stopnote > .ui-icon { flex-shrink: 0; margin-top: 1px; color: var(--text-2); }
+.motor-stopnote > p { margin: 0; font: 500 14px/20px var(--font-ui); color: var(--text-1); }
+.motor-stopnote--missing > .ui-icon { color: var(--alert-text); }
 .ui-btn.motor-legacy-stop { margin-top: 10px; }
 
 /* --------------------------------------------------------------- profile */
@@ -67,13 +84,22 @@
   font-size: 16px;   /* ≥16px: iOS never zooms on focus */
   letter-spacing: 0;
 }
+/* A placeholder UUID must never pass for a saved one — at night the two text levels are close,
+   so the hint is dimmed further (luminance only; stays red-safe). */
+:root[data-theme="night"] .motor-mono::placeholder { opacity: .55; }
 
 /* -------------------------------------------------------------- commands */
 .motor-cmds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
 .motor-cmds .ui-btn { padding-left: 12px; padding-right: 12px; }
+/* STOP: the only solid red command — first and full width, wherever it sits in the profile. */
+.motor-cmds .ui-btn.motor-cmd--stop { grid-column: 1 / -1; order: -1; min-height: 52px; font-size: 16px; font-weight: 700; letter-spacing: .02em; }
+/* Can move the boat: outlined in alert with the triangle — never mistaken for an emergency stop. */
+.motor-cmds .ui-btn.motor-cmd--danger { background: var(--raised); box-shadow: inset 0 0 0 1.5px var(--alert); }
+.motor-cmds .ui-btn.motor-cmd--danger .ui-icon { color: var(--alert-text); }
 
 /* ----------------------------------------------------------------- recon */
-.motor-recon { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+/* one full-width column: "Mark what I just did" no longer breaks over two lines beside a half-empty row */
+.motor-recon { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 .motor-count { margin: 10px 2px 0; font: 500 13px/18px var(--font-ui); color: var(--text-2); }
 .motor-count .ui-num { color: var(--text-1); }
 

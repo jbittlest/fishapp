@@ -4,7 +4,19 @@
 
 /* ---------------------------------------------------------------- bite windows */
 .tide-bite__caveat { margin: 0 2px 10px; }
-.tide-bite__cta { margin-top: 10px; }
+/* not-yet states (too few catches, no forecast, nothing matches): one raised card, so the
+   explanation, the progress and the next step read as a unit */
+.tide-bite__card {
+  display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: var(--r-lg);
+  background: var(--raised); box-shadow: inset 0 0 0 1px var(--line);
+}
+.tide-bite__card .ui-hint { margin: 0; text-wrap: pretty; }
+.tide-bite__meter { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.tide-bite__count { display: inline-flex; align-items: baseline; gap: 5px; }
+.tide-bite__of { font: 500 13px/18px var(--font-ui); color: var(--text-2); }
+.tide-bite__cta { margin-top: 2px; }
+/* a secondary button on a raised card needs one more step of fill to read as a shape (night) */
+.tide-bite__card .ui-btn--secondary { background: var(--selected); }
 .tide-bw { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .tide-bw__item {
   padding: 12px 14px; border-radius: var(--r-lg); background: var(--raised);
@@ -13,37 +25,51 @@
 .tide-bw__item.is-top { box-shadow: inset 0 0 0 1.5px var(--line-2); }
 .tide-bw__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .tide-bw__when { font: 600 15px/20px var(--font-ui); color: var(--text-1); font-variant-numeric: tabular-nums; min-width: 0; overflow-wrap: anywhere; }
-.tide-bw__score { display: inline-flex; align-items: baseline; gap: 1px; flex-shrink: 0; }
+.tide-bw__score { display: inline-flex; align-items: baseline; gap: 0; flex-shrink: 0; }
 .tide-bw__pct { font: 500 12px/16px var(--font-ui); color: var(--text-2); }
-.tide-bw__tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.tide-bw__why { margin-top: 6px; font: 500 13px/18px var(--font-ui); color: var(--text-2); }
+.tide-bw__meter { display: block; height: 4px; margin-top: 8px; border-radius: 2px; background: var(--control); overflow: hidden; }
+.tide-bw__meter > span { display: block; height: 100%; border-radius: 2px; background: var(--text-3); }
+.tide-bw__item.is-top .tide-bw__meter > span { background: var(--signal); }
+.tide-bw__tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.tide-bw__why { margin-top: 8px; font: 500 13px/18px var(--font-ui); color: var(--text-2); }
 
 /* -------------------------------------------------------------------- solunar */
 .tide-sol .ui-row__title { display: inline-flex; align-items: center; gap: 8px; }
 .tide-sol .ui-badge { height: 20px; padding: 0 7px; font-size: 11px; }
-.tide-sol.is-active { background: var(--signal-soft); }
+/* the live period: soft signal fill + a crisp signal hairline (beats the group's row divider) */
+.ui-group > .tide-sol.is-active { background: var(--signal-soft); box-shadow: inset 0 0 0 1.5px var(--signal-fg); }
+.tide-sol.is-active .ui-row__trail { color: var(--text-1); }
 .tide-sol.is-active .ui-row__lead { color: var(--signal-fg); }
 /* past solunar periods and the high/low that just went by: dimmed (scoped — never a bare .ui-row rule) */
-.tide-sol.is-past, .tide-hilo__row.is-past { opacity: .45; }
+.tide-sol.is-past, .tide-hilo__row.is-past { opacity: .5; }
 
 /* ----------------------------------------------------------------- sun & moon */
 .tide-kv-k { display: inline-flex; align-items: center; gap: 8px; }
 .tide-kv-k .ui-icon { color: var(--text-3); }
-.tide-kv-unit { margin-left: 1px; font: 500 13px/18px var(--font-ui); color: var(--text-2); }
+.tide-kv-unit { margin-left: 0; font: 500 13px/18px var(--font-ui); color: var(--text-2); }
 
 /* ----------------------------------------------------------------------- tide */
-.tide-station { display: flex; align-items: center; gap: 12px; margin: 0 2px 10px; }
+.tide-station { display: flex; align-items: center; gap: 12px; margin: 0 2px 12px; }
 .tide-station__icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--r-md); background: var(--raised); color: var(--text-2); box-shadow: inset 0 0 0 1px var(--line); flex-shrink: 0; }
 .tide-station__text { flex: 1; min-width: 0; }
 .tide-station__name { font: 600 16px/21px var(--font-ui); color: var(--text-1); overflow-wrap: anywhere; }
 
-.tide-now { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; margin: 0 2px 8px; }
-.tide-now__label { color: var(--text-3); }
-.tide-now__dir { display: inline-flex; align-items: center; gap: 4px; font: 600 14px/18px var(--font-ui); color: var(--text-1); align-self: center; }
-.tide-now__next { margin-left: auto; font: 500 13px/18px var(--font-ui); color: var(--text-2); }
+/* now / direction / next turn strip (StatStrip) */
+.tide-now { margin: 0 0 8px; }
+.tide-now .ui-strip__cell { padding: 10px 12px 11px; }
+.tide-now .ui-strip__cell > .ui-label { display: flex; align-items: center; height: 14px; }
+.tide-now .ui-strip__v { display: flex; align-items: center; height: 24px; }
+.tide-now__key { display: inline-flex; align-items: center; gap: 6px; }
+.tide-now__key::before {   /* the chart's now-marker, as a legend key */
+  content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--signal);
+  box-shadow: 0 0 0 1.5px var(--raised), 0 0 0 2.5px var(--signal-fg);
+}
+.tide-now__dir { display: inline-flex; align-items: center; gap: 4px; }
+.tide-now__dir .ui-icon { color: var(--text-2); }
+.tide-now .tide-time { font-weight: 600; }
 
 .tide-chart {
-  margin: 0 0 12px; padding: 4px 0 6px; border-radius: var(--r-lg); background: var(--raised);
+  margin: 0 0 18px; padding: 6px 0 8px; border-radius: var(--r-lg); background: var(--raised);
   box-shadow: inset 0 0 0 1px var(--line); overflow: hidden;
 }
 .tide-chart__plot { position: relative; margin: 0 8px; }
@@ -51,38 +77,56 @@
 .tide-chart__grid { stroke: var(--line-2); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .tide-chart__area { fill: var(--series); fill-opacity: .45; stroke: none; }
 .tide-chart__line { fill: none; stroke: var(--text-2); stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
-.tide-chart__now { stroke: var(--signal); stroke-width: 1.5; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
-.tide-chart__mark { position: absolute; width: 0; height: 0; }
+/* --signal-fg, not --signal: amber on paper (sun) is darkened to keep its contrast */
+.tide-chart__now { stroke: var(--signal-fg); stroke-width: 1.5; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
+/* extremes: hollow rings (now is a solid target — the two differ by shape, not only colour) */
 .tide-chart__dot {
-  position: absolute; left: -4px; top: -4px; width: 8px; height: 8px; border-radius: 50%;
-  background: var(--text-1); box-shadow: 0 0 0 2px var(--raised);
+  position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%;
+  background: var(--raised); box-shadow: inset 0 0 0 2px var(--text-1);
 }
 .tide-chart__lbl {
-  position: absolute; left: 0; transform: translateX(-50%);
+  position: absolute; transform: translateX(-50%);
   display: flex; flex-direction: column; align-items: center; white-space: nowrap;
+  padding: 1px 4px; border-radius: var(--r-xs); background: var(--raised);   /* knockout: lines pass behind */
   font: 500 11px/13px var(--font-inst); font-variant-numeric: tabular-nums; color: var(--text-2);
 }
 .tide-chart__t { font-weight: 600; font-size: 12px; line-height: 14px; color: var(--text-1); }
-.tide-chart__mark.is-high .tide-chart__lbl { bottom: 8px; }
-.tide-chart__mark.is-low .tide-chart__lbl { top: 8px; flex-direction: column-reverse; }
-.tide-chart__mark.is-start .tide-chart__lbl { transform: translateX(-6px); align-items: flex-start; }
-.tide-chart__mark.is-end .tide-chart__lbl { transform: translateX(calc(-100% + 6px)); align-items: flex-end; }
+.tide-chart__lbl.is-high { transform: translate(-50%, -100%); }
+.tide-chart__lbl.is-low { flex-direction: column-reverse; }
+.tide-chart__lbl.is-start { align-items: flex-start; transform: translateX(-10px); }
+.tide-chart__lbl.is-end { align-items: flex-end; transform: translateX(calc(-100% + 10px)); }
+.tide-chart__lbl.is-high.is-start { transform: translate(-10px, -100%); }
+.tide-chart__lbl.is-high.is-end { transform: translate(calc(-100% + 10px), -100%); }
 .tide-chart__nowdot {
-  position: absolute; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%;
-  background: var(--signal); box-shadow: 0 0 0 2px var(--raised);
+  position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%;
+  background: var(--signal); box-shadow: 0 0 0 2px var(--raised), 0 0 0 3.5px var(--signal-fg);
 }
-.tide-chart__axis { position: relative; height: 16px; margin: 2px 8px 0; }
+.tide-chart__axis { position: relative; height: 16px; margin: 4px 8px 0; }
 .tide-chart__axis > span {
   position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap;
   font: 500 11px/16px var(--font-inst); font-variant-numeric: tabular-nums; color: var(--text-3);
 }
-.tide-hilo .ui-row__trail { gap: 14px; color: var(--text-1); }
-.tide-hilo .ui-row__trail .tide-time { min-width: 66px; text-align: right; }
+.tide-chart__axis > .tide-chart__axisnow { font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--signal-fg); }
+.tide-chart__axis > .tide-chart__axisnow.is-start { transform: none; }
+.tide-chart__axis > .tide-chart__axisnow.is-end { transform: translateX(-100%); }
+
+/* highs and lows, grouped by day */
+.tide-hilo__day + .tide-hilo__day { margin-top: 14px; }
+.tide-hilo__daylabel { margin: 0 2px 8px; color: var(--text-3); }
+.tide-hilo__row .ui-row__title { display: inline-flex; align-items: center; gap: 8px; }
+.tide-hilo__row .ui-badge { height: 20px; padding: 0 7px; font-size: 11px; }
+.tide-hilo .ui-row__trail { gap: 12px; align-items: baseline; color: var(--text-1); }
+.tide-hilo .ui-row__trail .tide-time { min-width: 68px; text-align: right; }
+.tide-hilo__ft { display: inline-block; min-width: 54px; text-align: right; }   /* one right edge for the time column */
+.tide-hilo__row.is-past .ui-row__lead { color: var(--text-3); }
 
 /* ------------------------------------------------------------------ catch log */
 .tide-catch__stats { margin: 0 2px 12px; font: 500 14px/20px var(--font-ui); color: var(--text-2); overflow-wrap: anywhere; }
 .tide-catch__stats b { color: var(--text-1); font-weight: 700; }
 .tide-catch__list { margin-top: 14px; }
+.tide-catch__empty { border-radius: var(--r-lg); background: var(--raised); box-shadow: inset 0 0 0 1px var(--line); }
+.tide-catch__empty > .ui-state { padding: 18px 16px 20px; gap: 8px; }
+.tide-catch__empty .ui-state__msg { text-wrap: balance; }
 .tide-catch__month + .tide-catch__month { margin-top: 12px; }
 .tide-catch__monthlabel { margin: 0 2px 8px; color: var(--text-3); }
 .tide-catch__row { display: flex; align-items: center; gap: 4px; padding-right: 8px; min-height: 64px; }
@@ -103,9 +147,11 @@
 .tide-catch__acts { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }   /* ≥12 px: Navigate vs Delete */
 
 /* ---------------------------------------------------------------- catch modal */
+/* scrolling a field into view (focus) stops above the on-screen keyboard (--kb, shell) */
+.ui-modal-wrap:has(.tide-form) { scroll-padding: 16px 0 calc(var(--kb, 0px) + 20px); }
 .tide-form__pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .tide-photo { display: flex; flex-direction: column; gap: 10px; }
-.tide-photo__img { display: block; max-width: 100%; max-height: 220px; width: auto; border-radius: var(--r-md); object-fit: cover; align-self: flex-start; }
+.tide-photo__img { display: block; width: 100%; height: 180px; border-radius: var(--r-md); object-fit: cover; }
 .tide-photo__btns { display: flex; flex-wrap: wrap; gap: 8px; }
 .tide-photo__btns > .ui-btn { flex: 1 1 auto; }
 .tide-photo__pick { position: relative; cursor: pointer; }
@@ -115,13 +161,43 @@
 .tide-form__pos .ui-icon { flex-shrink: 0; margin-top: 1px; color: var(--text-3); }
 
 /* --------------------------------------------- state + full-size Retry (RetryState) */
-.tide-retry { display: flex; flex-direction: column; align-items: center; padding-bottom: 22px; }
-.tide-retry > .ui-state { align-self: stretch; padding-bottom: 0; }
-.tide-retry__btn { margin-top: 12px; }
+.tide-retry {
+  display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 14px; border-radius: var(--r-lg);
+  background: var(--raised); box-shadow: inset 0 0 0 1px var(--line);
+}
+.tide-retry__icon { flex-shrink: 0; color: var(--text-3); }
+.tide-retry.is-alert .tide-retry__icon { color: var(--alert-text); }
+.tide-retry__msg { flex: 1; min-width: 0; font: 500 14px/19px var(--font-ui); color: var(--text-2); text-wrap: pretty; }
+.tide-retry__btn { flex-shrink: 0; padding: 0 16px; }
+.tide-retry .ui-btn--secondary { background: var(--selected); }
+
+/* Night: catch photos are full-colour daylight shots — tone them to the red-safe ramp and dim
+   them (the same treatment the radar / SST overlays get), so a photo never blows dark adaptation. */
+:root[data-theme="night"] .tide-photo__img,
+:root[data-theme="night"] .tide-catch__thumb img,
+:root[data-theme="night"] .tide-card__photo {
+  filter: grayscale(1) sepia(1) saturate(3.5) hue-rotate(-28deg) brightness(.42);
+}
 
 /* ----------------------------------------------------------------- catch card */
-.tide-card__photo { display: block; width: 100%; max-height: 220px; object-fit: cover; border-radius: var(--r-md); margin: 0 0 10px; }
-.tide-card__kv { margin-bottom: 10px; }
-.tide-card__label { margin: 4px 2px 8px; color: var(--text-3); }
-.tide-card__notes { margin: 0 2px 8px; font: 400 15px/21px var(--font-ui); color: var(--text-1); overflow-wrap: anywhere; white-space: pre-wrap; }
-.tide-card__pos { margin: 0 2px; }
+.tide-card__photo { display: block; width: 100%; max-height: 180px; object-fit: cover; border-radius: var(--r-md); margin: 0 0 10px; }
+.tide-card__facts { display: block; color: var(--text-1); font-weight: 600; overflow-wrap: anywhere; }
+.tide-card__when { display: block; }
+.tide-card__label { margin: 2px 2px 8px; color: var(--text-3); }
+.tide-card__photo + .tide-card__label { margin-top: 12px; }
+.tide-card__notes { margin: 12px 2px 6px; font: 400 15px/21px var(--font-ui); color: var(--text-1); overflow-wrap: anywhere; white-space: pre-wrap; }
+.tide-card__pos { margin: 8px 2px 0; }
+/* facts + conditions: two-column cells on hairlines */
+.tide-cond {
+  margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 1px; overflow: hidden;
+  border-radius: var(--r-lg); background: var(--line); border: 1px solid var(--line);
+}
+.tide-cond__cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 9px 12px 10px; background: var(--raised); }
+.tide-cond__cell:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.tide-cond__cell dt { color: var(--text-3); }
+.tide-cond__cell dd { margin: 0; font: 600 15px/20px var(--font-inst); font-variant-numeric: tabular-nums; color: var(--text-1); overflow-wrap: anywhere; }
+/* actions: Share · Navigate · Delete on one row (Delete used to wrap onto a line of its own) */
+.shell-card__actions > .tide-card__acts { flex: 1 1 100%; display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: center; }
+.tide-card__acts.is-two { grid-template-columns: 1fr auto; }
+.tide-card__acts > .ui-btn { min-width: 0; }
+.tide-card__acts > .tide-card__del { width: 48px; height: 48px; margin-left: 4px; border-radius: var(--r-md); color: var(--alert-text); }   /* ≥12px from Navigate */

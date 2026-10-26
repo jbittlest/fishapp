@@ -1,6 +1,6 @@
 /* Spots & tracks — saved spots nearest-first, the nearest artificial reefs, then the voyage and
- * track archives (features/nav/Sections). Export / import of the whole backup sits on top,
- * where it was in the legacy panel. */
+ * track archives (features/nav/Sections). Export / import of the whole backup closes the sheet:
+ * it is a rare, whole-app action, so the content people open this sheet for comes first. */
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { Button, Group, Hint, Icon, IconButton, ListRow, LoadingRow, Num, Section, Sheet, StateBox, useStoreValue } from '../../ui';
 import {
@@ -13,6 +13,7 @@ import { closePanels } from '../../services/ui';
 import { VoyagesSection, TracksSection } from '../nav/Sections';
 import { SpotDisc } from './SpotGlyph';
 import { fixAgeText, useFix } from './useFix';
+import { shortDate } from './format';
 import './spots.css';
 
 const SPOTS_SHOWN = 8;
@@ -21,13 +22,14 @@ const REEFS_SHOWN = 6;
 /* Distances in the lists are worked out from the last fix the engine saw. Once the fix is no
    longer live they are dimmed (and the section says how old the fix is) — never shown as live. */
 function SpotLine({ s, stale }: { s: SpotRow; stale: boolean }) {
-  const date = new Date(s.ts).toLocaleDateString();
   return (
-    <span className="spot-meta">
+    <span className="spot-meta spot-meta--stack">
       {s.distNm != null && s.brgDeg != null && (
-        <><Num value={s.distNm} digits={2} unit="nm" size="row" stale={stale} /> · <Num value={s.brgDeg} deg="°T" size="row" stale={stale} /> · </>
+        <span className="spot-meta__nav">
+          <Num value={s.distNm} digits={2} unit="nm" size="row" stale={stale} /><span className="spot-meta__sep">·</span><Num value={s.brgDeg} deg="°T" size="row" stale={stale} />
+        </span>
       )}
-      {spotTypeLabel(s.type)} · {date}
+      <span className="spot-meta__kind">{spotTypeLabel(s.type)} · {shortDate(s.ts)}</span>
     </span>
   );
 }
@@ -59,9 +61,9 @@ function SpotItem({ s, open, stale, onToggle }: { s: SpotRow; open: boolean; sta
         <div className="spot-row__more">
           {s.notes && <p className="spot-row__notes">{s.notes}</p>}
           <div className="spot-row__actions">
-            <Button icon="crosshair" onClick={() => flyToSpot(s)}>Show on chart</Button>
-            <Button icon="pencil" onClick={() => openSpotModal(s)}>Edit</Button>
-            <Button variant="ghost" icon="trash" onClick={() => { void confirmDeleteSpot(s); }}>Delete</Button>
+            <Button icon="crosshair" className="spot-tool" onClick={() => flyToSpot(s)}>Show on chart</Button>
+            <Button icon="pencil" className="spot-tool" onClick={() => openSpotModal(s)}>Edit</Button>
+            <Button variant="ghost" icon="trash" className="spot-tool spot-tool--delete" onClick={() => { void confirmDeleteSpot(s); }}>Delete</Button>
           </div>
         </div>
       )}
@@ -87,7 +89,7 @@ function SpotsSection() {
       Saved spots could not be read from this device's storage{error ? ` (${error})` : ''}.
     </StateBox>
   );
-  else if (!items.length) body = <StateBox icon="pin">No spots yet. Tap Mark or long-press the map.</StateBox>;
+  else if (!items.length) body = <StateBox icon="pin">No spots yet. Tap Mark here, or long-press anywhere on the chart.</StateBox>;
   else body = (
     <>
       <Group>
@@ -179,18 +181,20 @@ export default function SpotsPanel() {
   };
 
   return (
-    <Sheet title="Spots & tracks">
-      <div className="spot-backup">
-        <Button icon="share" busy={exporting} onClick={() => { void exportData(); }}>Export backup</Button>
-        <Button icon="download" busy={importing} onClick={() => fileRef.current?.click()}>Import</Button>
-        <input ref={fileRef} className="spot-file" type="file" accept="application/json,.json" tabIndex={-1} aria-hidden onChange={onFile} />
-      </div>
-      <Hint>A backup holds your spots, tracks, catches and voyages. Offline charts are not in it — download them again on a new device.</Hint>
-
+    <Sheet title="Spots & tracks" bodyClassName="spot-sheet">
       <SpotsSection />
       <ReefsSection />
       <VoyagesSection />
       <TracksSection />
+
+      <Section label="Backup" className="spot-backup-sec">
+        <div className="spot-backup">
+          <Button icon="share" busy={exporting} onClick={() => { void exportData(); }}>Export backup</Button>
+          <Button icon="download" busy={importing} onClick={() => fileRef.current?.click()}>Import</Button>
+          <input ref={fileRef} className="spot-file" type="file" accept="application/json,.json" tabIndex={-1} aria-hidden onChange={onFile} />
+        </div>
+        <Hint>A backup holds your spots, tracks, catches and voyages. Offline charts are not in it — download them again on a new device.</Hint>
+      </Section>
     </Sheet>
   );
 }

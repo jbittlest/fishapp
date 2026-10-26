@@ -36,13 +36,18 @@ export function VoiceTabButton() {
           ? 'Hands-free voice was on — tap anywhere to resume it'
           : 'Hey Fish hands-free voice. Tap to start listening';
 
+  /* A heard command is longer than a tab cell: the cell says "Heard" and the command itself shows
+     in full in a chip above the bar (beside the rail on desktop) for the 2 s it is up. */
   return (
     <button type="button" id="btn-voice" data-voice-toggle=""
       className={'shell-tab shell-tab--voice voice-tab ' + state + (heard ? ' voice-tab--heard' : '')}
       aria-pressed={on} aria-label={aria} title={aria}
       onClick={() => voiceToggle()}>
       <span className="shell-tab__disc"><Icon name="mic" size={22} /></span>
-      <span className="shell-tab__label voice-tab__label">{label}</span>
+      <span className="shell-tab__label voice-tab__label">
+        {heard ? <><span className="voice-tab__short">Heard</span><span className="voice-tab__full">{label}</span></> : label}
+      </span>
+      {heard && <span className="voice-tab__heard" aria-hidden>{'“' + heard + '”'}</span>}
       {resumePending && <span className="voice-tab__resume" aria-hidden />}
     </button>
   );

@@ -15,16 +15,23 @@
 
 .guide-level { margin: 0 0 12px; font: 600 12px/16px var(--font-ui); letter-spacing: .02em; color: var(--text-2); }
 
-/* ---- illustrated steps ---- */
-.guide-frames {
-  list-style: none; margin: 0; padding: 0;
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 14px 12px;
+/* The sheet body scrolls a row into view when it opens (GuidesPanel revealRow); the padding keeps
+   it clear of the floating tab bar on a phone (--tab-clear is 0 on desktop). */
+.guide-body { scroll-padding: 12px 0 calc(var(--tab-clear, 0px) + 16px); }
+
+/* ---- illustrated steps ----
+   One step per row: the diagram beside its numbered caption. Every step reads the same way
+   whatever the step count (no half-empty last row) and captions wrap in their own column. */
+.guide-frames { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.guide-frame {
+  display: grid; grid-template-columns: minmax(0, 46%) minmax(0, 1fr); align-items: center; gap: 14px;
+  min-width: 0;
 }
-.guide-frame { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.guide-frame + .guide-frame { padding-top: 10px; box-shadow: inset 0 1px 0 var(--line); }
 .guide-art { border-radius: var(--r-sm); overflow: hidden; }
 .guide-art svg { display: block; width: 100%; height: auto; aspect-ratio: 2 / 1; }
-.guide-cap { display: flex; gap: 6px; align-items: baseline; margin: 0; font: 400 14px/20px var(--font-ui); color: var(--text-1); }
-.guide-cap__n { flex-shrink: 0; color: var(--signal-fg); }
+.guide-cap { display: flex; gap: 8px; align-items: baseline; margin: 0; font: 400 14.5px/20px var(--font-ui); color: var(--text-1); text-wrap: pretty; }
+.guide-cap__n { flex-shrink: 0; min-width: 10px; color: var(--signal-fg); }
 .guide-cap__n .ui-num { color: inherit; }
 .guide-steps { margin: 0; padding-left: 20px; font: 400 15px/22px var(--font-ui); color: var(--text-1); }
 .guide-steps li { margin-bottom: 6px; }

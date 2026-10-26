@@ -6,7 +6,7 @@
  *
  * Copy is the legacy app's, word-for-word apart from emoji. The CDFW disclaimer stays FIRST on the
  * Fish & limits tab and is never collapsed; the official link opens outside the app. */
-import { useLayoutEffect, type MouseEvent } from 'react';
+import { useLayoutEffect, useRef, type MouseEvent, type RefObject } from 'react';
 import { Button, Disclosure, Group, Hint, Icon, Notice, Num, Section, Segmented, Sheet, useStoreValue, type IconName } from '../../ui';
 import { toast, useUi } from '../../services/ui';
 import { isNativeShell, openExternal } from '../../services/native';
@@ -45,9 +45,9 @@ function onRegsLink(e: MouseEvent<HTMLAnchorElement>): void {
   openExternal(CDFW_URL);
 }
 
-function RowSummary({ icon, title, sub }: { icon: IconName; title: string; sub: string }) {
+function RowSummary({ icon, title, sub, anchor }: { icon: IconName; title: string; sub: string; anchor?: RefObject<HTMLSpanElement | null> }) {
   return (
-    <span className="guide-sum">
+    <span className="guide-sum" ref={anchor}>
       <span className="guide-sum__lead"><Icon name={icon} size={20} /></span>
       <span className="guide-sum__main">
         <span className="guide-sum__title">{title}</span>
@@ -57,6 +57,18 @@ function RowSummary({ icon, title, sub }: { icon: IconName; title: string; sub: 
   );
 }
 
+/* After a row opens, bring what it revealed into view: the whole row when it fits, otherwise its
+ * header at the top. The sheet body's scroll-padding (guides.css) keeps it clear of the floating
+ * tab bar. Layout only — nothing about the row's state changes. */
+function revealRow(anchor: RefObject<HTMLSpanElement | null>): void {
+  requestAnimationFrame(() => {
+    const row = anchor.current?.closest('.ui-disc');
+    if (!row) return;
+    const reduce = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    row.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
+  });
+}
+
 function Tip({ children, legal }: { children: string; legal?: boolean }) {
   return (
     <p className={'guide-tip' + (legal ? ' guide-tip--legal' : '')}>
@@ -64,6 +76,12 @@ function Tip({ children, legal }: { children: string; legal?: boolean }) {
       <span>{children}</span>
     </p>
   );
+}
+
+/* "5–7 times" must not break after the dash in a narrow caption column: word joiners (invisible,
+ * zero-width) hold a number range together. Display only — the caption text is unchanged. */
+function keepRanges(text: string): string {
+  return text.replace(/(\d)([\u2013-])(\d)/g, '$1\u2060$2\u2060$3');
 }
 
 /* KnotArt is static, app-authored SVG (engine/knot-diagrams.js) — never user text — so it is
@@ -76,7 +94,7 @@ function KnotFrames({ frames }: { frames: Frame[] }) {
           <div className="guide-art" role="img" aria-label={`Step ${n + 1} diagram`} dangerouslySetInnerHTML={{ __html: f.svg }} />
           <p className="guide-cap">
             <span className="guide-cap__n"><Num value={n + 1} size="row" /></span>
-            <span>{f.cap}</span>
+            <span>{keepRanges(f.cap)}</span>
           </p>
         </li>
       ))}
@@ -87,9 +105,10 @@ function KnotFrames({ frames }: { frames: Frame[] }) {
 function KnotRow({ k }: { k: Knot }) {
   const open = useStoreValue(guidesStore, (s) => s.openKnots.includes(k.name));
   const frames = knotFrames(k) as Frame[] | null;
+  const anchor = useRef<HTMLSpanElement>(null);
   return (
-    <Disclosure open={open} onToggle={(o) => setGuideOpen('openKnots', k.name, o)} className="guide-row"
-      summary={<RowSummary icon="knot" title={k.name} sub={k.use} />}>
+    <Disclosure open={open} onToggle={(o) => { setGuideOpen('openKnots', k.name, o); if (o) revealRow(anchor); }} className="guide-row"
+      summary={<RowSummary icon="knot" title={k.name} sub={k.use} anchor={anchor} />}>
       <p className="guide-level">{k.level}</p>
       {frames ? <KnotFrames frames={frames} /> : (
         <ol className="guide-steps">{k.steps.map((s: string, i: number) => <li key={i}>{s}</li>)}</ol>
@@ -102,7 +121,7 @@ function KnotRow({ k }: { k: Knot }) {
 function KnotsTab() {
   return (
     <>
-      <Hint className="guide-intro">Tap a knot for illustrated steps. Works offline.</Hint>
+      <Hint className="guide-intro">Tap a knot for illustrated steps.</Hint>
       <div className="guide-legend" aria-label="Diagram key">
         <span className="guide-legend__item"><svg viewBox="0 0 24 8" aria-hidden><path className="guide-sw guide-sw--line" d="M2 4 H22" /></svg>Standing line</span>
         <span className="guide-legend__item"><svg viewBox="0 0 24 8" aria-hidden><path className="guide-sw guide-sw--tag" d="M2 4 H22" /></svg>Tag end</span>
@@ -119,9 +138,10 @@ function KnotsTab() {
 
 function FishRow({ f }: { f: Fish }) {
   const open = useStoreValue(guidesStore, (s) => s.openFish.includes(f.name));
+  const anchor = useRef<HTMLSpanElement>(null);
   return (
-    <Disclosure open={open} onToggle={(o) => setGuideOpen('openFish', f.name, o)} className="guide-row"
-      summary={<RowSummary icon="fish" title={f.name} sub={f.size + ' · ' + f.bag} />}>
+    <Disclosure open={open} onToggle={(o) => { setGuideOpen('openFish', f.name, o); if (o) revealRow(anchor); }} className="guide-row"
+      summary={<RowSummary icon="fish" title={f.name} sub={f.size + ' · ' + f.bag} anchor={anchor} />}>
       <p className="guide-id">{f.id}</p>
       <dl className="guide-facts">
         <div className="guide-facts__cell"><dt className="ui-label">Min size</dt><dd>{f.size}</dd></div>
@@ -172,7 +192,7 @@ export default function GuidesPanel() {
   }, [panelData]);
 
   return (
-    <Sheet title="Guides" subtitle="Works offline">
+    <Sheet title="Guides" subtitle="Works offline" bodyClassName="guide-body">
       <Segmented<GuidesTab> label="Guide" value={tab} onChange={setGuidesTab} className="guide-seg"
         options={[{ value: 'knots', label: 'Knots' }, { value: 'fish', label: 'Fish & limits' }]} />
       <div role="tabpanel" aria-label={tab === 'knots' ? 'Knots' : 'Fish & limits'}>

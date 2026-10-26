@@ -13,7 +13,8 @@ export default function AboutPanel() {
         <span className="about-head__mark" aria-hidden><Icon name="hull" size={26} /></span>
         <div>
           <div className="ui-title-2">FishApp</div>
-          <div className="ui-sub">Offline charts, GPS navigation and fishing tools · build {build.app}{isNativeShell() ? ' · iPhone app' : ''}</div>
+          <div className="ui-sub">Offline charts, GPS navigation and fishing tools</div>
+          <div className="about-head__build">Build {build.app}{isNativeShell() ? ' · iPhone app' : ''}</div>
         </div>
       </div>
 

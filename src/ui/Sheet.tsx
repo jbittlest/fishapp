@@ -38,6 +38,8 @@ export function Sheet({ title, subtitle, actions, footer, children, onClose, pap
   const sheetRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ y0: number; t0: number; base: number; dy: number; lastY: number; lastT: number } | null>(null);
   const [dragY, setDragY] = useState<number | null>(null);
+  // visual only: a hairline under the header once the body has scrolled
+  const [scrolled, setScrolled] = useState(false);
 
   const close = useCallback(() => { (onClose ?? closePanels)(); }, [onClose]);
 
@@ -81,7 +83,7 @@ export function Sheet({ title, subtitle, actions, footer, children, onClose, pap
   return (
     <div
       ref={sheetRef}
-      className={'ui-sheet' + (desktop ? ' ui-sheet--panel' : ` ui-sheet--${detent}`) + (paper ? ' surface-paper' : '')}
+      className={'ui-sheet' + (desktop ? ' ui-sheet--panel' : ` ui-sheet--${detent}`) + (paper ? ' surface-paper' : '') + (scrolled ? ' is-scrolled' : '')}
       role="dialog" aria-modal="false" aria-label={label ?? (typeof title === 'string' ? title : undefined)}
       style={style}
     >
@@ -96,7 +98,8 @@ export function Sheet({ title, subtitle, actions, footer, children, onClose, pap
           <IconButton icon="x" label="Close" size="sm" onClick={close} />
         </div>
       </header>
-      <div className={'ui-sheet__body' + (bodyClassName ? ' ' + bodyClassName : '')} ref={bodyRef}>
+      <div className={'ui-sheet__body' + (bodyClassName ? ' ' + bodyClassName : '')} ref={bodyRef}
+        onScroll={(e) => { const s = e.currentTarget.scrollTop > 2; if (s !== scrolled) setScrolled(s); }}>
         {children}
       </div>
       {footer && <div className="ui-sheet__foot">{footer}</div>}

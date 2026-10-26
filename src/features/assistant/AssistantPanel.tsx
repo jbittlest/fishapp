@@ -8,13 +8,14 @@
  * Honesty: answers render as plain text (pre-wrap) with **bold** as the only markup — never
  * HTML. The status line says which brain is answering, with a shape-coded dot that survives
  * night mode. Cloud AI asks for consent first (App Store 5.1.2(i)); the switch is in settings. */
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type UIEvent } from 'react';
 import {
   Button, Chip, ChipRow, Field, Group, Hint, Icon, IconButton, Notice, PillButton, Section, Select, Sheet, TextInput,
   ToggleRow, useStoreValue,
 } from '../../ui';
 import {
-  ASST_CHIPS, ASST_CLOUD_DATA, ASST_MODELS, ASST_PROXY, asstClearChat, asstNormalizeProxy, asstOnOpen, asstReadSettings, asstSaveSettings,
+  ASST_CHIPS, ASST_CLOUD_DATA, ASST_CONSENT_LATER_NOTE, ASST_CONSENT_TIMEOUT_NOTE, ASST_DECLINED_NOTE, ASST_MODELS, ASST_PROXY,
+  asstClearChat, asstNormalizeProxy, asstOnOpen, asstReadSettings, asstSaveSettings,
   asstSend, asstSetCloudConsent, asstSplitBold, asstStartMic, asstStore, asstTestVoice, asstToggleSpeak,
 } from '../../engine/assistant.js';
 import { isNativeShell } from '../../services/native';
@@ -99,15 +100,43 @@ function Transcript({ body }: { body: HTMLDivElement | null }) {
   const messages = useStoreValue(asstStore, (s) => s.messages);
   const busy = useStoreValue(asstStore, (s) => s.busy);
   const lastCount = useRef(0);
+  /* Was the reader at the bottom BEFORE the latest update? Measured on scroll, because after a
+     long answer lands the content has already grown past any "near the bottom" threshold. */
+  const following = useRef(true);
+  /* The last answer already positioned (null until the first render has run). */
+  const settled = useRef<number | null | undefined>(undefined);
+
+  useEffect(() => {
+    if (!body) return;
+    const onScroll = () => { following.current = body.scrollHeight - body.scrollTop - body.clientHeight < 120; };
+    body.addEventListener('scroll', onScroll, { passive: true });
+    return () => body.removeEventListener('scroll', onScroll);
+  }, [body]);
 
   /* Follow the conversation: always jump to a NEW message; for progress updates on the one
-     in flight, only if the reader hasn't scrolled up to read something older. */
+     in flight, only if the reader hasn't scrolled up to read something older. When the answer
+     lands, show it from its question down: to the bottom if it all fits, otherwise with the
+     question pinned at the top so the answer reads from its first line. */
   useLayoutEffect(() => {
     if (!body) return;
     const grew = messages.length !== lastCount.current;
     lastCount.current = messages.length;
-    const nearBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 120;
-    if (grew || nearBottom) body.scrollTop = body.scrollHeight;
+    const last = messages[messages.length - 1];
+    const answer = last && last.role === 'bot' && !last.thinking && !last.greeting ? last.id : null;
+    const first = settled.current === undefined;
+    const landed = !first && answer != null && answer !== settled.current;
+    if (answer != null || first) settled.current = answer;
+    const bottom = body.scrollHeight - body.clientHeight;
+    if (landed && (grew || following.current)) {
+      const q = [...messages].reverse().find((m) => m.role === 'user');
+      const el = body.querySelector<HTMLElement>(`[data-mid="${q ? q.id : answer}"]`);
+      const top = el ? el.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop - 12 : bottom;
+      body.scrollTop = Math.min(Math.max(0, top), bottom);
+      following.current = top >= bottom;
+    } else if (grew || following.current) {
+      body.scrollTop = body.scrollHeight;
+      following.current = true;     // the scroll event that would say so arrives after the next update
+    }
   }, [messages, body]);
 
   const last = messages[messages.length - 1];
@@ -120,20 +149,20 @@ function Transcript({ body }: { body: HTMLDivElement | null }) {
     <div className="asst-log" role="log" aria-live="polite" aria-label="Conversation with First Mate">
       {messages.map((m) => (
         m.role === 'user' ? (
-          <div key={m.id} className="asst-msg asst-msg--user">{m.text}</div>
+          <div key={m.id} data-mid={m.id} className="asst-msg asst-msg--user">{m.text}</div>
         ) : m.thinking ? (
-          <div key={m.id} className="asst-msg asst-msg--bot asst-thinking" aria-label="First Mate is working on it">
+          <div key={m.id} data-mid={m.id} className="asst-msg asst-msg--bot asst-thinking" aria-label="First Mate is working on it">
             <span className="asst-dots" aria-hidden><i /><i /><i /></span>
             <span>{m.progress ? capitalize(m.progress) + '…' : 'Thinking…'}</span>
           </div>
         ) : m.error ? (
-          <div key={m.id} className="asst-msg asst-msg--bot is-error">
-            <Icon name="alert" size={18} className="asst-msg__icon" />
+          <div key={m.id} data-mid={m.id} className="asst-msg asst-msg--bot is-error">
+            <Icon name="cloud-off" size={18} className="asst-msg__icon" />
             <div className="asst-msg__text"><RichText text={m.text} /></div>
           </div>
         ) : (
-          <div key={m.id} className={'asst-msg asst-msg--bot' + (m.greeting ? ' is-greeting' : '')}>
-            <RichText text={m.text} />
+          <div key={m.id} data-mid={m.id} className={'asst-msg asst-msg--bot' + (m.greeting ? ' is-greeting' : '')}>
+            <RichText text={m.text} lead={!!m.greeting} />
           </div>
         )
       ))}
@@ -147,12 +176,56 @@ function Transcript({ body }: { body: HTMLDivElement | null }) {
   );
 }
 
-/** Plain text with **bold** runs — the only markup a reply may carry. React escapes the rest. */
-function RichText({ text }: { text: string }) {
-  const parts = useMemo(() => asstSplitBold(text), [text]);
+interface Run { text: string; bold: boolean }
+/* The "answered on this phone" notes the engine appends after a blank line: shown as a quiet
+   footnote (same words), so they never read as part of the answer. */
+const NOTES: ReadonlySet<string> = new Set([ASST_DECLINED_NOTE, ASST_CONSENT_LATER_NOTE, ASST_CONSENT_TIMEOUT_NOTE]);
+/* A list line: "• ", "- ", "* " or "1. " / "1) " — rendered with a hanging indent so wrapped
+   lines sit under the text, not under the bullet. Numbers are kept; "-" and "*" markers are
+   typeset as the same bullet as "•". */
+const LIST_RE = /^([ \t]*(?:[•\-*]|\d{1,2}[.)]))[ \t]+/;
+
+/** Split the bold runs into lines (a bold run may span a line break). */
+function toLines(parts: Run[]): Run[][] {
+  const lines: Run[][] = [[]];
+  for (const p of parts) {
+    p.text.split('\n').forEach((seg, i) => {
+      if (i > 0) lines.push([]);
+      if (seg) lines[lines.length - 1].push({ text: seg, bold: p.bold });
+    });
+  }
+  return lines;
+}
+
+function Runs({ runs }: { runs: Run[] }) {
+  return <>{runs.map((p, i) => (p.bold ? <strong key={i}>{p.text}</strong> : <Fragment key={i}>{p.text}</Fragment>))}</>;
+}
+
+/** Plain text with **bold** runs — the only markup a reply may carry. React escapes the rest.
+ *  Layout only: each line is a block (blank lines become a paragraph gap), list lines get a
+ *  hanging indent; the words are exactly the reply's. */
+function RichText({ text, lead }: { text: string; lead?: boolean }) {
+  const lines = useMemo(() => toLines(asstSplitBold(text) as Run[]), [text]);
   return (
     <>
-      {parts.map((p, i) => (p.bold ? <strong key={i}>{p.text}</strong> : <Fragment key={i}>{p.text}</Fragment>))}
+      {lines.map((runs, i) => {
+        if (!runs.length) return <span key={i} className="asst-gapline" aria-hidden />;
+        const whole = runs.map((r) => r.text).join('');
+        if (NOTES.has(whole.trim())) return <span key={i} className="asst-line asst-note">{whole}</span>;
+        const m = !runs[0].bold ? LIST_RE.exec(runs[0].text) : null;
+        if (m) {
+          const rest = [{ text: runs[0].text.slice(m[0].length), bold: false }, ...runs.slice(1)];
+          return (
+            <span key={i} className="asst-line asst-li">
+              <span className="asst-li__m" aria-hidden={/^[-*•]$/.test(m[1].trim()) || undefined}>
+                {/^[-*]$/.test(m[1].trim()) ? '•' : m[1].trim()}
+              </span>
+              <span className="asst-li__t"><Runs runs={rest} /></span>
+            </span>
+          );
+        }
+        return <span key={i} className={'asst-line' + (lead && i === 0 ? ' asst-line--lead' : '')}><Runs runs={runs} /></span>;
+      })}
     </>
   );
 }
@@ -167,10 +240,28 @@ function Composer({ draft, setDraft }: { draft: string; setDraft: (v: string) =>
   const micListening = useStoreValue(asstStore, (s) => s.micListening);
   const ta = useRef<HTMLTextAreaElement>(null);
   const hasText = draft.trim().length > 0;
+  /* Which ends of the suggestion row are scrolled away — the fade only shows where more chips are. */
+  const [chipEdge, setChipEdge] = useState({ start: true, end: false });
+  const chipWrap = useRef<HTMLDivElement>(null);
+  const measureChips = useCallback((el: HTMLElement | null | undefined) => {
+    if (!el) return;
+    const start = el.scrollLeft <= 2;
+    const end = el.scrollLeft + el.clientWidth >= el.scrollWidth - 2;
+    setChipEdge((p) => (p.start === start && p.end === end ? p : { start, end }));
+  }, []);
+  useLayoutEffect(() => { measureChips(chipWrap.current?.querySelector<HTMLElement>('.ui-chiprow')); }, [showChips, measureChips]);
+  const onChipScroll = (e: UIEvent<HTMLDivElement>) => {
+    const el = e.target as HTMLElement;
+    if (el.classList?.contains('ui-chiprow')) measureChips(el);
+  };
 
   useLayoutEffect(() => {
     const el = ta.current;
     if (!el) return;
+    /* Empty: the CSS single-line height. Measuring would size it to the placeholder, which can
+       wrap on a narrow phone and make an empty composer two lines tall. */
+    el.style.height = '';
+    if (!draft) return;
     el.style.height = 'auto';
     el.style.height = Math.min(el.scrollHeight, COMPOSER_MAX_PX) + 'px';
   }, [draft]);
@@ -190,9 +281,12 @@ function Composer({ draft, setDraft }: { draft: string; setDraft: (v: string) =>
   return (
     <div className="asst-composer">
       {showChips && (
-        <ChipRow className="asst-chips">
-          {ASST_CHIPS.map((c: string) => <Chip key={c} onPress={() => { if (!busy) void asstSend(c); }}>{c}</Chip>)}
-        </ChipRow>
+        <div ref={chipWrap} onScrollCapture={onChipScroll}
+          className={'asst-chips-wrap' + (chipEdge.start ? ' is-start' : '') + (chipEdge.end ? ' is-end' : '')}>
+          <ChipRow className="asst-chips">
+            {ASST_CHIPS.map((c: string) => <Chip key={c} onPress={() => { if (!busy) void asstSend(c); }}>{c}</Chip>)}
+          </ChipRow>
+        </div>
       )}
       <div className="asst-bar">
         {micSupported && (
@@ -206,7 +300,7 @@ function Composer({ draft, setDraft }: { draft: string; setDraft: (v: string) =>
           className="ui-input asst-bar__input"
           rows={1}
           value={draft}
-          placeholder="Ask about tides, wind, fish, regs, knots…"
+          placeholder="Ask about tides, wind, fish…"
           aria-label="Ask First Mate"
           autoComplete="off"
           autoCapitalize="sentences"
@@ -329,7 +423,7 @@ function SettingsView({ onDone }: { onDone: () => void }) {
       </Section>
 
       <Section label="Free-AI endpoint">
-        <Field label="Endpoint" hint={proxyCheck.error ?? (proxyCheck.value
+        <Field label="Endpoint" className={proxyCheck.error ? 'asst-field--error' : undefined} hint={proxyCheck.error ?? (proxyCheck.value
           ? 'Your own relay.'
           : 'The FishApp relay — no key needed. Change it only if you run your own.')}>
           <TextInput type="url" inputMode="url" value={proxy} placeholder={ASST_PROXY} autoComplete="off" autoCorrect="off"

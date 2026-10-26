@@ -8,7 +8,7 @@
  * Device names and log lines are attacker-controlled (anything broadcasting in radio range):
  * they are only ever rendered as React text. */
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Badge, Button, Field, Group, Hint, ListRow, Notice, Num, Section, Sheet, Spinner, StateBox, TextInput, useStoreValue } from '../../ui';
+import { Badge, Button, Field, Group, Hint, Icon, ListRow, Notice, Num, Section, Sheet, Spinner, StateBox, TextInput, useStoreValue } from '../../ui';
 import {
   motorStore, motorOnOpen, motorToggleConnect, motorConnect, motorCopyLog, motorToggleArm, motorStop,
   motorSaveUuids, motorSendFrame, motorAddFrame, motorRecordToggle, motorMarkEvent, motorExportSession,
@@ -151,7 +151,7 @@ function SafetySection() {
             {armed && !hasStop && <span className="motor-deadman__warn">No STOP command — use the foot pedal.</span>}
           </span>
           {hasStop && (
-            <Button variant="destructive" icon="stop" className="motor-deadman__stop" onClick={() => motorStop('stop button')}>STOP</Button>
+            <Button variant="destructive" icon="stop" className="motor-deadman__stop motor-stopglyph" onClick={() => motorStop('stop button')}>STOP</Button>
           )}
         </div>
       )}
@@ -168,18 +168,21 @@ function SafetySection() {
         </div>
       )}
 
-      <div className="motor-safety-note">
-        <Notice icon="alert" title="Best-effort only">
+      <div className="motor-safety-note motor-safety-note--limits">
+        <Notice tone="alert" icon="alert" title="Best-effort only">
           These interlocks are software in a browser on a phone that can lock, freeze or be killed —
           they are best-effort, not a guarantee. <b>The foot pedal and the real remote are the only
           true kill.</b> Keep a hand near one whenever this is armed.
         </Notice>
       </div>
-      <Hint>
-        {hasStop
-          ? 'STOP sends your command named STOP, then disarms. Auto-stop, leaving the app, disarming and disconnecting while armed send it too. It never needs arming.'
-          : 'No command named STOP yet, so auto-stop, leaving the app and disarming can only disarm the link — they cannot stop the motor. Add one named exactly STOP under Commands.'}
-      </Hint>
+      <div className={'motor-stopnote' + (hasStop ? '' : ' motor-stopnote--missing')}>
+        <Icon name={hasStop ? 'info' : 'alert'} size={18} />
+        <p>
+          {hasStop
+            ? 'STOP sends your command named STOP, then disarms. Auto-stop, leaving the app, disarming and disconnecting while armed send it too. It never needs arming.'
+            : 'No command named STOP yet, so auto-stop, leaving the app and disarming can only disarm the link — they cannot stop the motor. Add one named exactly STOP under Commands.'}
+        </p>
+      </div>
     </Section>
   );
 }
@@ -241,11 +244,12 @@ function CommandsSection() {
           <div className="motor-cmds">
             {/* Every one of these came from your own packet capture — the app ships with none. */}
             {frames.map((f, i) => (i === stopIndex ? (
-              <Button key={i} variant="destructive" icon="stop"
+              <Button key={i} variant="destructive" icon="stop" className="motor-cmd--stop motor-stopglyph"
                 aria-label={f.label + ' (emergency stop, sends without arming)'}
                 onClick={() => { void motorSendFrame(i); }}>{f.label}</Button>
             ) : (
-              <Button key={i} variant={f.danger ? 'destructive' : 'secondary'} icon={f.danger ? 'alert' : undefined}
+              <Button key={i} variant="secondary" icon={f.danger ? 'alert' : undefined}
+                className={f.danger ? 'motor-cmd--danger' : undefined}
                 aria-label={f.danger ? f.label + ' (can move the boat)' : f.label}
                 onClick={() => { void motorSendFrame(i); }}>{f.label}</Button>
             )))}

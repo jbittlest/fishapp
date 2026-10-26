@@ -87,7 +87,8 @@ export async function trackStop() {
     return;
   }
   const track = {
-    name: 'Track ' + new Date(Tracks.startedAt).toLocaleString(),
+    // 'Track Oct 25, 5:53 PM' — short enough to fit one list row (the full locale string wrapped)
+    name: 'Track ' + new Date(Tracks.startedAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }),
     points: Tracks.points,
     start: Tracks.startedAt,
     end: Date.now(),

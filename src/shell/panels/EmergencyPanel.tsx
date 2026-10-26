@@ -1,6 +1,6 @@
 /* Emergency — opened by SOS. Safety copy is kept word-for-word from the legacy app. */
 import { useState } from 'react';
-import { Button, Group, Hint, ListRow, Section, Sheet, useStoreValue } from '../../ui';
+import { Button, Group, Hint, Icon, ListRow, Section, Sheet, Spinner, useStoreValue } from '../../ui';
 import { gpsStore, formatCoord } from '../../engine/gps.js';
 import { readJSON } from '../../engine/app.js';
 import { promptDialog, toast } from '../../services/ui';
@@ -56,15 +56,18 @@ export default function EmergencyPanel() {
             <div className="emg-pos__dm">{dm}</div>
             <div className="emg-pos__dec">{dec}</div>
           </>
-        ) : <div className="emg-pos__wait">Waiting for GPS…</div>}
+        ) : <div className="emg-pos__wait"><Spinner size="sm" />Waiting for GPS…</div>}
         <Button icon="copy" compact onClick={copy}>Copy coordinates</Button>
       </div>
 
       <Section label="Text my position">
         <Button variant="destructive" icon="send" block onClick={text}>Text my location for help</Button>
-        <Hint>{contact ? `To: ${contact.name} (${contact.number})` : 'No contact saved — the text opens with no recipient so you can pick one.'}</Hint>
-        <Button variant="secondary" compact onClick={setNew}>Set emergency contact</Button>
         <Hint>Opens your Messages app with your live coordinates + a Google Maps link pre-filled — you just hit send. Needs any cell signal (on iPhone 14+, texts can go via satellite).</Hint>
+        <div className="emg-contact">
+          <Icon name="phone" size={18} />
+          <span className="emg-contact__text">{contact ? <>To: <b>{contact.name}</b> ({contact.number})</> : 'No contact saved — the text opens with no recipient so you can pick one.'}</span>
+          <Button variant="secondary" compact onClick={setNew}>Set emergency contact</Button>
+        </div>
       </Section>
 
       <Section label="No signal? Satellite SOS">

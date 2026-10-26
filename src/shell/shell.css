@@ -27,12 +27,14 @@
 /* ---------------------------------------------------------------- HUD */
 .shell-hud {
   flex: 1; min-width: 0; pointer-events: auto;
-  background: var(--chrome); border-radius: var(--r-lg);
+  background: var(--chrome-solid); border-radius: var(--r-lg);
   box-shadow: var(--e1), inset 0 0 0 1px var(--line);
   padding: 8px 12px 10px;
 }
 .shell-hud__top { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 18px; }
-.shell-hud__fix { display: inline-flex; align-items: center; gap: 7px; font: 600 12px/16px var(--font-ui); letter-spacing: .04em; color: var(--text-2); white-space: nowrap; }
+/* the fix state may ellipsize as a last resort (< 360 px); the coordinates never do */
+.shell-hud__fix { display: inline-flex; align-items: center; gap: 7px; min-width: 0; font: 600 12px/16px var(--font-ui); letter-spacing: .03em; color: var(--text-2); white-space: nowrap; }
+.shell-hud__fixtext { overflow: hidden; text-overflow: ellipsis; }
 .shell-hud__dot { position: relative; width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 .shell-hud__fix.is-ok .shell-hud__dot { background: var(--ok); box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--ok) 25%, transparent); }
 .shell-hud__fix.is-weak .shell-hud__dot { box-shadow: inset 0 0 0 2px var(--ok); }
@@ -43,45 +45,76 @@
 }
 .shell-hud__fix.is-alert .shell-hud__dot::before { transform: rotate(45deg); }
 .shell-hud__fix.is-alert .shell-hud__dot::after { transform: rotate(-45deg); }
-.shell-hud__right { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
-.shell-hud__coords { font: 600 12.5px/16px var(--font-inst); font-variant-numeric: tabular-nums; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shell-hud__coords { flex-shrink: 0; font: 600 12.5px/16px var(--font-inst); font-variant-numeric: tabular-nums; letter-spacing: .01em; color: var(--text-2); white-space: nowrap; }
 .shell-hud__coords.is-stale { color: var(--text-3); }
-.shell-hud__offline { font: 700 10.5px/1 var(--font-ui); letter-spacing: .08em; text-transform: uppercase; color: var(--text-1); background: var(--control); padding: 4px 7px; border-radius: var(--r-pill); }
-.shell-hud__cells { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 4px; }
-.shell-hud__cell { display: flex; flex-direction: column; gap: 1px; min-width: 0; padding-left: 10px; }
+.shell-hud__cells { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 6px; }
+.shell-hud__cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding-left: 12px; }
 .shell-hud__cell:first-child { padding-left: 0; }
-.shell-hud__cell--btn { text-align: left; align-items: flex-start; }
+/* the Water dash is a door to Weather: a chevron after the label says "tap", the dash says "not loaded" */
+.shell-hud__cell--btn { position: relative; text-align: left; align-items: flex-start; transition: background-color var(--t-fast); }
+.shell-hud__cell--btn::after { content: ''; position: absolute; inset: -8px -12px -10px 0; }   /* hit area out to the HUD's edges */
 .shell-hud__cell--btn:active { background: var(--control); }
+.shell-hud__cell--btn:focus-visible { outline-offset: 0; border-radius: var(--r-xs); }
+.shell-hud__lbl { display: inline-flex; align-items: center; gap: 2px; }
+.shell-hud__more { color: var(--text-3); }
 .shell-hud__cell + .shell-hud__cell { box-shadow: inset 1px 0 0 var(--line); }
 .shell-hud.is-compact { padding: 6px 12px; }
 .shell-hud.is-compact .shell-hud__cells { margin-top: 0; }
 .shell-hud.is-compact .shell-hud__top { min-height: 0; margin-bottom: 2px; }
 .shell-hud.is-compact .ui-num--m { font-size: 21px; line-height: 24px; }
-.shell-hud.is-compact .ui-label { display: none; }
+.shell-hud.is-compact .ui-label, .shell-hud.is-compact .shell-hud__more { display: none; }
+/* desktop: the HUD is wide, so the instrument values grow with it */
+.shell.is-desktop .shell-hud { padding: 10px 16px 12px; }
+.shell.is-desktop .shell-hud__cell { padding-left: 16px; }
+.shell.is-desktop .shell-hud__cell:first-child { padding-left: 0; }
+.shell.is-desktop .shell-hud .ui-num--m { font-size: 32px; line-height: 34px; }
 
 /* ---------------------------------------------------------------- SOS */
 .shell-sos {
+  /* a square tile, top-aligned with the HUD: unmistakable without becoming a red slab that
+     dominates the screen (and the brightest thing at night) */
   pointer-events: auto; flex-shrink: 0; width: 52px; height: 52px; border-radius: var(--r-md);
   background: var(--alert); color: var(--alert-ink); box-shadow: var(--e1);
   font: 700 15px/1 var(--font-inst); letter-spacing: .07em;
 }
 .shell-sos:active { transform: scale(.97); }
+.shell.is-desktop .shell-sos { width: 56px; height: 56px; }
 
 /* ----------------------------------------------------------- map controls */
 .shell-right {
   position: fixed; z-index: var(--z-chrome); pointer-events: none;
   top: calc(var(--persist-bottom) + 10px); right: calc(var(--safe-right) + 12px);
-  display: flex; flex-direction: column; gap: 10px;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
 }
 .shell.is-desktop .shell-right { right: 12px; }
 .shell-ctlgroup {
-  pointer-events: auto; display: flex; flex-direction: column; overflow: hidden;
+  position: relative; pointer-events: auto; display: flex; flex-direction: column; overflow: hidden;
   background: var(--chrome); border-radius: var(--r-md); box-shadow: var(--e1), inset 0 0 0 1px var(--line);
 }
 .shell-ctl { width: 48px; height: 48px; display: grid; place-items: center; color: var(--text-1); transition: color var(--t-fast), background-color var(--t-fast); }
 .shell-ctl + .shell-ctl { box-shadow: inset 0 1px 0 var(--line); }
 .shell-ctl:active { background: var(--control); }
 .shell-ctl.is-active { color: var(--signal-fg); }
+.shell-ctl:focus-visible { outline-offset: -3px; border-radius: var(--r-md); }
+/* chart tiles loading: a small ring in the Map layers button's corner */
+.shell-ctl__busy { position: absolute; top: 5px; right: 5px; pointer-events: none; display: grid; }
+.shell-ctl__busy .ui-spinner { width: 11px; height: 11px; border-width: 1.75px; }
+
+/* OFFLINE marker: top-left of the chart, under the persistent layer */
+.shell-left {
+  position: fixed; z-index: var(--z-chrome); pointer-events: none;
+  top: calc(var(--persist-bottom) + 10px); left: calc(var(--safe-left) + 12px + var(--rail-w));
+  display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+}
+.shell.is-desktop .shell-left { left: calc(var(--rail-w) + 12px); }
+.shell.is-desktop.has-sheet .shell-left { left: calc(var(--rail-w) + 424px); }
+.shell-offline {
+  pointer-events: auto; display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px 0 9px;
+  border-radius: var(--r-pill); background: var(--chrome); color: var(--text-1);
+  box-shadow: var(--e1), inset 0 0 0 1px var(--line-2);
+  font: 700 11px/1 var(--font-ui); letter-spacing: .08em; text-transform: uppercase;
+}
+.shell-offline .ui-icon { color: var(--text-2); }
 
 /* --------------------------------------------------------- bottom stack */
 .shell-bottom {
@@ -111,16 +144,19 @@
   transition: color var(--t-fast);
 }
 .shell-tab:active { background: var(--control); }
+.shell-tab:focus-visible { outline-offset: -2px; }
 .shell-tab__label { font: 600 11px/13px var(--font-ui); letter-spacing: .01em; white-space: nowrap; }
 .shell-tab.is-active { color: var(--signal-fg); }
 /* shape cue for "selected": a dot under the label (colour alone fails at night) */
 .shell-tab.is-active::after { content: ''; position: absolute; bottom: 3px; width: 4px; height: 4px; border-radius: 50%; background: currentColor; }
 /* the centre voice item (features/voice/VoiceTabButton renders .shell-tab.shell-tab--voice) */
-.shell-tab--voice { color: var(--text-1); }
+/* the label matches its neighbours; the disc carries the emphasis (a white label read as "selected") */
+.shell-tab--voice { color: var(--text-2); }
+.shell-tab--voice.is-listening .shell-tab__label { color: var(--signal-fg); }
 .shell-tab--voice .shell-tab__disc {
-  position: relative; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center;
+  position: relative; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
   background: var(--signal); color: var(--signal-ink);
-  margin: -7px 0;          /* the 38px disc takes a 24px icon's slot so every label lines up */
+  margin: -5px 0;          /* the 34px disc takes a 24px icon's slot so every label lines up */
 }
 .shell-tab--voice.is-listening .shell-tab__disc::before, .shell-tab--voice.is-listening .shell-tab__disc::after {
   content: ''; position: absolute; inset: -1px; border-radius: 50%; box-shadow: 0 0 0 1.5px var(--signal);
@@ -150,8 +186,12 @@
   max-height: calc(100dvh - var(--persist-bottom) - var(--chrome-bottom) - 24px);
   display: flex; flex-direction: column; justify-content: flex-end;
 }
-.shell.is-desktop .shell-cardhost { left: calc(var(--rail-w) + 12px); right: auto; width: 400px; bottom: calc(var(--chrome-bottom) + 12px); }
-.shell.is-desktop.has-sheet .shell-cardhost { left: calc(var(--rail-w) + 424px); }
+.shell.is-desktop .shell-cardhost {
+  left: calc(var(--rail-w) + 12px); right: auto; width: 400px; bottom: 12px;
+  max-width: calc(100vw - var(--rail-w) - 12px - 72px);          /* never under the zoom keys */
+  max-height: calc(100dvh - var(--persist-bottom) - 24px);
+}
+.shell.is-desktop.has-sheet .shell-cardhost { left: calc(var(--rail-w) + 424px); max-width: calc(100vw - var(--rail-w) - 424px - 72px); }
 .shell-card {
   pointer-events: auto; display: flex; flex-direction: column; min-height: 0; max-height: 100%;
   background: var(--sheet); color: var(--text-1); border-radius: var(--r-xl);
@@ -166,6 +206,9 @@
 .shell-card__eyebrow { margin-bottom: 2px; }
 .shell-card__title { overflow-wrap: anywhere; }
 .shell-card__body { margin-top: 10px; overflow-y: auto; min-height: 0; overscroll-behavior: contain; }
+/* the technical reason under an error state: small, quiet, for a bug report — never the headline */
+.shell-errtext { display: block; margin: 8px 0 0; font: 500 12px/16px var(--font-mono); color: var(--text-3); overflow-wrap: anywhere; }
+.shell-card__body > .shell-errtext:first-child { margin-top: 0; }
 .shell-card__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .shell-card__actions > .ui-btn { flex: 1 1 auto; }
 
@@ -181,9 +224,13 @@
 .shell-onboard__mark { width: 52px; height: 52px; border-radius: 16px; display: grid; place-items: center; background: var(--chrome-solid); color: var(--signal); margin-bottom: 14px; }
 .shell-onboard__list { list-style: none; margin: 14px 0 20px; padding: 0; display: flex; flex-direction: column; gap: 14px; }
 .shell-onboard__list li { display: flex; gap: 12px; font: 400 15px/21px var(--font-ui); color: var(--text-2); }
-.shell-onboard__list li > .ui-icon { margin-top: 1px; color: var(--signal-fg); flex-shrink: 0; }
+.shell-onboard__list li > .ui-icon { margin-top: 1px; color: var(--text-2); flex-shrink: 0; }
 .shell-onboard__list b { color: var(--text-1); font-weight: 600; }
-.shell-onboard__link { display: block; width: 100%; margin-top: 10px; min-height: 44px; font: 600 14px/1 var(--font-ui); color: var(--signal-fg); }
+.shell-onboard__link { display: block; width: 100%; margin-top: 8px; min-height: 44px; font: 500 14px/1 var(--font-ui); color: var(--signal-fg); }
+
+/* toasts centre over the chart on desktop, beside the rail and any open panel */
+.shell.is-desktop .ui-toast { left: calc(var(--rail-w) + 16px); right: 16px; }
+.shell.is-desktop.has-sheet .ui-toast { left: calc(var(--rail-w) + 424px); }
 
 /* everything React draws over the map that is a dialog/overlay accepts input */
 .ui-sheet, .ui-modal-wrap, .ui-toast, .shell-cardhost .shell-card { pointer-events: auto; }
@@ -191,13 +238,12 @@
 /* ------------------------------------------------- map symbology (Leaflet) */
 .boat-icon { background: none; border: 0; }
 .boat-icon svg { overflow: visible; transition: transform .3s linear; }
-.own-keyline { fill: none; stroke: #fff; stroke-width: 5.5; stroke-linejoin: round; }
+.own-keyline { fill: none; stroke: var(--chart-halo); stroke-width: 5.5; stroke-linejoin: round; }
 .own-hull { fill: var(--signal); stroke: var(--chart-ink); stroke-width: 2; stroke-linejoin: round; }
-:root[data-theme="night"] .own-keyline { stroke: #2A0805; }
 .gps-acc-circle { stroke: var(--signal); stroke-opacity: .55; fill: var(--signal); fill-opacity: .08; }
 .sel-pin { background: none; border: 0; }
 .sel-pin__ring { fill: var(--chart-ink); fill-opacity: .85; stroke: var(--signal); stroke-width: 3; }
-.sel-pin__dot { fill: #fff; }
+.sel-pin__dot { fill: var(--chart-halo); }
 :root[data-theme="night"] .sel-pin__dot { fill: var(--signal); }
 /* catch markers (engine/catch.js): ink disc + line fish glyph, species chip hanging below; the icon
    box is only the disc so taps beside a catch still reach the chart */
@@ -205,15 +251,13 @@
 .catch-pin__wrap { position: relative; width: 26px; height: 26px; }
 .catch-pin__hit { position: absolute; inset: -9px; border-radius: 50%; }
 .catch-pin__disc { position: absolute; inset: 0; border-radius: 50%; display: grid; place-items: center;
-  background: var(--chart-ink); color: #F3F6F9; box-shadow: var(--e1); }
-:root[data-theme="night"] .catch-pin__disc { color: var(--text-1); }
+  background: var(--chart-ink); color: var(--chart-label); box-shadow: var(--e1); }
 .catch-pin__label { position: absolute; top: 29px; left: 50%; transform: translateX(-50%);
   max-width: 140px; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
 
 /* name chips on the chart (spots, destinations): ink chip, never bare text with a halo */
 .map-chip {
   display: inline-block; padding: 3px 8px; border-radius: var(--r-sm); white-space: nowrap;
-  background: color-mix(in srgb, var(--chart-ink) 90%, transparent); color: #F3F6F9;
-  font: 600 12px/16px var(--font-ui); box-shadow: 0 1px 3px rgba(0, 0, 0, .35);
+  background: color-mix(in srgb, var(--chart-ink) 90%, transparent); color: var(--chart-label);
+  font: 600 12px/16px var(--font-ui); box-shadow: var(--e-chip);
 }
-:root[data-theme="night"] .map-chip { color: var(--text-1); }

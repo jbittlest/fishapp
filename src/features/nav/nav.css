@@ -49,36 +49,59 @@
 .nav-anchor-pin svg { fill: none; stroke: var(--text-1); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
 /* ====================================================================== Go-To card */
+/* Compact (≈150 px on a phone) and SOLID: the chart, the route line and the destination chip must
+   never show through the numbers. Header (steer badge · destination · ETA line), one instrument
+   row (distance · bearing · steer words), then Arrived / Stop. */
 .nav-goto {
-  pointer-events: auto; color: var(--text-1); background: var(--chrome); border-radius: var(--r-xl);
-  box-shadow: var(--e1), inset 0 0 0 1px var(--line); padding: 12px 14px 12px;
-  display: flex; flex-direction: column; gap: 10px;
+  pointer-events: auto; color: var(--text-1); background: var(--chrome-solid); border-radius: var(--r-xl);
+  box-shadow: var(--e1), inset 0 0 0 1px var(--line-2); padding: 12px;
+  display: flex; flex-direction: column; gap: 8px;
 }
 .nav-goto.is-arriving { box-shadow: var(--e1), inset 0 0 0 1.5px var(--signal); }
+.nav-goto.is-stale { box-shadow: var(--e1), inset 0 0 0 1.5px var(--alert); }
+
 .nav-goto__head { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.nav-goto__head > .ui-icon { color: var(--signal-fg); flex-shrink: 0; }
-.nav-goto__titles { flex: 1; min-width: 0; }
-.nav-goto__name { font: 600 17px/22px var(--font-ui); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.nav-goto__stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; }
-.nav-goto__stat { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding-left: 10px; }
+/* steer badge: the bow-relative arrow on a control disc; the alert glyph when GPS is lost */
+.nav-goto__badge {
+  width: 40px; height: 40px; flex-shrink: 0; border-radius: 50%; display: grid; place-items: center;
+  background: var(--control);
+}
+.nav-goto__badge .ui-dial__shaft { stroke: var(--signal); stroke-width: 2.4; }
+.nav-goto__badge .ui-dial__ring { stroke: transparent; }
+.nav-goto__badge.is-alert { color: var(--alert-text); background: transparent; box-shadow: inset 0 0 0 2px var(--alert); }
+.nav-goto.is-arriving .nav-goto__badge { background: var(--signal-soft); box-shadow: inset 0 0 0 1.5px var(--signal); }
+.nav-goto__titles { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.nav-goto__name { font: 600 16px/20px var(--font-ui); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nav-goto__leg { font-weight: 500; color: var(--text-2); font-variant-numeric: tabular-nums; }
+/* the ETA line: may wrap on a narrow phone rather than lose the "planned" honesty note */
+.nav-goto__sub { font: 500 13px/17px var(--font-ui); color: var(--text-2); font-variant-numeric: tabular-nums; text-wrap: pretty; }
+.nav-goto__eta, .nav-goto__nb { white-space: nowrap; }
+.nav-goto__eta b { font: 600 14px/17px var(--font-inst); color: var(--text-1); }
+.nav-goto__arriving { font-weight: 700; color: var(--signal-fg); }
+.nav-goto__sub .is-alert { font-weight: 600; color: var(--alert-text); }
+.nav-goto__sub .is-muted { color: var(--text-2); }
+
+/* instrument row: values only, units small (DESIGN §0.5), hairlines between cells */
+.nav-goto__stats {
+  display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center;
+  min-height: 26px; padding: 0 2px;
+}
+.nav-goto__stat { display: flex; align-items: baseline; gap: 5px; min-width: 0; padding: 0 10px; white-space: nowrap; }
 .nav-goto__stat:first-child { padding-left: 0; }
-.nav-goto__stat + .nav-goto__stat { box-shadow: inset 1px 0 0 var(--line); }
-.nav-goto__value { display: flex; align-items: baseline; gap: 6px; min-width: 0; white-space: nowrap; }
-.nav-goto__compass { font: 600 13px/16px var(--font-inst); color: var(--text-2); }
-.nav-goto__clock { font: 600 26px/28px var(--font-inst); font-variant-numeric: tabular-nums; white-space: nowrap; }
-/* computed from a fix that is no longer live: greyed like <Num stale>, never shown as live */
-.nav-goto__clock.is-stale, .nav-goto__compass.is-stale { color: var(--text-3); }
-.nav-goto__detail { font: 500 12.5px/16px var(--font-inst); font-variant-numeric: tabular-nums; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.nav-goto__steer { display: flex; align-items: center; gap: 10px; min-height: 32px; font: 600 15px/20px var(--font-ui); }
-.nav-goto__steer .ui-dial__shaft { stroke: var(--signal); }
-.nav-goto__steer-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.nav-goto__steer-text.is-muted { color: var(--text-2); font-weight: 500; }
-/* GPS lost mid-voyage: a safety state — alert glyph + words, never colour alone */
-.nav-goto__steer.is-alert { color: var(--alert-text); }
-.nav-goto__steer.is-alert > .ui-icon { flex-shrink: 0; margin: 0 4px; }
+.nav-goto__stat:last-child { padding-right: 0; }
+.nav-goto__stat + .nav-goto__stat { box-shadow: inset 1px 0 0 var(--line-2); }
+.nav-goto__stats .ui-num--s { font-size: 22px; line-height: 26px; }
+.nav-goto__stats .ui-num--s .ui-num__unit { font-size: .62em; }
+.nav-goto__compass { font: 600 13px/16px var(--font-inst); color: var(--text-2); letter-spacing: .02em; }
+.nav-goto__qual { font: 600 11px/14px var(--font-ui); color: var(--text-3); letter-spacing: .06em; text-transform: uppercase; }
+.nav-goto__compass.is-stale { color: var(--text-3); }
+.nav-goto__steer { font: 600 16px/19px var(--font-inst); color: var(--text-1); white-space: normal; text-wrap: balance; }
+.nav-goto.is-route .nav-goto__steer { font-size: 15px; }
+.nav-goto__steer.is-muted { font-weight: 500; color: var(--text-2); }
+
 /* ≥ 12 px between Arrived and Stop: two actions a wet thumb could confuse */
-.nav-goto__actions { display: flex; justify-content: flex-end; gap: 12px; }
-.nav-goto__actions > .ui-btn { flex: 1 1 0; }
+.nav-goto__actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 2px; }
+.nav-goto__actions > .ui-btn { min-height: 44px; padding: 0 12px; }
 
 /* Arrived stays in one place; while arriving it turns signal and pulses (.keep-motion). */
 .nav-goto__arrive { position: relative; }
@@ -89,14 +112,16 @@
 
 /* ======================================================================= nav pill */
 .nav-pill {
-  pointer-events: auto; display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 0 14px;
-  background: var(--chrome); color: var(--text-1); border-radius: var(--r-pill);
-  box-shadow: var(--e1), inset 0 0 0 1px var(--line); text-align: left;
+  pointer-events: auto; display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 0 8px 0 14px;
+  background: var(--chrome-solid); color: var(--text-1); border-radius: var(--r-pill);
+  box-shadow: var(--e1), inset 0 0 0 1px var(--line-2); text-align: left;
 }
 .nav-pill > .ui-icon { color: var(--signal-fg); flex-shrink: 0; }
 .nav-pill__name { flex: 1; min-width: 0; font: 600 14px/18px var(--font-ui); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nav-pill .ui-num--row { font-size: 17px; }
+.nav-pill__dist { display: inline-flex; align-items: baseline; gap: 4px; flex-shrink: 0; }
 .nav-pill .ui-dial { flex-shrink: 0; }
-.nav-pill .ui-dial__shaft { stroke: var(--signal); }
+.nav-pill .ui-dial__shaft { stroke: var(--signal); stroke-width: 2.4; }
 .nav-pill.is-arriving { box-shadow: var(--e1), inset 0 0 0 1.5px var(--signal); }
 .nav-pill.is-arriving .nav-pill__name { color: var(--signal-fg); }
 .nav-pill.is-arriving > .ui-icon { animation: live-dot 1.2s ease-in-out infinite; }
@@ -106,15 +131,16 @@
 
 /* ===================================================================== watch band */
 .nav-band {
-  pointer-events: auto; display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 7px 12px;
-  background: var(--chrome); color: var(--text-1); border-radius: var(--r-lg);
-  box-shadow: var(--e1), inset 0 0 0 1px var(--line); text-align: left;
+  pointer-events: auto; display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 7px 10px 7px 12px;
+  background: var(--chrome-solid); color: var(--text-1); border-radius: var(--r-lg);
+  box-shadow: var(--e1), inset 0 0 0 1px var(--line-2); text-align: left;
 }
 .nav-band__icons { display: flex; gap: 4px; color: var(--signal-fg); flex-shrink: 0; }
 .nav-band__text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.nav-band__what { font: 600 13px/17px var(--font-ui); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.nav-band__detail { display: flex; align-items: center; gap: 5px; font: 500 12.5px/16px var(--font-ui); font-variant-numeric: tabular-nums; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nav-band__what { font: 600 14px/18px var(--font-ui); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nav-band__detail { display: flex; align-items: center; gap: 5px; font: 500 13px/17px var(--font-ui); font-variant-numeric: tabular-nums; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nav-band__detail > span { overflow: hidden; text-overflow: ellipsis; }
+.nav-band__detail > .ui-icon { flex-shrink: 0; }
 .nav-band > .ui-icon:last-child { color: var(--text-3); flex-shrink: 0; }
 /* a degraded watch is a safety state: red ring + glyph + words (never colour alone) */
 .nav-band.is-warn { box-shadow: var(--e1), inset 0 0 0 1.5px var(--alert); }
@@ -122,15 +148,14 @@
 
 /* =================================================================== anchor alarm */
 /* Full screen, above everything but the boot splash. Flashes for everyone (.keep-motion),
-   and deliberately overrides night mode — a dragging anchor must wake you.
-   --on-alarm (white in every theme) is requested from the design system
-   (docs/requests/navigation.md #2); until it lands the var() falls back to white, because
-   --text-1 is red at night and would vanish on the flashing red. */
+   and deliberately overrides night mode — a dragging anchor must wake you. Text and the
+   Silence button use --on-alarm (white in every theme: --text-1 is red at night and would
+   vanish on the flashing red). */
 .nav-alarm {
   position: fixed; inset: 0; z-index: var(--z-alarm); pointer-events: auto;
   display: flex; align-items: center; justify-content: center; overflow-y: auto;
   padding: calc(var(--safe-top) + 24px) calc(var(--safe-right) + 20px) calc(var(--safe-bottom) + 24px) calc(var(--safe-left) + 20px);
-  background: var(--alarm); color: var(--on-alarm, #fff);
+  background: var(--alarm); color: var(--on-alarm);
   animation: alarm-flash 1s linear infinite;
 }
 .nav-alarm__inner { width: 100%; max-width: 440px; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
@@ -143,31 +168,68 @@
 .nav-alarm__sub { margin: 0; font: 500 15px/20px var(--font-ui); font-variant-numeric: tabular-nums; opacity: .92; }
 .nav-alarm__silence {
   width: 100%; min-height: 64px; margin-top: 18px; border-radius: var(--r-lg);
-  background: var(--on-alarm, #fff); color: var(--alarm); font: 800 22px/1 var(--font-ui); letter-spacing: .02em;
+  background: var(--on-alarm); color: var(--alarm); font: 800 22px/1 var(--font-ui); letter-spacing: .02em;
   box-shadow: var(--e1);
 }
 .nav-alarm__silence:active { transform: scale(.985); }
+/* focus is moved here when the alarm opens: a white ring on the red, never the amber signal ring */
+.nav-alarm__silence:focus-visible { outline: 3px solid var(--on-alarm); outline-offset: 4px; }
+/* the limit sits inside the sentence at the sentence's size */
+.nav-alarm__line .ui-num { font-size: inherit; line-height: inherit; }
+.nav-alarm__line .ui-num__unit { font-size: .8em; }
 .nav-alarm__hint { margin: 2px 0 0; font: 500 14px/19px var(--font-ui); opacity: .92; }
 
 /* ==================================================================== Tools panel */
-.nav-tools-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
-.nav-tools-row--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.nav-tools-row > .ui-btn { padding: 0 10px; }
-.nav-toggle.is-on { background: var(--signal-soft); color: var(--signal-fg); box-shadow: inset 0 0 0 1px var(--signal); }
-.nav-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
-.nav-fields .ui-field { margin-bottom: 8px; }
-.nav-block { margin-top: 10px; }
+/* two equal columns: nothing truncates at 375 px (each cell ≥ 160 px) */
+.nav-tools-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.nav-tools-grid > .ui-btn { padding: 0 12px; }
+/* the editing pair (Undo / Clear) sits under the main pair: outlined and a step shorter */
+.nav-tools-grid > .nav-tools-edit { min-height: 44px; }
+/* disabled actions read as "not yet" the same way in every theme — including night, where the
+   quiet text level is the same red as the loud one, so the cue has to be the dimming itself */
+.nav-tools-grid > .ui-btn:disabled { opacity: .5; }
+.nav-tools-grid > .ui-btn--ghost:disabled { color: var(--text-3); }
+.nav-toggle.is-on { background: var(--signal-soft); color: var(--signal-fg); box-shadow: inset 0 0 0 1.5px var(--signal); }
+
+/* number fields with the unit inside, right-aligned (the label stays words only) */
+.nav-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+.nav-fields .ui-field { margin-bottom: 0; }
+.nav-unit-input { position: relative; display: block; }
+.nav-unit-input > .ui-input { padding-right: 58px; font-family: var(--font-inst); font-weight: 600; font-variant-numeric: tabular-nums; }
+.nav-unit {
+  position: absolute; right: 14px; top: 50%; transform: translateY(-50%); pointer-events: none;
+  font: 500 14px/1 var(--font-ui); color: var(--text-3);
+}
+.nav-anchor .ui-field { margin-bottom: 10px; }
+
+.nav-block { margin-top: 12px; }
 .nav-block + .nav-block { margin-top: 8px; }
 .nav-legs dd { white-space: nowrap; }
-.nav-status { display: flex; align-items: flex-start; gap: 8px; margin-top: 10px; font: 500 14px/20px var(--font-ui); color: var(--text-1); font-variant-numeric: tabular-nums; }
+.nav-planner > .ui-hint { margin-top: 10px; }
+.nav-status { display: flex; align-items: flex-start; gap: 8px; margin-top: 12px; font: 500 14px/20px var(--font-ui); color: var(--text-1); font-variant-numeric: tabular-nums; }
 .nav-status > .ui-icon { color: var(--ok); margin-top: 2px; flex-shrink: 0; }
-.ui-section > .ui-btn + .nav-status { margin-top: 10px; }
+.nav-anchor .ui-notice { margin: 12px 0 0; }
+/* numbers inside the anchor notice sit in the sentence, not above it */
+.nav-anchor .ui-notice__body .ui-num { font-size: inherit; line-height: inherit; }
+.nav-anchor .ui-notice__body .ui-num__unit { font-size: .9em; }
 .nav-gap { margin-top: 10px; }
+.nav-tools-grid + .ui-kv { margin-top: 12px; }
 
 /* ========================================================== Voyages / Tracks lists */
+.nav-list .ui-row__title { text-wrap: balance; }
 .nav-list .ui-row__sub { font-variant-numeric: tabular-nums; }
 .nav-list .ui-row__trail { gap: 8px; }
-.nav-list__month { margin: 12px 2px 6px; }
-.nav-list__month:first-child { margin-top: 0; }
+.nav-list .ui-pill { padding: 0 12px 0 10px; }
+/* month sub-groups: quieter than the section label above them (sentence case, caption size) */
+.nav-list__month { margin: 14px 4px 6px; font: 600 12px/16px var(--font-ui); color: var(--text-3); }
+.nav-list__month:first-child, div:first-child > .nav-list__month { margin-top: 0; }
 .nav-list__unsaved .ui-row__sub { color: var(--alert-text); }
+/* empty list: a quiet inset row where the list will be, saying what to do next */
+.nav-empty .ui-state {
+  flex-direction: row; align-items: center; gap: 12px; padding: 14px 16px; text-align: left;
+  background: var(--raised); border-radius: var(--r-lg); box-shadow: inset 0 0 0 1px var(--line);
+}
+.nav-empty .ui-state > .ui-icon { flex-shrink: 0; color: var(--text-3); }
+.nav-empty .ui-state__msg { max-width: none; flex: 1; min-width: 0; }
+.nav-empty .ui-state > .ui-btn { flex-shrink: 0; }
 .nav-list__retry { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 14px 12px 54px; }

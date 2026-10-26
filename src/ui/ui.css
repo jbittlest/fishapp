@@ -17,6 +17,10 @@
 .ui-num { font-family: var(--font-inst); font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-1); white-space: nowrap; letter-spacing: 0; }
 .ui-num.is-prop { font-variant-numeric: proportional-nums; }
 .ui-num.is-stale { color: var(--text-3); }
+/* night has only two text levels, so "no longer live" also dims (shape cues carry the rest) */
+:root[data-theme="night"] .ui-num.is-stale { opacity: .62; }
+/* "unknown" is a quiet dash, never something that reads like a live value */
+.ui-num.is-empty .ui-num__v { color: var(--text-3); font-weight: 500; }
 .ui-num__unit { font-family: var(--font-ui); font-weight: 500; color: var(--text-2); margin-left: .18em; font-size: .52em; letter-spacing: .01em; }
 .ui-num__deg { font-weight: 500; color: var(--text-2); font-size: .62em; vertical-align: .32em; margin-left: .02em; }
 .ui-num__approx { color: var(--text-2); margin-right: .04em; }
@@ -81,7 +85,7 @@
 .ui-seg__thumb {
   position: absolute; top: 3px; bottom: 3px; left: 3px;
   width: calc((100% - 6px) / var(--n)); border-radius: 8px; background: var(--selected);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, .3);
+  box-shadow: var(--e-thumb);
   transform: translateX(calc(100% * var(--i))); transition: transform var(--t-base) var(--ease-out);
 }
 .ui-seg__opt { position: relative; z-index: 1; font: 600 14px/18px var(--font-ui); color: var(--text-2); border-radius: 8px; }
@@ -94,12 +98,11 @@
 }
 .ui-switch__knob {
   position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%;
-  background: #fff; box-shadow: 0 2px 4px rgba(0, 0, 0, .3); transition: transform var(--t-base) var(--ease-out);
+  background: var(--knob); box-shadow: var(--e-knob); transition: transform var(--t-base) var(--ease-out), background-color var(--t-base);
 }
 .ui-switch.is-on { background: var(--signal); }
-.ui-switch.is-on .ui-switch__knob { transform: translateX(20px); }
+.ui-switch.is-on .ui-switch__knob { transform: translateX(20px); background: var(--knob-on); }
 .ui-switch:disabled { opacity: .4; }
-:root[data-theme="night"] .ui-switch__knob { background: var(--text-1); }
 
 /* ----------------------------------------------------------------- rows */
 .ui-group { background: var(--raised); border-radius: var(--r-lg); overflow: hidden; box-shadow: inset 0 0 0 1px var(--line); }
@@ -117,6 +120,7 @@
 .ui-row__chev { color: var(--text-3); }
 .ui-row--alert .ui-row__title, .ui-row--alert .ui-row__lead { color: var(--alert-text); }
 .ui-row.is-disabled { opacity: .5; }
+.ui-row:focus-visible, .ui-disc__sum:focus-visible, .ui-seg__opt:focus-visible { outline-offset: -2px; }
 .ui-radio { width: 22px; height: 22px; border-radius: 50%; box-shadow: inset 0 0 0 2px var(--line-2); display: grid; place-items: center; flex-shrink: 0; }
 .ui-radio > span { width: 10px; height: 10px; border-radius: 50%; background: transparent; transition: background-color var(--t-fast); }
 .ui-row--radio.is-on .ui-radio { box-shadow: inset 0 0 0 2px var(--signal); }
@@ -159,7 +163,8 @@
   transition: box-shadow var(--t-fast);
 }
 .ui-input::placeholder { color: var(--text-3); }
-.ui-input:focus { box-shadow: inset 0 0 0 1.5px var(--signal); }
+.ui-input:focus { box-shadow: inset 0 0 0 2px var(--signal); }
+.ui-input:focus-visible { outline: none; }   /* the 2px signal inset IS the focus ring — no second ring outside it */
 .ui-textarea { resize: none; min-height: 84px; }
 .ui-select { position: relative; display: block; }
 .ui-select select { appearance: none; -webkit-appearance: none; padding-right: 38px; }
@@ -173,7 +178,7 @@
 }
 .ui-chip::before { content: ''; position: absolute; inset: -4px 0; }
 .ui-chip.is-on { background: var(--signal-soft); box-shadow: inset 0 0 0 1px var(--signal); color: var(--signal-fg); }
-.ui-chiprow { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding: 2px 0; -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent); }
+.ui-chiprow { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding: 2px 0; -webkit-mask-image: linear-gradient(90deg, var(--ink-950) 85%, transparent); mask-image: linear-gradient(90deg, var(--ink-950) 85%, transparent); }
 .ui-chiprow::-webkit-scrollbar { display: none; }
 
 /* ---------------------------------------------------------- badges etc. */
@@ -188,6 +193,9 @@
 .ui-notice__title { font-weight: 600; color: var(--text-1); margin-bottom: 2px; }
 .ui-notice b, .ui-notice strong { color: var(--text-1); }
 .ui-notice--alert { box-shadow: inset 0 0 0 1.5px var(--alert); }
+/* breathing room when a notice or hint follows a group or a hint */
+.ui-group + .ui-notice, .ui-hint + .ui-notice, .ui-seg + .ui-notice { margin-top: 12px; }
+.ui-group + .ui-hint, .ui-seg + .ui-hint { margin-top: 8px; padding: 0 4px; }
 .ui-notice--alert > .ui-icon, .ui-notice--alert .ui-notice__title { color: var(--alert-text); }
 
 /* ------------------------------------------------------- loading/state */

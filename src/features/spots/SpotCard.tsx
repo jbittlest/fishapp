@@ -10,6 +10,7 @@ import { confirmDeleteSpot, navigateToSpot, openSpotModal, spotDistBrg, spotsSto
 import { formatCoord } from '../../engine/gps.js';
 import { SpotDisc } from './SpotGlyph';
 import { fromText, useFix } from './useFix';
+import { shortDate } from './format';
 import './spots.css';
 
 export default function SpotCard({ data }: CardProps) {
@@ -26,7 +27,7 @@ export default function SpotCard({ data }: CardProps) {
   const { distNm, brgDeg } = spotDistBrg(fix.here, spot);
   const subtitle = distNm != null && brgDeg != null ? (
     <span className="spot-meta">
-      <Num value={distNm} digits={2} unit="nm" size="row" stale={!fix.live} /> · <Num value={brgDeg} deg="°T" size="row" stale={!fix.live} /> {fromText(fix)}
+      <Num value={distNm} digits={2} unit="nm" size="row" stale={!fix.live} /><span className="spot-meta__sep">·</span><Num value={brgDeg} deg="°T" size="row" stale={!fix.live} /> <span className="spot-meta__from">{fromText(fix)}</span>
     </span>
   ) : 'No GPS fix — distance unknown';
 
@@ -42,7 +43,7 @@ export default function SpotCard({ data }: CardProps) {
       )}>
       {spot.notes && <p className="spot-card__notes">{spot.notes}</p>}
       <p className="ui-caption spot-card__foot">
-        {formatCoord(spot.lat, 'lat')}  {formatCoord(spot.lng, 'lon')} · Saved {new Date(spot.ts).toLocaleDateString()}
+        <span className="spot-card__pos">{formatCoord(spot.lat, 'lat')}  {formatCoord(spot.lng, 'lon')}</span> · Saved {shortDate(spot.ts)}
       </p>
     </MapCard>
   );

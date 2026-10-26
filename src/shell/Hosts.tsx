@@ -1,6 +1,6 @@
 /* Hosts: render whichever panel / map card / modal the UI store says is open. Each lives in its
  * own error boundary, so a broken feature shows a recoverable message instead of a white app. */
-import { Component, Suspense, useEffect, type ReactNode } from 'react';
+import { Component, Suspense, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import L from 'leaflet';
 import { LoadingRow, Sheet, StateBox, Modal } from '../ui';
 import { closeCard, closeModal, closePanels, useUi } from '../services/ui';
@@ -26,7 +26,12 @@ export function SheetHost() {
   const title = PANEL_TITLES[panel] ?? '';
   return (
     <Boundary resetKey={panel} fallback={(reset, e) => (
-      <Sheet title={title}><StateBox icon="alert" tone="alert" onRetry={reset}>This section hit a problem: {errText(e)}</StateBox></Sheet>
+      <Sheet title={title}>
+        <StateBox icon="alert" tone="alert" onRetry={reset}>
+          This section hit a problem. Tap Retry — if it keeps happening, close and reopen FishApp.
+          <span className="shell-errtext">{errText(e)}</span>
+        </StateBox>
+      </Sheet>
     )}>
       {/* keyed per panel: switching panels drops the old sheet at once instead of React keeping it
           mounted-but-hidden while the next panel's chunk loads */}
@@ -59,12 +64,30 @@ export function CardHost() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [id]);
+  /* Publish --card-clear (px from the bottom of the screen to the card's top edge, 0 with no card)
+     so map chrome that shares the bottom-left corner on desktop (the weather legends) can sit
+     above the card instead of under it. Layout only. */
+  const ro = useRef<ResizeObserver | null>(null);
+  const hostRef = useCallback((el: HTMLDivElement | null) => {
+    const root = document.documentElement.style;
+    ro.current?.disconnect();
+    ro.current = null;
+    if (!el) { root.setProperty('--card-clear', '0px'); return; }
+    const set = () => root.setProperty('--card-clear', Math.max(0, Math.round(window.innerHeight - el.getBoundingClientRect().top)) + 'px');
+    ro.current = new ResizeObserver(set);
+    ro.current.observe(el);
+    set();
+  }, []);
   if (!card) return null;
   const C = CARDS[card.kind];
   if (!C) return null;
   return (
-    <div className="shell-cardhost">
-      <Boundary resetKey={card.id} fallback={(_r, e) => <MapCard title="Couldn't show this" subtitle={errText(e)} />}>
+    <div className="shell-cardhost" ref={hostRef}>
+      <Boundary resetKey={card.id} fallback={(_r, e) => (
+        <MapCard eyebrow="Something went wrong" title="Couldn't show this" subtitle="Close this card and tap the chart again.">
+          <p className="shell-errtext">{errText(e)}</p>
+        </MapCard>
+      )}>
         <Suspense fallback={<MapCard title="Loading…"><LoadingRow /></MapCard>}>
           <C key={card.id} data={card.data} card={card} />
         </Suspense>

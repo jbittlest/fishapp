@@ -6,7 +6,7 @@
  * pipeline and "only close the session this save belongs to" all live in engine/catch.js. The
  * modal host mounts a fresh form per open, so the file inputs are always reset (picking the
  * same photo again still fires change). */
-import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type FocusEvent, type ReactNode } from 'react';
 import { Button, Field, Hint, Icon, LoadingRow, Modal, Notice, TextArea, TextInput, useStoreValue } from '../../ui';
 import { catchStore, clearCatchPhoto, closeCatchModal, onCatchPhoto, saveCatch } from '../../engine/catch.js';
 import { formatCoord } from '../../engine/gps.js';
@@ -21,6 +21,13 @@ function staleFixText(fixTs: number): ReactNode {
   const mins = Math.max(1, Math.round((Date.now() - fixTs) / 60000));
   if (mins < 120) return <>last GPS fix, <span className="tnum">{mins}</span> min ago</>;
   return <>last GPS fix, <span className="tnum">{Math.round(mins / 60)}</span> h ago</>;
+}
+
+/** After the keyboard has risen (it lifts the modal by --kb), bring the focused field into view. */
+function keepFieldInView(e: FocusEvent<HTMLDivElement>) {
+  const el = e.target;
+  if (!(el instanceof HTMLElement) || !el.matches('input:not([type=file]), textarea')) return;
+  window.setTimeout(() => { if (document.activeElement === el) el.scrollIntoView({ block: 'nearest' }); }, 350);
 }
 
 export default function CatchModal(_: { data: unknown }) {
@@ -49,16 +56,18 @@ export default function CatchModal(_: { data: unknown }) {
       primaryLabel={saving ? 'Saving…' : 'Save catch'} onPrimary={save} primaryBusy={saving}
       cancelLabel={saving ? 'Close' : 'Cancel'}>
       {/* Not a <form>: the return key must never save half a catch (implicit submission). */}
-      <div className="tide-form">
+      {/* A field focused while the keyboard is up scrolls clear of it (the modal wrap's
+          scroll-padding carries the keyboard height, tides.css). */}
+      <div className="tide-form" onFocus={keepFieldInView}>
         <Field label="Species">
           <TextInput ref={species} placeholder="e.g. Calico Bass" value={f.species} onChange={set('species')} autoCapitalize="words" />
         </Field>
         <div className="tide-form__pair">
           <Field label="Length (in)">
-            <TextInput type="number" inputMode="decimal" step="any" min="0" value={f.length} onChange={set('length')} />
+            <TextInput type="number" inputMode="decimal" step="any" min="0" placeholder="e.g. 18" value={f.length} onChange={set('length')} />
           </Field>
           <Field label="Weight (lb)">
-            <TextInput type="number" inputMode="decimal" step="any" min="0" value={f.weight} onChange={set('weight')} />
+            <TextInput type="number" inputMode="decimal" step="any" min="0" placeholder="e.g. 3.5" value={f.weight} onChange={set('weight')} />
           </Field>
         </div>
         <Field label="Bait / lure">

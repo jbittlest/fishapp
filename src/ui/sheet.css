@@ -30,10 +30,14 @@
 .ui-sheet__head {
   position: relative; display: flex; align-items: flex-start; gap: 12px;
   padding: 22px 16px 12px 20px; flex-shrink: 0; touch-action: none; cursor: grab;
+  box-shadow: 0 1px 0 transparent; transition: box-shadow var(--t-base);
+  z-index: 1;
 }
+/* once the body scrolls, a hairline separates the pinned header from the content passing under it */
+.ui-sheet.is-scrolled .ui-sheet__head { box-shadow: 0 1px 0 var(--line); }
 .ui-sheet--panel .ui-sheet__head { cursor: default; touch-action: auto; padding-top: 18px; }
 .ui-sheet__grabber { position: absolute; top: 7px; left: 50%; width: 36px; height: 5px; margin-left: -18px; border-radius: 3px; background: var(--grabber); }
-.ui-sheet__titles { flex: 1; min-width: 0; padding-top: 2px; }
+.ui-sheet__titles { flex: 1; min-width: 0; padding-top: 4px; }
 .ui-sheet__titles .ui-title-1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ui-sheet__subtitle { margin-top: 2px; font: 500 13px/18px var(--font-ui); color: var(--text-2); }
 .ui-sheet__actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
@@ -44,6 +48,13 @@
 .ui-sheet--panel .ui-sheet__body { padding: 4px 20px 24px; }
 .ui-sheet__foot { flex-shrink: 0; padding: 8px 16px calc(var(--tab-clear, 0px) + 10px); background: var(--sheet); box-shadow: 0 -1px 0 var(--line); }
 .ui-sheet--panel .ui-sheet__foot { padding-bottom: 14px; }
+/* Phone: the tab capsule floats over the sheet's bottom edge. Fade the sheet's content out beneath
+   it, so text never shows through the gap between the capsule and the screen edge (functional scrim). */
+.ui-sheet--full::after, .ui-sheet--medium::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; pointer-events: none;
+  height: calc(var(--tab-clear, 0px) + 10px);
+  background: linear-gradient(to bottom, transparent, var(--sheet) 34%);
+}
 /* when a footer exists, the body no longer needs to clear the tab bar */
 .ui-sheet:has(.ui-sheet__foot) .ui-sheet__body { padding-bottom: 16px; }
 
@@ -68,18 +79,22 @@
 
 /* ------------------------------------------------------------------ toast */
 .ui-toast {
-  position: fixed; z-index: var(--z-toast); left: 50%; transform: translateX(-50%);
+  position: fixed; z-index: var(--z-toast); left: calc(var(--safe-left) + 16px); right: calc(var(--safe-right) + 16px);
+  margin: 0 auto; width: fit-content; max-width: 440px;
   bottom: calc(var(--chrome-bottom) + var(--kb, 0px) + 12px);
-  max-width: min(420px, calc(100vw - 32px)); min-height: 44px; padding: 10px 8px 10px 16px;
+  min-height: 48px; padding: 10px 8px 10px 16px;
   display: flex; align-items: center; gap: 12px;
   background: var(--chrome-solid); color: var(--text-1); border-radius: 22px;
   box-shadow: var(--e3), inset 0 0 0 1px var(--line);
   font: 500 14px/19px var(--font-ui);
   animation: toast-in var(--t-base) var(--ease-out);
 }
-@keyframes toast-in { from { transform: translate(-50%, 8px); opacity: .6; } to { transform: translateX(-50%); opacity: 1; } }
-.ui-toast__msg { flex: 1; padding-right: 8px; }
+@keyframes toast-in { from { transform: translateY(8px); opacity: .6; } to { transform: none; opacity: 1; } }
+.ui-toast__msg { flex: 1; min-width: 0; padding: 2px 8px 2px 0; text-wrap: pretty; }
+.ui-toast:not(:has(.ui-toast__action)) { padding-right: 16px; }
+.ui-toast:not(:has(.ui-toast__action)) .ui-toast__msg { padding-right: 0; }
 .ui-toast--alert { box-shadow: var(--e3), inset 0 0 0 1.5px var(--alert); padding-left: 12px; }
 .ui-toast__icon { color: var(--alert-text); flex-shrink: 0; }
-.ui-toast__action { flex-shrink: 0; height: 32px; padding: 0 12px; border-radius: var(--r-pill); color: var(--signal-fg); font: 600 14px/1 var(--font-ui); }
+.ui-toast__action { position: relative; flex-shrink: 0; height: 36px; padding: 0 14px; border-radius: var(--r-pill); background: var(--control); color: var(--signal-fg); font: 600 14px/1 var(--font-ui); }
+.ui-toast__action::before { content: ''; position: absolute; inset: -4px -2px; }   /* 44px hit area */
 .ui-toast__action:active { background: var(--control); }

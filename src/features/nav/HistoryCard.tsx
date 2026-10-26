@@ -8,14 +8,15 @@ import { MapCard } from '../../shell/MapCard';
 import type { CardProps } from '../../shell/registry';
 import { deleteTrip, toggleTripShown, tripRetrySave, tripSaveAsFile, tripsStore } from '../../engine/goto.js';
 import { deleteTrack, toggleTrackShown, trackRetrySave, trackSaveAsFile, tracksStore } from '../../engine/tracks.js';
-import { fmtDur } from '../../engine/nav.js';
+import { durWords } from './useNow';
 import './nav.css';
 
 function when(start: number, end: number) {
   if (!start) return '';
   const d = new Date(start);
   const t = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) + ' · ' + t(start) + (end > start ? '–' + t(end) : '');
+  const a = t(start), b = end > start ? t(end) : '';
+  return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) + ' · ' + a + (b && b !== a ? '–' + b : '');
 }
 
 function TripCard({ id }: { id: number | string }) {
@@ -35,7 +36,7 @@ function TripCard({ id }: { id: number | string }) {
       }>
       <StatStrip cells={[
         { key: 'nm', label: 'Distance', value: <Num value={t.actualNm} digits={1} unit="nm" size="s" /> },
-        { key: 't', label: 'Time', value: fmtDur(durS) },
+        { key: 't', label: 'Time', value: durWords(durS) },
         { key: 'avg', label: 'Avg', value: <Num value={t.avgKn > 0 ? t.avgKn : null} digits={1} unit="kn" size="s" /> },
         { key: 'max', label: 'Max', value: <Num value={t.maxKn > 0 ? t.maxKn : null} digits={1} unit="kn" size="s" /> },
       ]} />
@@ -67,7 +68,7 @@ function TrackCard({ id }: { id: number | string }) {
       }>
       <StatStrip cells={[
         { key: 'nm', label: 'Distance', value: <Num value={t.nm} digits={2} unit="nm" size="s" /> },
-        { key: 't', label: 'Time', value: t.end > t.start ? fmtDur(durS) : '—' },
+        { key: 't', label: 'Time', value: t.end > t.start ? durWords(durS) : '—' },
         { key: 'pts', label: 'Points', value: <Num value={t.points} digits={0} size="s" /> },
       ]} />
       {t.unsaved && <p className="ui-hint">Storage refused this track{t.error ? ` (${t.error})` : ''}. It is kept until the app closes — retry, or save it as a file and import it later.</p>}

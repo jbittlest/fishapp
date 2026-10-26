@@ -10,7 +10,7 @@ import { useUi } from '../services/ui';
 import { isNativeShell } from '../services/native';
 import { gotoStore } from '../engine/goto.js';
 import { Hud } from './Hud';
-import { SosButton, MapControls, ZoomControls, TabBar } from './Chrome';
+import { SosButton, MapControls, ZoomControls, TabBar, OfflineChip } from './Chrome';
 import { SheetHost, CardHost, ModalHost } from './Hosts';
 import { Onboarding } from './Onboarding';
 import { GoToCard, NavPill } from '../features/nav/GoToCard';
@@ -76,6 +76,9 @@ export function App() {
       {/* map chrome */}
       <div className="shell-right">
         <MapControls />
+      </div>
+      <div className="shell-left">
+        <OfflineChip />
       </div>
       <MapLegends />
 

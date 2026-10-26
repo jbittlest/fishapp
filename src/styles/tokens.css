@@ -39,6 +39,9 @@
   --e1: 0 1px 2px rgba(0, 0, 0, .30), 0 8px 20px rgba(2, 6, 10, .30);
   --e2: 0 -12px 40px rgba(0, 0, 0, .45);
   --e3: 0 20px 48px rgba(0, 0, 0, .5);
+  --e-thumb: 0 1px 2px rgba(0, 0, 0, .3);              /* segmented thumb, small raised controls */
+  --e-knob: 0 2px 4px rgba(0, 0, 0, .3);               /* switch knob */
+  --e-chip: 0 1px 3px rgba(0, 0, 0, .35);              /* name chips on the chart */
 
   /* ---- layout measurements published by the shell (px) ---- */
   --safe-top: env(safe-area-inset-top, 0px);
@@ -47,6 +50,7 @@
   --safe-right: env(safe-area-inset-right, 0px);
   --persist-bottom: 140px;   /* measured: bottom edge of HUD + nav pill/watch band (Shell) */
   --chrome-bottom: 96px;     /* measured: top edge of the bottom chrome stack (Shell) */
+  --card-clear: 0px;         /* measured: screen bottom → top edge of an open map card (Hosts) */
   --rail-w: 0px;             /* 76px on desktop */
   --panel-w: 0px;            /* side-panel width on desktop when one is open */
 }
@@ -79,6 +83,17 @@
   --alarm: #C81E14;
   --ok: #3FD08A;                      /* only ever a dot or glyph, never text */
   --chart-ink: #0B131C;               /* casing under route lines, marker discs */
+  --chart-bg: #0E2A40;                /* behind missing tiles: dark, never a bright grey glare */
+  --chart-halo: #FFFFFF;              /* own-ship keyline, selection dot */
+  --chart-label: #F3F6F9;             /* text/glyphs on --chart-ink chips and discs */
+  /* Always-ink surfaces that sit INSIDE a paper sheet in sun (the Emergency position card): these
+     are NOT remapped by .surface-paper, so the card stays a high-contrast instrument in glare. */
+  --ink-text-1: #F3F6F9;
+  --ink-text-2: #B4C0CC;
+  --ink-control: #1D2C3C;
+  --knob: #FFFFFF;                    /* switch knob */
+  --knob-on: #FFFFFF;
+  --alarm-dim: #7A0F09;               /* off-phase of the anchor alarm flash */
   --series: #4A5D72;                  /* single neutral data series */
   --scrim-top: linear-gradient(rgba(6, 11, 17, .72), rgba(6, 11, 17, 0));
   --backdrop: rgba(4, 8, 12, .55);
@@ -135,6 +150,15 @@
   --alarm: #C81E14;                   /* alarms override night mode on purpose — a dragging anchor must wake you */
   --ok: #D0583F;                      /* status is carried by SHAPE at night (filled / hollow / ✕) */
   --chart-ink: #070202;
+  --chart-bg: #050101;
+  --chart-halo: #2A0805;
+  --chart-label: #F2664A;
+  --ink-text-1: #F2664A;
+  --ink-text-2: #D0583F;
+  --ink-control: #1E0907;
+  --knob: #6E2618;                    /* off: a dim knob, so OFF never reads as a lit control */
+  --knob-on: #000000;                 /* on: dark knob on the signal track */
+  --alarm-dim: #7A0F09;
   --series: #5A1E14;
   --scrim-top: linear-gradient(rgba(0, 0, 0, .85), rgba(0, 0, 0, 0));
   --backdrop: rgba(0, 0, 0, .6);

@@ -1,8 +1,8 @@
 /* Map card for a California Marine Protected Area (replaces the Leaflet popup). The take rule and
- * the regulations disclaimer are the legacy wording; the polygon's look is echoed as a swatch:
- * its data colour by day (red no-take, magenta special closure, orange limited) and its line
- * pattern always (solid / dashed / dotted), so the kind never rests on colour alone and the
- * swatch stays red-safe at night. */
+ * the regulations disclaimer are the legacy wording; the polygon's look is echoed by the card's
+ * media tile: its data colour by day (red no-take, magenta special closure, orange limited) and
+ * its line pattern always (solid / dashed / dotted), so the kind never rests on colour alone and
+ * the tile stays red-safe at night. */
 import type { CSSProperties } from 'react';
 import { Badge, Button, Hint, Icon } from '../../ui';
 import { MapCard } from '../../shell/MapCard';
@@ -23,14 +23,21 @@ export default function MpaCard({ data }: CardProps) {
   const type: string = data?.type ?? '';
   const typeName: string = data?.typeName ?? '';
   const restrictive = kind === 'notake' || kind === 'closure';
-  const subtitle = type ? (typeName && typeName !== type ? `${type} · ${typeName}` : type) : undefined;
+  const name = String(data?.name ?? 'Marine Protected Area');
+  /* "Point Vicente SMCA (No-Take)" already carries the designation: spell it out once, not twice. */
+  const subtitle = type
+    ? (typeName && typeName !== type ? (name.includes(type) ? typeName : `${type} · ${typeName}`) : type)
+    : undefined;
 
   return (
-    <MapCard eyebrow="Marine Protected Area" title={String(data?.name ?? 'Marine Protected Area')} subtitle={subtitle}
-      media={<span className={'spot-mpa-media spot-mpa-media--' + kind}><Icon name={restrictive ? 'no-fishing' : 'fish'} size={28} /></span>}
+    <MapCard eyebrow="Marine Protected Area" title={name} subtitle={subtitle}
+      media={(
+        <span className={'spot-mpa-media spot-mpa-media--' + kind} style={data?.color ? { '--mpa': data.color } as CSSProperties : undefined}>
+          <Icon name={restrictive ? 'no-fishing' : 'fish'} size={28} />
+        </span>
+      )}
       actions={<Button icon="external" onClick={() => openExternal(CDFW_MPA_URL)}>CDFW regulations</Button>}>
       <div className="spot-mpa__head">
-        {data?.color && <span className={'spot-mpa__swatch spot-mpa__swatch--' + kind} style={{ '--mpa': data.color } as CSSProperties} aria-hidden />}
         <Badge tone={restrictive ? 'alert' : 'neutral'} icon={restrictive ? 'ban' : 'info'}>{BADGE[kind] ?? 'Restricted'}</Badge>
       </div>
       {data?.take && <p className="spot-mpa__take">{data.take}</p>}

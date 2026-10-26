@@ -1,16 +1,40 @@
 /* Hey Fish tab item — additions to shell.css's .shell-tab--voice. Tokens only. */
 
-/* The label can be a heard command: keep it on one line inside the tab cell. min-width:0 stops
-   the long label from widening its grid column (1fr has an automatic min-content minimum). */
+/* The label stays on one line inside the tab cell. min-width:0 stops a long label from widening
+   its grid column (1fr has an automatic min-content minimum). */
 .voice-tab { min-width: 0; }
 .voice-tab__label { display: block; max-width: calc(100% - 6px); overflow: hidden; text-overflow: ellipsis; }
 .voice-tab--heard .voice-tab__label { color: var(--signal-fg); }
 
+/* The disc: 34 px, lifted 2 px, still taking a 24 px icon's slot so every tab label shares one
+   baseline — the 38 px disc in shell.css ran into its own label. */
+/* disc size and label alignment come from shell.css (.shell-tab--voice .shell-tab__disc) */
+
+/* The command just heard, in full, for the 2 s it shows: a chip above the tab capsule (phone),
+   beside the rail (desktop). Chrome, not a sheet, so it stays ink in the sun theme. */
+.voice-tab__full { display: none; }
+.voice-tab__heard {
+  position: absolute; left: 50%; bottom: calc(100% + 14px); transform: translateX(-50%);
+  /* centred, it stays clear of the zoom keys in the right-hand column (12 + 48 + 8 px) */
+  max-width: min(300px, calc(100vw - 2 * 68px)); padding: 8px 14px; border-radius: var(--r-pill);
+  background: var(--chrome-solid); color: var(--text-1); box-shadow: var(--e1), inset 0 0 0 1px var(--line-2);
+  font: 600 14px/18px var(--font-ui); letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  pointer-events: none; animation: voice-heard-in var(--t-base) var(--ease-out);
+}
+@keyframes voice-heard-in { from { opacity: 0; translate: 0 4px; } to { opacity: 1; translate: none; } }
+.shell-rail .voice-tab__heard { left: calc(100% + 14px); bottom: auto; top: 50%; transform: translateY(-50%); max-width: 320px; }
+/* A Go-To card fills the slot above the capsule: never cover it, even for 2 s. The command goes
+   back into the tab label (truncated) instead. */
+.shell-bottom:has(.shell-bottom__main > *) .shell-tabbar .voice-tab__heard,
+.shell-bottom:has(.shell-bottom__main > *) .shell-tabbar .voice-tab__short { display: none; }
+.shell-bottom:has(.shell-bottom__main > *) .shell-tabbar .voice-tab__full { display: inline; }
+
 /* Hands-free was on before this launch: a small signal dot on the disc says "tap anywhere to
    resume" (with the toast and the button's label) — shape, not colour alone. */
 .voice-tab__resume {
-  position: absolute; top: 6px; left: calc(50% + 11px);
+  position: absolute; top: 5px; left: calc(50% + 10px);
   width: 9px; height: 9px; border-radius: 50%;
   background: var(--signal); box-shadow: 0 0 0 2px var(--chrome-solid);
 }
+.shell-rail .voice-tab__resume { top: 7px; }
 .voice-tab:focus-visible { outline: 2px solid var(--signal); outline-offset: -2px; }

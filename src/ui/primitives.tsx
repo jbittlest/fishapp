@@ -29,7 +29,7 @@ export interface NumProps {
 export function Num({ value, digits = 0, unit, deg, size = 'm', approx, stale, proportional, className, empty = '—' }: NumProps) {
   const ok = value != null && Number.isFinite(value);
   return (
-    <span className={cx('ui-num', `ui-num--${size}`, stale && 'is-stale', proportional && 'is-prop', className)}>
+    <span className={cx('ui-num', `ui-num--${size}`, stale && 'is-stale', proportional && 'is-prop', !ok && 'is-empty', className)}>
       {ok && approx && <span className="ui-num__approx">~</span>}
       <span className="ui-num__v">{ok ? (value as number).toFixed(digits) : empty}</span>
       {ok && deg && <span className="ui-num__deg">{deg}</span>}

@@ -54,23 +54,31 @@ function RoutePlanner() {
   for (let i = 0; i < legs.length; i += LEGS_PER_GROUP) legGroups.push(legs.slice(i, i + LEGS_PER_GROUP));
 
   return (
-    <Section label="Route planner">
-      <div className="nav-tools-row">
-        <Button icon="plus" className={'nav-toggle' + (adding ? ' is-on' : '')} aria-pressed={adding}
+    <Section label="Route planner" className="nav-planner">
+      {/* 2 x 2 so nothing truncates at 375 px: the main pair (add points → start) filled, the
+          editing pair (undo / clear) outlined underneath. */}
+      <div className="nav-tools-grid">
+        <Button icon={adding ? 'check' : 'plus'} className={'nav-toggle' + (adding ? ' is-on' : '')} aria-pressed={adding}
           onClick={() => setMode('route', adding)}>{adding ? 'Done' : 'Add points'}</Button>
-        <Button icon="undo" onClick={routeUndo} disabled={pts === 0}>Undo</Button>
-        <Button icon="trash" onClick={routeClear} disabled={pts === 0}>Clear</Button>
+        <Button variant="primary" icon="play" disabled={pts < 2} busy={starting} onClick={start}>Start route</Button>
+        <Button variant="ghost" icon="undo" className="nav-tools-edit" onClick={routeUndo} disabled={pts === 0}>Undo</Button>
+        <Button variant="ghost" icon="trash" className="nav-tools-edit" onClick={routeClear} disabled={pts === 0}>Clear</Button>
       </div>
-      <Button variant="primary" icon="play" block disabled={pts < 2} busy={starting} onClick={start}>Start route</Button>
 
       <div className="nav-fields">
-        <Field label="Speed (kn)">
-          <TextInput type="number" inputMode="decimal" min={0} step="any" value={spdDraft} placeholder="0"
-            onChange={(e) => { setSpdDraft(e.target.value); setRouteSpeedKn(e.target.value); }} />
+        <Field label="Cruise speed">
+          <span className="nav-unit-input">
+            <TextInput type="number" inputMode="decimal" min={0} step="any" value={spdDraft} placeholder="0"
+              onChange={(e) => { setSpdDraft(e.target.value); setRouteSpeedKn(e.target.value); }} />
+            <span className="nav-unit">kn</span>
+          </span>
         </Field>
-        <Field label="Fuel (gal/hr)">
-          <TextInput type="number" inputMode="decimal" min={0} step="any" value={gphDraft} placeholder="0"
-            onChange={(e) => { setGphDraft(e.target.value); setRouteGph(e.target.value); }} />
+        <Field label="Fuel burn">
+          <span className="nav-unit-input">
+            <TextInput type="number" inputMode="decimal" min={0} step="any" value={gphDraft} placeholder="0"
+              onChange={(e) => { setGphDraft(e.target.value); setRouteGph(e.target.value); }} />
+            <span className="nav-unit">gal/hr</span>
+          </span>
         </Field>
       </div>
 
@@ -104,9 +112,9 @@ function Measure() {
   const on = mode === 'measure';
   return (
     <Section label="Measure">
-      <Button block icon="ruler" className={'nav-toggle' + (on ? ' is-on' : '')} aria-pressed={on}
-        onClick={() => setMode('measure', on)}>{on ? 'Stop measuring' : 'Tap two points on the map'}</Button>
-      {on && <Hint>{pending ? 'Now tap the second point.' : 'Tap two points on the map. A third tap starts over.'}</Hint>}
+      <Button block icon={on ? 'x' : 'ruler'} className={'nav-toggle' + (on ? ' is-on' : '')} aria-pressed={on}
+        onClick={() => setMode('measure', on)}>{on ? 'Stop measuring' : 'Measure distance'}</Button>
+      <Hint>{on ? (pending ? 'Now tap the second point.' : 'Tap two points on the map. A third tap starts over.') : 'Distance and bearing between any two points you tap on the chart.'}</Hint>
       {result && (
         <StatStrip className="nav-block" cells={[
           { key: 'nm', label: 'Distance', value: <Num value={result.nm} digits={2} unit="nm" size="s" /> },
@@ -148,10 +156,13 @@ function AnchorWatch() {
   const snoozedOutside = !blind && !dragging && outside && snoozeUntil > now;
 
   return (
-    <Section label="Anchor alarm">
-      <Field label="Watch radius (ft)">
-        <TextInput type="number" inputMode="numeric" min={1} step={1} value={draft}
-          onChange={(e) => setDraft(e.target.value)} onBlur={commit} onKeyDown={onKey} />
+    <Section label="Anchor alarm" className="nav-anchor">
+      <Field label="Watch radius">
+        <span className="nav-unit-input">
+          <TextInput type="number" inputMode="numeric" min={1} step={1} value={draft}
+            onChange={(e) => setDraft(e.target.value)} onBlur={commit} onKeyDown={onKey} />
+          <span className="nav-unit">ft</span>
+        </span>
       </Field>
       {/* The tap itself unlocks audio, takes the wake lock and the keep-alive — keep it synchronous. */}
       <Button block icon="anchor" variant="secondary"
@@ -196,17 +207,17 @@ function TripStats() {
   const dur = tripDurationMs({ active, start, segStart, accMs }, now);
   return (
     <Section label="Trip stats">
-      <div className="nav-tools-row nav-tools-row--2">
+      <div className="nav-tools-grid">
         <Button icon={active ? 'pause' : 'play'} onClick={tripToggle}>{button}</Button>
         <Button icon="undo" onClick={tripReset} disabled={!start}>Reset</Button>
       </div>
       <KeyValues items={[
         { key: 'd', k: 'Distance', v: <Num value={start ? dist : null} digits={2} unit="nm" size="row" /> },
-        { key: 't', k: 'Time', v: start ? fmtDur(dur / 1000) : '—' },
+        { key: 't', k: 'Time', v: start ? fmtDur(dur / 1000) : <Num value={null} size="row" /> },
         { key: 'max', k: 'Max speed', v: <Num value={maxKn} digits={1} unit="kn" size="row" /> },
         { key: 'avg', k: 'Avg speed', v: <Num value={avgKn} digits={1} unit="kn" size="row" /> },
       ]} />
-      <Hint>Distance counts real movement only — GPS jitter while you sit on a spot is ignored.</Hint>
+      <Hint>{start ? '' : 'Start a trip to log distance, time and speed from here. '}Distance counts real movement only — GPS jitter while you sit on a spot is ignored.</Hint>
     </Section>
   );
 }

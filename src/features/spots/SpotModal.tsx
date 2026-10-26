@@ -1,7 +1,7 @@
 /* The spot editor (modal 'spot'): name, type, notes. Opened by engine openSpotModal() — the Mark
  * control, a long-press on the map, the inspect card, a reef's "Save as spot", Edit on a spot. */
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Field, Modal, TextArea, TextInput, useStoreValue } from '../../ui';
+import { Field, Icon, Modal, TextArea, TextInput, useStoreValue } from '../../ui';
 import { SPOT_TYPES, closeSpotModal, saveSpot, spotsStore } from '../../engine/spots.js';
 import { formatCoord } from '../../engine/gps.js';
 import { SpotGlyph } from './SpotGlyph';
@@ -34,7 +34,9 @@ export default function SpotModal({ data }: { data: SpotModalData | null }) {
   return (
     <Modal title={d.isNew ? 'New spot' : 'Edit spot'} onCancel={closeSpotModal}
       primaryLabel="Save" onPrimary={save} primaryBusy={saving}>
-      {hasPos && <p className="ui-caption spot-modal__pos">{formatCoord(d.lat!, 'lat')}  {formatCoord(d.lng!, 'lon')}</p>}
+      {hasPos && (
+        <p className="spot-modal__pos"><Icon name="crosshair" size={14} /><span>{formatCoord(d.lat!, 'lat')}  {formatCoord(d.lng!, 'lon')}</span></p>
+      )}
       <form onSubmit={onSubmit}>
         <Field label="Name">
           <TextInput ref={nameRef} value={name} placeholder={d.defaultName || 'Spot name'} maxLength={60} enterKeyHint="done"

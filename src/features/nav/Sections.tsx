@@ -10,12 +10,13 @@ import {
 import {
   deleteTrack, loadTracks, toggleTrackShown, trackRetrySave, trackSaveAsFile, tracksStore, type TrackItem,
 } from '../../engine/tracks.js';
-import { fmtDur } from '../../engine/nav.js';
+import { durWords } from './useNow';
 import './nav.css';
 
 const PER_GROUP = 8;
 
-function dateText(ms: number) { return ms ? new Date(ms).toLocaleDateString() : ''; }
+/* rows are grouped by month, so the row only needs the day */
+function dateText(ms: number) { return ms ? new Date(ms).toLocaleDateString([], { month: 'short', day: 'numeric' }) : ''; }
 function monthText(ms: number) { return ms ? new Date(ms).toLocaleDateString([], { month: 'long', year: 'numeric' }) : 'Undated'; }
 
 /** Unsaved first, then by month, at most 8 rows per group (DESIGN §4). */
@@ -27,6 +28,8 @@ function groupRows<T extends { start: number; unsaved: boolean }>(items: T[]): A
     else out.push({ key: label + ':' + out.length, label: last && last.label === label ? '' : label, rows: [row] });
   };
   items.forEach((it) => push(it.unsaved ? 'Not saved' : monthText(it.start), it));
+  // one month and nothing unsaved: the header would only repeat what every row's date says
+  if (out.length === 1 && !items[0].unsaved) out[0].label = '';
   return out;
 }
 
@@ -40,7 +43,7 @@ function ArchiveRow({ icon, title, subtitle, unsaved, shown, onShow, onDelete, o
         className={unsaved ? 'nav-list__unsaved' : undefined}
         trailing={
           <>
-            <PillButton on={shown} onClick={onShow} aria-label={(shown ? 'Hide ' : 'Show ') + kind + ' on the map'}>{shown ? 'Hide' : 'Show'}</PillButton>
+            <PillButton icon={shown ? 'eye-off' : 'eye'} on={shown} onClick={onShow} aria-label={(shown ? 'Hide ' : 'Show ') + kind + ' on the map'}>{shown ? 'Hide' : 'Show'}</PillButton>
             <IconButton icon="trash" size="sm" tone="plain" label={'Delete ' + kind} onClick={onDelete} />
           </>
         } />
@@ -55,9 +58,10 @@ function ArchiveRow({ icon, title, subtitle, unsaved, shown, onShow, onDelete, o
 }
 
 function tripSub(t: TripItem) {
-  const dur = fmtDur(Math.max(0, (t.end - t.start) / 1000));
+  const dur = durWords(Math.max(0, (t.end - t.start) / 1000));
   if (t.unsaved) return 'Not saved — ' + (t.error || 'storage error') + ' · ' + t.actualNm.toFixed(1) + ' nm';
-  return t.actualNm.toFixed(1) + ' nm · ' + dur + ' · avg ' + t.avgKn.toFixed(1) + ' kn · ' + dateText(t.start);
+  return [dateText(t.start), t.actualNm.toFixed(1) + ' nm', dur, t.avgKn > 0 ? 'avg ' + t.avgKn.toFixed(1) + ' kn' : '']
+    .filter(Boolean).join(' · ');
 }
 
 export function VoyagesSection() {
@@ -69,15 +73,15 @@ export function VoyagesSection() {
 
   let body: ReactNode;
   if (status === 'error' && !items.length) {
-    body = <StateBox icon="alert" tone="alert" onRetry={() => { loadTrips(); }}>Couldn't read saved voyages — {error}</StateBox>;
+    body = <div className="nav-empty"><StateBox icon="alert" tone="alert" onRetry={() => { loadTrips(); }}>Couldn't read saved voyages — {error}</StateBox></div>;
   } else if ((status === 'idle' || status === 'loading') && !items.length) {
     body = <LoadingRow>Loading voyages…</LoadingRow>;
   } else if (!items.length) {
-    body = <StateBox icon="navigation">No voyages yet. Tap the map → Navigate here (or a saved spot → Navigate) to start one.</StateBox>;
+    body = <div className="nav-empty"><StateBox icon="navigation">No voyages yet. Tap the map → Navigate here (or a saved spot → Navigate) to start one.</StateBox></div>;
   } else {
     body = groupRows(items).map((g) => (
       <div key={g.key}>
-        {g.label && <div className="ui-label nav-list__month">{g.label}</div>}
+        {g.label && <div className="nav-list__month">{g.label}</div>}
         <Group className="nav-list">
           {g.rows.map((t) => (
             <ArchiveRow key={String(t.id)} kind="voyage" icon="navigation" title={t.name} subtitle={tripSub(t)}
@@ -94,7 +98,8 @@ export function VoyagesSection() {
 
 function trackSub(t: TrackItem) {
   if (t.unsaved) return 'Not saved — ' + (t.error || 'storage error') + ' · ' + t.nm.toFixed(2) + ' nm';
-  return t.nm.toFixed(2) + ' nm · ' + dateText(t.start);
+  return [dateText(t.start), t.nm.toFixed(2) + ' nm', t.end > t.start ? durWords((t.end - t.start) / 1000) : '']
+    .filter(Boolean).join(' · ');
 }
 
 export function TracksSection() {
@@ -107,15 +112,15 @@ export function TracksSection() {
 
   let body: ReactNode;
   if (status === 'error' && !items.length) {
-    body = <StateBox icon="alert" tone="alert" onRetry={() => { loadTracks(); }}>Couldn't read saved tracks — {error}</StateBox>;
+    body = <div className="nav-empty"><StateBox icon="alert" tone="alert" onRetry={() => { loadTracks(); }}>Couldn't read saved tracks — {error}</StateBox></div>;
   } else if ((status === 'idle' || status === 'loading') && !items.length) {
     body = <LoadingRow>Loading tracks…</LoadingRow>;
   } else if (!items.length) {
-    body = <StateBox icon="record">{recording ? 'Recording now — it appears here when you stop.' : 'No tracks recorded yet. Start one from More → Record track.'}</StateBox>;
+    body = <div className="nav-empty"><StateBox icon="record">{recording ? 'Recording now — it appears here when you stop.' : 'No tracks recorded yet. Start one from More → Record track.'}</StateBox></div>;
   } else {
     body = groupRows(items).map((g) => (
       <div key={g.key}>
-        {g.label && <div className="ui-label nav-list__month">{g.label}</div>}
+        {g.label && <div className="nav-list__month">{g.label}</div>}
         <Group className="nav-list">
           {g.rows.map((t) => (
             <ArchiveRow key={String(t.id)} kind="track" icon="route" title={t.name} subtitle={trackSub(t)}

@@ -1,8 +1,10 @@
 /* Instrument HUD — top of the persistent layer, never covered by a sheet.
  *
- * Row 1: GPS fix state (shape-coded so it survives night mode and colour blindness), DMM
- *        coordinates (thousandths of a minute — the number you read to the Coast Guard), the
- *        OFFLINE marker and the chart-loading spinner.
+ * Row 1: GPS fix state (shape-coded so it survives night mode and colour blindness) and the DMM
+ *        coordinates (thousandths of a minute — the number you read to the Coast Guard). Nothing
+ *        else shares this row, so the coordinates are never truncated, even at 375 px with a
+ *        stale age showing. The OFFLINE marker and the chart-loading spinner live with the map
+ *        controls (Chrome.tsx): they describe the chart and data, not the instruments.
  * Row 2: SOG · COG °T · WATER — big condensed tabular numerals.
  *
  * Honesty rules: a value older than 10 s dims and the age is shown; with no fix for 60 s the GPS
@@ -10,11 +12,10 @@
  * is dimmed below 0.5 kn where GPS course is mostly noise; water temp is satellite SST, so it
  * only shows near the boat and while fresh. */
 import { useEffect, useState } from 'react';
-import { Num, Spinner, useStoreValue } from '../ui';
+import { Icon, Num, useStoreValue } from '../ui';
 import { gpsStore, formatCoord, GPS_STALE_MS } from '../engine/gps.js';
 import { conditionsStore } from '../engine/weather.js';
-import { layersStore } from '../engine/layers.js';
-import { openPanel, useUi } from '../services/ui';
+import { openPanel } from '../services/ui';
 
 function useNow(ms: number) {
   const [now, setNow] = useState(() => Date.now());
@@ -50,8 +51,6 @@ export function Hud({ compact }: { compact?: boolean }) {
   const waterAt = useStoreValue(conditionsStore, (s) => s.at);
   const wLat = useStoreValue(conditionsStore, (s) => s.lat);
   const wLng = useStoreValue(conditionsStore, (s) => s.lng);
-  const online = useUi((s) => s.online);
-  const tileBusy = useStoreValue(layersStore, (s) => s.tileBusy);
 
   const fixAge = fixAt ? now - fixAt : Infinity;
   const hasFix = status === 'fix' && fixAt > 0;
@@ -86,13 +85,9 @@ export function Hud({ compact }: { compact?: boolean }) {
           <span className="shell-hud__dot" aria-hidden />
           <span className="shell-hud__fixtext">{gpsText}</span>
         </span>
-        <span className="shell-hud__right">
-          {tileBusy && <Spinner size="sm" label="Loading chart tiles" />}
-          {!online && <span className="shell-hud__offline">Offline</span>}
-          {hasFix && lat != null && lng != null && !compact && (
-            <span className={'shell-hud__coords' + (stale ? ' is-stale' : '')}>{formatCoord(lat, 'lat')} {formatCoord(lng, 'lon')}</span>
-          )}
-        </span>
+        {hasFix && lat != null && lng != null && !compact && (
+          <span className={'shell-hud__coords' + (stale ? ' is-stale' : '')}>{formatCoord(lat, 'lat')} {formatCoord(lng, 'lon')}</span>
+        )}
       </div>
       <div className="shell-hud__cells">
         <div className="shell-hud__cell">
@@ -113,7 +108,7 @@ export function Hud({ compact }: { compact?: boolean }) {
              position isn't sent anywhere until you ask). The dash is a door to Weather, not a fault. */
           <button type="button" className="shell-hud__cell shell-hud__cell--btn" onClick={() => openPanel('weather')}
             aria-label="Water temperature not loaded — open Weather">
-            <span className="ui-label">Water</span>
+            <span className="shell-hud__lbl"><span className="ui-label">Water</span><Icon name="chevron-right" size={12} className="shell-hud__more" /></span>
             <Num value={null} digits={0} empty="—" />
           </button>
         )}

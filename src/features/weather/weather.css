@@ -5,17 +5,23 @@
 /* ----------------------------------------------------------- panel basics */
 .wx-tabs { margin: 2px 0 14px; }
 .wx-loc {
-  display: flex; align-items: flex-start; gap: 6px; margin: 0 2px 12px;
+  display: flex; align-items: flex-start; gap: 6px; margin: 0 2px 4px;
   font: 500 13px/18px var(--font-ui); color: var(--text-2);
 }
 .wx-loc > .ui-icon { margin-top: 2px; color: var(--text-3); }
 .wx-loc__text { min-width: 0; overflow-wrap: anywhere; }
-.wx-loc--area > .ui-icon { color: var(--signal-fg); }
-.wx-area { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: -4px 0 12px; }
 .wx-busy { display: inline-grid; place-items: center; width: 32px; height: 32px; }
-/* compact buttons are 40 px tall: extend the hit area to 44 px (DESIGN §3), like .ui-ibtn--sm */
-.wx-hit44 { position: relative; }
-.wx-hit44::after { content: ''; position: absolute; inset: -2px 0; }
+
+/* a tapped area's forecast: its own bar, with the way back on the same line */
+.wx-areabar {
+  display: flex; align-items: center; gap: 10px; margin: 0 0 8px; padding: 8px 8px 8px 12px;
+  background: var(--raised); border-radius: var(--r-lg); box-shadow: inset 0 0 0 1px var(--line);
+}
+.wx-areabar__ic { color: var(--signal-fg); flex-shrink: 0; }
+.wx-areabar__text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.wx-areabar__title { font: 600 14px/18px var(--font-ui); color: var(--text-1); }
+.wx-areabar__where { font: 500 12.5px/16px var(--font-inst); font-variant-numeric: tabular-nums; color: var(--text-2); overflow-wrap: anywhere; }
+.wx-areabar .ui-btn { flex-shrink: 0; }
 
 /* strong wind / gust (≥ the rough-day wind threshold): triangle + heavier figures, like a rough
    day in the 10-day list — never colour alone, and never red (reserved for safety alarms) */
@@ -23,38 +29,48 @@
 .wx-strong .ui-num__v { font-weight: 800; }
 .wx-strong__icon { color: var(--text-1); flex-shrink: 0; }
 
+/* percent hugs its number ("38%"), like degrees — a spaced "38 %" reads as two things */
+.wx-pct .ui-num__unit { margin-left: .04em; }
+
 /* current conditions */
 .wx-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
-.wx-tiles .ui-stat { min-height: 104px; }
+.wx-tiles .ui-stat { padding: 11px 12px 12px 14px; gap: 2px; justify-content: flex-start; }
+.wx-tiles .ui-stat__row { min-height: 40px; }
+.wx-tiles .ui-stat__detail { font-size: 12.5px; line-height: 17px; }
 .wx-strip-now { margin-bottom: 22px; }
-.wx-detail-sep { color: var(--text-3); }
+.wx-strip-now .ui-strip__cell { padding: 10px 12px 11px 14px; }
+.wx-detail-sep { margin-left: .3em; font: 600 14px/22px var(--font-inst); color: var(--text-2); }
 
 /* stale / source line — sits right under the location line, above the numbers it qualifies */
 .wx-age {
-  display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: -6px 2px 12px;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-height: 18px; margin: 0 2px 14px;
   font: 500 12.5px/17px var(--font-ui); color: var(--text-3);
 }
 .wx-age.is-stale { color: var(--text-1); }
 .wx-age.is-stale > .ui-icon { color: var(--text-1); }
 
 /* ------------------------------------------------- hourly strip (24 h / 3 h) */
+/* a real border, not an inset shadow: the label column's own fill would paint over a shadow */
 .wx-hstrip {
   display: flex; background: var(--raised); border-radius: var(--r-lg);
-  box-shadow: inset 0 0 0 1px var(--line); overflow: hidden;
+  border: 1px solid var(--line); overflow: hidden;
 }
 .wx-hstrip__labels {
-  flex-shrink: 0; display: grid; grid-template-rows: 30px repeat(5, 30px); align-items: center;
-  padding: 6px 10px 8px 12px; box-shadow: inset -1px 0 0 var(--line); background: var(--raised);
+  flex-shrink: 0; display: grid; grid-template-rows: 28px repeat(5, 34px); align-items: center;
+  padding: 6px 10px 8px 12px; box-shadow: inset -1px 0 0 var(--line);
 }
-.wx-hstrip__lab { font: 600 11px/14px var(--font-ui); letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); white-space: nowrap; }
-.wx-hstrip__lab small { font-size: 10px; letter-spacing: .02em; text-transform: none; color: var(--text-3); font-weight: 500; }
+.wx-hstrip__lab {
+  display: flex; flex-direction: column; font: 600 11px/12px var(--font-ui); letter-spacing: .06em;
+  text-transform: uppercase; color: var(--text-3); white-space: nowrap;
+}
+.wx-hstrip__lab small { margin-top: 1px; font: 500 10.5px/12px var(--font-ui); letter-spacing: .01em; text-transform: none; color: var(--text-3); }
 .wx-hstrip__scroll {
   flex: 1; min-width: 0; display: flex; overflow-x: auto; overscroll-behavior-x: contain;
   scrollbar-width: none; -webkit-overflow-scrolling: touch; padding: 6px 4px 8px;
 }
 .wx-hstrip__scroll::-webkit-scrollbar { display: none; }
 .wx-hstrip__col {
-  flex: 0 0 auto; min-width: 58px; display: grid; grid-template-rows: 30px repeat(5, 30px);
+  flex: 0 0 auto; min-width: 56px; display: grid; grid-template-rows: 28px repeat(5, 34px);
   align-items: center; justify-items: center; padding: 0 4px;
 }
 .wx-hstrip__col + .wx-hstrip__col { box-shadow: inset 1px 0 0 var(--line); }
@@ -66,7 +82,8 @@
 
 /* ------------------------------------------------------------- 10-day list */
 .wx-days .ui-disc__sum { padding: 6px 10px 6px 12px; gap: 6px; min-height: 56px; }
-.wx-days .ui-disc__body { padding: 2px 12px 14px; }
+.wx-days .ui-disc.is-open > .ui-disc__sum { box-shadow: inset 0 -1px 0 var(--line); }
+.wx-days .ui-disc__body { padding: 12px 12px 14px; }
 .wx-day {
   display: grid; align-items: center; column-gap: 5px;
   grid-template-columns: minmax(0, 1.35fr) 22px minmax(0, 1.05fr) minmax(0, 1fr) minmax(0, .95fr) minmax(0, .8fr);
@@ -88,63 +105,101 @@
 .wx-day--rough .wx-day__wind .ui-num__v,
 .wx-day--rough .wx-day__wave .ui-num__v { font-weight: 800; }
 .wx-legendhint { margin: 0 2px 10px; }
+.wx-days__key { display: flex; align-items: baseline; gap: 6px; margin: 10px 2px 0; font: 500 12.5px/17px var(--font-ui); color: var(--text-3); }
+.wx-days__key > span { font: 700 14px/1 var(--font-inst); color: var(--text-2); }
 
-.wx-daydet { display: flex; flex-direction: column; gap: 12px; }
+/* an open day: facts as hairline rows on the day's own surface (no box inside a box), the
+   3-hourly strip as a recessed well */
+.wx-daydet { display: flex; flex-direction: column; gap: 14px; }
+.wx-daydet .ui-kv { background: transparent; box-shadow: none; border-radius: 0; }
+.wx-daydet .ui-kv__row { padding: 8px 2px; }
+.wx-daydet .ui-kv__row:first-child { padding-top: 0; }
+.wx-daydet .ui-kv__row:last-child { padding-bottom: 0; }
+.wx-daydet .ui-kv dt { font-size: 13.5px; }
 .wx-daydet .ui-kv dd { font-family: var(--font-ui); font-weight: 500; font-size: 14px; }
 .wx-daydet .ui-kv dd .ui-num { font-size: 15px; }
-.wx-daydet .ui-notice { margin: 0; }
-.wx-daydet__strip .ui-section__head { margin-top: 0; }
+.wx-daydet .ui-notice { margin: 0; background: var(--sheet); }
+.wx-daydet__strip { margin: 0; }
+.wx-daydet__strip .ui-section__head { margin-top: 0; min-height: 0; }
+.wx-daydet .wx-hstrip { background: var(--sheet); }
 
 /* ------------------------------------------------------------- map legends */
+/* one column of equal-width cards; on a phone it keeps the right-hand control column
+   (layers / follow / zoom, 48 px + gaps) free */
 .wx-legends {
   position: fixed; z-index: var(--z-chrome); pointer-events: none;
   left: calc(var(--safe-left) + 12px + var(--rail-w));
-  right: calc(var(--safe-right) + 12px);
-  /* above the bottom stack (zoom keys, Go-To card, tab bar) and the attribution line */
+  right: calc(var(--safe-right) + 12px + 48px + 8px);
+  /* above the bottom stack (zoom keys, Go-To card, tab bar) and the attribution line —
+     22 px matches GAP_BOTTOM in MapLegends.tsx */
   bottom: calc(var(--chrome-bottom) + 22px);
-  display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+  max-width: 400px;
+  display: flex; flex-direction: column; align-items: stretch; gap: 6px;
 }
-.shell.is-desktop .wx-legends { left: calc(var(--rail-w) + 12px); right: auto; width: 400px; }
+.shell.is-desktop .wx-legends { left: calc(var(--rail-w) + 12px); right: auto; width: 360px; }
 .shell.is-desktop.has-sheet .wx-legends { left: calc(var(--rail-w) + 424px); }
+/* desktop: a map card shares the bottom-left corner — the legends ride above it */
+.shell.is-desktop.has-card .wx-legends { bottom: calc(max(var(--chrome-bottom), var(--card-clear, 0px)) + 12px); }
 .wx-legends > * { pointer-events: auto; }
-.wx-legends.is-hidden { display: none; }   /* a sheet is open on a phone (MapLegends) */
+.wx-legends.is-hidden { display: none; }   /* a sheet or map card is open on a phone (MapLegends) */
 
-.wx-sst {
-  width: 236px; max-width: 100%; padding: 10px 12px 10px;
+.wx-legend {
   background: var(--chrome); color: var(--text-1); border-radius: var(--r-lg);
   box-shadow: var(--e1), inset 0 0 0 1px var(--line);
-  display: flex; flex-direction: column; gap: 8px;
 }
+
+/* SST legend */
+.wx-sst { display: flex; flex-direction: column; gap: 8px; padding: 8px 8px 10px 12px; }
 .wx-sst__head { display: flex; align-items: center; gap: 8px; min-height: 32px; }
-.wx-sst__titles { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.wx-sst__date { font: 500 12px/16px var(--font-inst); font-variant-numeric: tabular-nums; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.wx-sst__bar { height: 12px; border-radius: 6px; box-shadow: inset 0 0 0 1px var(--line-2); }
-.wx-sst__ends { display: flex; justify-content: space-between; margin-top: -4px; }
-.wx-sst__ends .ui-num { font-size: 15px; line-height: 18px; }
-.wx-sst__ends-words { font: 500 12px/18px var(--font-ui); color: var(--text-3); }
-.wx-sst .ui-input { min-height: 44px; padding-top: 10px; padding-bottom: 10px; font-size: 16px; }
-.wx-sst__note { margin: 0; font: 500 12px/16px var(--font-ui); color: var(--text-3); text-align: center; }
+.wx-sst__titles { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+.wx-sst__titles .ui-label { flex-shrink: 0; color: var(--text-2); }
+.wx-sst__date { min-width: 0; font: 500 12.5px/16px var(--font-inst); font-variant-numeric: tabular-nums; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wx-sst__scale { display: flex; align-items: center; gap: 8px; padding-right: 4px; }
+.wx-sst__scale .ui-num { font-size: 15px; line-height: 18px; flex-shrink: 0; }
+.wx-sst__bar { flex: 1; min-width: 40px; height: 10px; border-radius: 5px; box-shadow: inset 0 0 0 1px var(--line-2); }
+.wx-sst__ends-words { flex-shrink: 0; font: 500 12px/18px var(--font-ui); color: var(--text-3); }
+.wx-sst__foot { display: flex; align-items: center; gap: 8px; padding-right: 4px; }
+.wx-sst__pal { flex: 1 1 0; min-width: 0; }
+.wx-sst__pal .ui-input { min-height: 44px; padding: 10px 34px 10px 12px; font-size: 16px; line-height: 22px; background: var(--control); box-shadow: none; }
+.wx-sst__pal .ui-select__chev { right: 10px; }
+.wx-sst__play.ui-btn { flex: 1 1 0; min-width: 0; min-height: 44px; padding: 0 12px; }
+.wx-sst__note { margin: -2px 4px 0 0; font: 500 12px/16px var(--font-ui); color: var(--text-3); text-wrap: balance; }
 .wx-sst__chip {
-  display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px;
+  align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 10px 0 12px;
   background: var(--chrome); color: var(--text-1); border-radius: var(--r-pill);
   box-shadow: var(--e1), inset 0 0 0 1px var(--line); font: 600 13px/1 var(--font-ui);
 }
 .wx-sst__chip .ui-num { font-size: 15px; line-height: 18px; }
+.wx-sst__chiprange { display: inline-flex; align-items: baseline; }
+.wx-sst__dash { margin: 0 2px; color: var(--text-3); font: 500 14px/1 var(--font-inst); }
 .wx-sst__chipbar { width: 34px; height: 8px; border-radius: 4px; }
+.wx-sst__chipplay { color: var(--signal-fg); }
+.wx-sst__chipchev { color: var(--text-2); }
 
-.wx-loop {
-  display: flex; align-items: center; gap: 8px; width: 100%; max-width: 420px; min-height: 52px;
-  padding: 4px 12px 4px 8px; background: var(--chrome); color: var(--text-1); border-radius: var(--r-lg);
-  box-shadow: var(--e1), inset 0 0 0 1px var(--line);
-}
-.wx-loop__icon { display: grid; place-items: center; width: 22px; color: var(--text-2); flex-shrink: 0; }
+/* rain / wind loop scrubbers */
+.wx-loop { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 2px 12px 2px 10px; }
+.wx-loop__icon { display: grid; place-items: center; width: 20px; color: var(--text-2); flex-shrink: 0; }
+.wx-loop .ui-ibtn--sm { width: 32px; height: 32px; }
+.wx-loop .ui-ibtn--signal { background: var(--signal-soft); }
 .wx-loop__scrub {
-  flex: 1; min-width: 80px; height: 44px; margin: 0; background: transparent;
-  accent-color: var(--signal); cursor: pointer; touch-action: pan-y;
+  -webkit-appearance: none; appearance: none; --pct: 0%;
+  flex: 1; min-width: 64px; height: 40px; margin: 0; background: transparent; cursor: pointer; touch-action: pan-y;
 }
+.wx-loop__scrub:focus-visible { outline-offset: -6px; }
+.wx-loop__scrub::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 2px;
+  background: linear-gradient(to right, var(--signal) var(--pct), var(--line-2) var(--pct));   /* progress, not decoration */
+}
+.wx-loop__scrub::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 18px; height: 18px; margin-top: -7px; border-radius: 50%;
+  background: var(--signal); box-shadow: 0 0 0 2px var(--chrome-solid);
+}
+.wx-loop__scrub::-moz-range-track { height: 4px; border-radius: 2px; background: var(--line-2); }
+.wx-loop__scrub::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--signal); }
+.wx-loop__scrub::-moz-range-thumb { width: 18px; height: 18px; border: 0; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 2px var(--chrome-solid); }
 .wx-loop__scrub:disabled { opacity: .4; cursor: default; }
 .wx-loop__time {
-  display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; flex-shrink: 0; min-width: 76px;
+  display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; flex-shrink: 0; min-width: 62px;
   font: 600 13px/16px var(--font-inst); font-variant-numeric: tabular-nums; color: var(--text-1); white-space: nowrap;
 }
 .wx-loop__note { flex: 1; min-width: 0; font: 500 13px/17px var(--font-ui); color: var(--text-2); }
@@ -154,25 +209,55 @@
 }
 
 /* ------------------------------------------------------------ inspect card */
-.wx-ins { display: flex; flex-direction: column; }
-.wx-ins__row { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 48px; padding: 4px 0; }
-.wx-ins__row + .wx-ins__row { box-shadow: inset 0 1px 0 var(--line); }
-.wx-ins__ic { color: var(--text-2); display: grid; place-items: center; }
-.wx-ins__lbl { font: 500 14px/18px var(--font-ui); color: var(--text-2); }
-.wx-ins__val { display: flex; align-items: center; justify-content: flex-end; gap: 8px; text-align: right; min-width: 0; }
-.wx-ins__main { display: flex; flex-direction: column; align-items: flex-end; }
-.wx-ins__alt { font: 500 12.5px/16px var(--font-inst); font-variant-numeric: tabular-nums; color: var(--text-2); white-space: nowrap; }
-.wx-ins__muted { font: 500 13px/18px var(--font-ui); color: var(--text-3); font-style: italic; }
-.wx-ins__note { margin: 6px 0 0; font: 500 12px/16px var(--font-ui); color: var(--text-3); }
-.wx-ins__retry { margin-top: 6px; align-self: flex-start; }
+/* the coordinates title in instrument numerals (MapCard takes a plain string, which also names the dialog) */
+.shell-card:has(.wx-ins) .shell-card__title { font-family: var(--font-inst); font-variant-numeric: tabular-nums; letter-spacing: .005em; }
+.wx-ins { display: flex; flex-direction: column; gap: 8px; }
+.wx-ins__grid {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  background: var(--raised); border-radius: var(--r-lg); box-shadow: inset 0 0 0 1px var(--line); overflow: hidden;
+}
+.wx-ins__cell { display: flex; flex-direction: column; gap: 1px; min-width: 0; padding: 8px 10px 9px 12px; }
+.wx-ins__cell:nth-child(2) { box-shadow: inset 1px 0 0 var(--line); }
+.wx-ins__cell:nth-child(3) { box-shadow: inset 0 1px 0 var(--line); }
+.wx-ins__cell:nth-child(4) { box-shadow: inset 1px 0 0 var(--line), inset 0 1px 0 var(--line); }
+.wx-ins__lbl { color: var(--text-3); }
+.wx-ins__v { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 26px; }
+.wx-ins__main { min-width: 0; display: flex; align-items: center; }
+.wx-ins__alt {
+  font: 500 12.5px/16px var(--font-inst); font-variant-numeric: tabular-nums; color: var(--text-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wx-ins__alt .ui-num { font-size: inherit; line-height: inherit; color: var(--text-1); }
+.wx-ins__muted { font: italic 500 13px/16px var(--font-ui); color: var(--text-3); }
+.wx-ins__foot { display: flex; align-items: center; gap: 10px; }
+.wx-ins__note { flex: 1; margin: 0 2px; font: 500 12px/16px var(--font-ui); color: var(--text-3); }
+.wx-ins__retry { flex-shrink: 0; margin: 2px 0; }   /* room for the 44 px hit extension inside the scroll box */
+/* the three actions as one toolbar row: icon over label */
+.wx-ins__acts { flex: 1 1 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.wx-ins__acts .ui-btn { flex-direction: column; gap: 3px; min-height: 52px; padding: 6px 4px 5px; font-size: 13px; line-height: 16px; }
+.wx-ins__acts .ui-btn__label { max-width: 100%; }
 
 /* --------------------------------------------------------------- fish card */
-.wx-fish__photo {
-  display: block; width: 100%; height: 148px; object-fit: cover; border-radius: var(--r-md);
-  background: var(--raised); margin-bottom: 10px;
+.wx-fish { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; align-items: stretch; }
+.wx-fish.has-photo { grid-template-columns: 112px minmax(0, 1fr); }
+/* the photo frame holds its size while the picture loads, with a fish glyph behind it */
+.wx-fish__frame {
+  position: relative; display: grid; place-items: center; height: 112px;
+  border-radius: var(--r-md); overflow: hidden; background: var(--raised); color: var(--text-3);
+  box-shadow: inset 0 0 0 1px var(--line);
 }
+.wx-fish__photo { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; }
+.wx-fish__facts {
+  margin: 0; display: flex; flex-direction: column; justify-content: center;
+  background: var(--raised); border-radius: var(--r-md); box-shadow: inset 0 0 0 1px var(--line);
+}
+.wx-fish__fact { display: flex; flex-direction: column; gap: 2px; padding: 9px 12px; min-width: 0; }
+.wx-fish__fact + .wx-fish__fact { box-shadow: inset 0 1px 0 var(--line); }
+.wx-fish__fact dd { margin: 0; display: flex; flex-wrap: wrap; column-gap: 6px; font: 600 15px/19px var(--font-inst); font-variant-numeric: tabular-nums; color: var(--text-1); }
+.wx-fish__fact .ui-num { font-size: 15px; line-height: 19px; }
+.wx-fish__sub { font: 500 13px/19px var(--font-inst); color: var(--text-2); }
 .wx-fish__sci { font-style: italic; }
-.wx-fish__credit { margin: 10px 2px 0; font: 500 12px/16px var(--font-ui); color: var(--text-3); overflow-wrap: anywhere; }
+.wx-fish__credit { margin: 8px 2px 0; font: 500 12px/16px var(--font-ui); color: var(--text-3); overflow-wrap: anywhere; text-wrap: balance; }
 
 /* --------------------------------------------- map symbology (Leaflet) */
 .wx-windarrow { background: none; border: 0; }
@@ -184,3 +269,22 @@
 .leaflet-interactive.wx-fishdot--older { fill: var(--chart-ink); stroke: var(--text-1); }
 /* the invisible 44 px tap target under each dot */
 .leaflet-interactive.wx-fishhit { fill-opacity: 0; stroke: none; }
+
+/* Night (red-safe). The data overlays keep their meaning but lose blue / green light:
+   - wind arrows: the legacy speed bands (engine/weather.js windColor) become a red luminance
+     ramp — calm darkest, stay-home brightest — and the speed figures use night text;
+   - SST and rain radar images, and the SST legend bars, go red monochrome through one filter,
+     so the legend still matches the picture on screen. */
+:root[data-theme="night"] .wx-windarrow path { stroke: var(--chart-ink); }
+:root[data-theme="night"] .wx-windarrow path[fill="#8a9aa8"] { fill: var(--selected); }
+:root[data-theme="night"] .wx-windarrow path[fill="#4aa3e0"] { fill: color-mix(in srgb, var(--text-1) 38%, var(--chart-ink)); }
+:root[data-theme="night"] .wx-windarrow path[fill="#3dd464"] { fill: color-mix(in srgb, var(--text-1) 55%, var(--chart-ink)); }
+:root[data-theme="night"] .wx-windarrow path[fill="#e8c93d"] { fill: color-mix(in srgb, var(--text-1) 72%, var(--chart-ink)); }
+:root[data-theme="night"] .wx-windarrow path[fill="#f2803d"] { fill: color-mix(in srgb, var(--text-1) 88%, var(--chart-ink)); }
+:root[data-theme="night"] .wx-windarrow path[fill="#e8453d"] { fill: var(--text-1); }
+:root[data-theme="night"] .wx-windarrow svg + div { color: var(--text-1) !important; text-shadow: 0 1px 2px var(--chart-ink) !important; }
+:root[data-theme="night"] .leaflet-overlay-pane img.leaflet-image-layer,
+:root[data-theme="night"] .leaflet-layer.rain-tiles,
+:root[data-theme="night"] .wx-sstbar {
+  filter: grayscale(1) brightness(.45) sepia(1) hue-rotate(-35deg) saturate(5);
+}

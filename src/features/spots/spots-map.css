@@ -45,3 +45,7 @@
 :root[data-theme="night"] .spot-mpa--notake,
 :root[data-theme="night"] .spot-mpa--closure { stroke: var(--alert-text); fill: var(--alert-text); }
 :root[data-theme="night"] .spot-mpa--limited { stroke: var(--text-2); fill: var(--text-2); }
+
+/* A faint keyline on the name chip (it echoes the disc's) keeps the chip's edge readable where the
+   ink chip sits on dark water — satellite imagery, the night chart. */
+.spot-mk__chip { outline: 1px solid color-mix(in srgb, var(--text-1) 22%, transparent); outline-offset: 0; }

@@ -1,6 +1,7 @@
 /* Map chrome: SOS, the right-hand control column, zoom, and the tab bar / desktop rail. */
-import { Icon, type IconName, useIsDesktop, useStoreValue } from '../ui';
+import { Icon, Spinner, type IconName, useIsDesktop, useStoreValue } from '../ui';
 import { gpsStore } from '../engine/gps.js';
+import { layersStore } from '../engine/layers.js';
 import { getMap, markHere, toggleFollowByUser } from '../engine/app.js';
 import { voiceStore } from '../engine/voice.js';
 import { openPanel, togglePanel, useUi, type PanelId } from '../services/ui';
@@ -23,13 +24,30 @@ function Ctl({ icon, label, onClick, active, filled }: { icon: IconName; label: 
   );
 }
 
+/** The chart-loading spinner sits on the Map layers control (it is about the chart, not the
+ *  instruments), as a small ring in the button's corner. */
 export function MapControls() {
   const follow = useStoreValue(gpsStore, (s) => s.follow);
+  const tileBusy = useStoreValue(layersStore, (s) => s.tileBusy);
   const panel = useUi((s) => s.panel);
   return (
     <div className="shell-ctlgroup shell-mapctl">
       <Ctl icon="layers" label="Map layers" active={panel === 'layers'} onClick={() => togglePanel('layers')} />
       <Ctl icon="locate-fixed" label={follow ? 'Following the boat — tap to stop' : 'Follow the boat'} active={follow} onClick={toggleFollowByUser} />
+      {tileBusy && <span className="shell-ctl__busy"><Spinner size="sm" label="Loading chart tiles" /></span>}
+    </div>
+  );
+}
+
+/** OFFLINE marker: top-left of the chart, under the persistent layer. Shape + word, never colour
+ *  alone; it says the chart and conditions come from this device until the connection is back. */
+export function OfflineChip() {
+  const online = useUi((s) => s.online);
+  if (online) return null;
+  return (
+    <div className="shell-offline" role="status">
+      <Icon name="cloud-off" size={15} />
+      <span>Offline</span>
     </div>
   );
 }

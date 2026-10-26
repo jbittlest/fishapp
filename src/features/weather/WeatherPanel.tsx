@@ -87,7 +87,7 @@ function AgeNote({ ts, fresh, failed, refreshing, onRetry }: { ts: number; fresh
     <div className={'wx-age' + (stale ? ' is-stale' : '')} role={stale ? 'status' : undefined}>
       {stale && <Icon name="alert" size={14} />}
       <span>{wxAgeLabel(ts, fresh, failed, refreshing)}</span>
-      {stale && online && !refreshing && <Button variant="ghost" compact icon="refresh" className="wx-hit44" onClick={onRetry}>Retry</Button>}
+      {stale && online && !refreshing && <Button variant="ghost" compact icon="refresh" onClick={onRetry}>Retry</Button>}
     </div>
   );
 }
@@ -127,11 +127,11 @@ function HourStrip({ hours, label, stale }: { hours: WxHour[]; label: string; st
     <div className="wx-hstrip">
       <div className="wx-hstrip__labels" aria-hidden>
         <span className="wx-hstrip__lab" />
-        <span className="wx-hstrip__lab">Wind <small>kn</small></span>
-        <span className="wx-hstrip__lab">Gust</span>
-        <span className="wx-hstrip__lab">Waves <small>ft</small></span>
-        <span className="wx-hstrip__lab">Rain <small>chance</small></span>
-        <span className="wx-hstrip__lab">Air</span>
+        <span className="wx-hstrip__lab">Wind<small>kn</small></span>
+        <span className="wx-hstrip__lab">Gust<small>kn</small></span>
+        <span className="wx-hstrip__lab">Waves<small>ft</small></span>
+        <span className="wx-hstrip__lab">Rain<small>chance</small></span>
+        <span className="wx-hstrip__lab">Air<small>°F</small></span>
       </div>
       <div className="wx-hstrip__scroll" role="list" aria-label={label}>
         {hours.map((h) => (
@@ -142,7 +142,7 @@ function HourStrip({ hours, label, stale }: { hours: WxHour[]; label: string; st
             </span>
             <span className="wx-hstrip__c" aria-hidden><Strong on={h.gustRough} size={11}><Num size="row" value={h.gustKn} stale={stale} /></Strong></span>
             <span className="wx-hstrip__c" aria-hidden><Num size="row" value={h.waveFt} digits={1} stale={stale} /></span>
-            <span className="wx-hstrip__c" aria-hidden><Num size="row" value={h.rainPct} unit="%" stale={stale} /></span>
+            <span className="wx-hstrip__c" aria-hidden><Num size="row" value={h.rainPct} unit="%" className="wx-pct" stale={stale} /></span>
             <span className="wx-hstrip__c" aria-hidden><Num size="row" value={h.tempF} deg="°" stale={stale} /></span>
           </div>
         ))}
@@ -192,30 +192,31 @@ function CurrentTiles({ c, stale }: { c: WxCurrent; stale: boolean }) {
   const swell = c.swellFt == null ? <Num size="s" value={null} /> : (
     <>
       <Num size="s" value={c.swellFt} digits={1} unit="ft" stale={stale} />
-      {c.swellPerS != null && <span className="wx-detail-sep"> @ {c.swellPerS}s</span>}
+      {c.swellPerS != null && <span className="wx-detail-sep">@ {c.swellPerS}s</span>}
     </>
   );
+  // Instrument read-out like the HUD: caps label, big value, one detail line — no per-tile glyphs.
   return (
     <>
       <div className="wx-tiles">
-        <StatTile icon="wind" label="Wind" detail={windDetail}
+        <StatTile label="Wind" detail={windDetail}
           dial={<DirectionDial towardDeg={toward(c.windFromDeg)} label={c.windFromDeg != null ? `Wind from ${compass(c.windFromDeg)}` : undefined} />}>
           <Strong on={c.windRough} size={16}><Num value={c.windKn} unit="kn" stale={stale} /></Strong>
         </StatTile>
-        <StatTile icon="wind" label="Gusts" detail={c.maxGust24 != null ? `up to ${c.maxGust24} kn in 24 h` : undefined}>
+        <StatTile label="Gusts" detail={c.maxGust24 != null ? `up to ${c.maxGust24} kn in 24 h` : undefined}>
           <Strong on={c.gustRough} size={16}><Num value={c.gustKn} unit="kn" stale={stale} /></Strong>
         </StatTile>
-        <StatTile icon="waves" label="Waves" detail={waveDetail}
+        <StatTile label="Waves" detail={waveDetail}
           dial={c.waveFromDeg != null ? <DirectionDial towardDeg={toward(c.waveFromDeg)} label={`Waves from ${compass(c.waveFromDeg)}`} /> : undefined}>
           <Num value={c.waveFt} digits={1} unit="ft" stale={stale} />
         </StatTile>
-        <StatTile icon="thermo" label="Air">
+        <StatTile label="Air">
           <Num value={c.tempF} deg="°F" stale={stale} />
         </StatTile>
       </div>
       <StatStrip className="wx-strip-now" cells={[
         { key: 'swell', label: 'Swell', value: swell },
-        { key: 'rain', label: 'Rain chance', value: <Num size="s" value={c.rainPctNow} unit="%" stale={stale} /> },
+        { key: 'rain', label: 'Rain chance', value: <Num size="s" value={c.rainPctNow} unit="%" className="wx-pct" stale={stale} /> },
         {
           key: 'max', label: 'Max wind 24 h',
           value: <Strong on={c.maxWind24 != null && c.maxWind24 >= ROUGH_WIND_KN}><Num size="s" value={c.maxWind24} unit="kn" stale={stale} /></Strong>,
@@ -241,14 +242,18 @@ function TenDayTab() {
     body = <StateBox icon="alert" tone="alert" onRetry={retry}>Couldn’t load the 10-day forecast. Check your connection and retry.</StateBox>;
   } else if (fc.status === 'ready') {
     body = fc.days.length ? (
-      <Group className="wx-days">
-        {fc.days.map((d) => (
-          <Disclosure key={d.key} open={!!open[d.key]} onToggle={(o) => setOpen((p) => ({ ...p, [d.key]: o }))}
-            summary={<DaySummary d={d} stale={stale} />}>
-            <DayDetail d={d} stale={stale} />
-          </Disclosure>
-        ))}
-      </Group>
+      <>
+        <Group className="wx-days">
+          {fc.days.map((d) => (
+            <Disclosure key={d.key} open={!!open[d.key]} onToggle={(o) => setOpen((p) => ({ ...p, [d.key]: o }))}
+              summary={<DaySummary d={d} stale={stale} />}>
+              <DayDetail d={d} stale={stale} />
+            </Disclosure>
+          ))}
+        </Group>
+        {/* the "~" on a day name, spelled out once under the list */}
+        {fc.days.some((d) => d.longRange) && <p className="wx-days__key"><span aria-hidden>~</span> long-range model, low confidence</p>}
+      </>
     ) : <StateBox icon="clock" onRetry={retry}>Every day in this saved forecast has passed. Connect to the internet to refresh it.</StateBox>;
   } else {
     body = <LoadingRow>Loading 10-day forecast…</LoadingRow>;
@@ -256,19 +261,33 @@ function TenDayTab() {
 
   return (
     <>
-      <LocLine text={fc.locLabel} area={fc.forArea} />
-      {fc.forArea && (
-        <div className="wx-area">
-          {/* Same source as the engine's "here": the boat's last fix, kept after the fix is lost. */}
-          <Button variant="ghost" compact icon="locate" className="wx-hit44" onClick={() => openPanel('weather', { tab: '10day' })}>
-            {fc.hereAtBoat ? 'Back to my position' : 'Back to map centre'}
-          </Button>
-        </div>
-      )}
+      {fc.forArea ? <AreaBar label={fc.locLabel} hereAtBoat={fc.hereAtBoat} /> : <LocLine text={fc.locLabel} />}
       <AgeNote ts={fc.ts} fresh="Open-Meteo · updated just now" failed={fc.refreshFailed} refreshing={fc.refreshing} onRetry={retry} />
-      <Hint className="wx-legendhint">Tap any day for a 3-hourly breakdown. Wind in kn, waves in ft.</Hint>
+      {fc.status === 'ready' && fc.days.length > 0 && <Hint className="wx-legendhint">Tap a day for its 3-hourly breakdown.</Hint>}
       {body}
     </>
+  );
+}
+
+/** A tapped area's forecast is a different place from the boat: say so in a bar of its own,
+ *  with the way back on the same line. */
+function AreaBar({ label, hereAtBoat }: { label: string; hereAtBoat: boolean }) {
+  const cut = label.indexOf(' — ');
+  const title = cut > 0 ? label.slice(0, cut) : label || 'For this area';
+  const where = cut > 0 ? label.slice(cut + 3) : '';
+  const back = hereAtBoat ? 'Back to my position' : 'Back to map centre';
+  return (
+    <div className="wx-areabar">
+      <Icon name="pin" size={18} className="wx-areabar__ic" />
+      <div className="wx-areabar__text">
+        <span className="wx-areabar__title">{title}</span>
+        {where && <span className="wx-areabar__where">{where}</span>}
+      </div>
+      {/* Same source as the engine's "here": the boat's last fix, kept after the fix is lost. */}
+      <Button compact icon="locate" aria-label={back} onClick={() => openPanel('weather', { tab: '10day' })}>
+        {hereAtBoat ? 'My position' : 'Map centre'}
+      </Button>
+    </div>
   );
 }
 
@@ -310,7 +329,7 @@ function DaySummary({ d, stale }: { d: WxDay; stale: boolean }) {
         <span className="wx-day__cap">waves</span>
       </span>
       <span className="wx-day__stack" aria-hidden>
-        <Num size="row" value={d.pop} unit="%" stale={stale} />
+        <Num size="row" value={d.pop} unit="%" className="wx-pct" stale={stale} />
         <span className="wx-day__cap">chance</span>
       </span>
     </span>
@@ -335,7 +354,7 @@ function DayDetail({ d, stale }: { d: WxDay; stale: boolean }) {
   }
   items.push({
     key: 'rain', k: 'Rain',
-    v: d.pop == null ? '—' : <><Num size="row" value={d.pop} unit="%" /> chance{d.rainSum ? <> · <Num size="row" value={d.rainSum} digits={2} unit="in" /></> : null}</>,
+    v: d.pop == null ? '—' : <><Num size="row" value={d.pop} unit="%" className="wx-pct" /> chance{d.rainSum ? <> · <Num size="row" value={d.rainSum} digits={2} unit="in" /></> : null}</>,
   });
   if (d.sst != null) items.push({ key: 'water', k: 'Water', v: <Num size="row" value={d.sst} deg="°F" /> });
 

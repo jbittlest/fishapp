@@ -1,9 +1,14 @@
 /* First Mate (assistant) chat sheet. Tokens only; every class is prefixed asst-. */
 
 /* ------------------------------------------------------------ status line */
-.asst-status { display: inline-flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%; }
-.asst-status__text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.asst-status__dot { position: relative; width: 9px; height: 9px; flex-shrink: 0; border-radius: 50%; }
+/* The brain line is honesty copy ("Data mode — answering from your boat data"): it wraps to a
+   second line under the header actions instead of being cut off. */
+.asst-status { display: inline-flex; align-items: flex-start; gap: 7px; min-width: 0; max-width: 100%; }
+.asst-status__text {
+  overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;
+  text-wrap: pretty;
+}
+.asst-status__dot { position: relative; width: 9px; height: 9px; margin-top: 4.5px; flex-shrink: 0; border-radius: 50%; }
 /* filled disc = a cloud AI is answering */
 .asst-status.is-claude .asst-status__dot,
 .asst-status.is-proxy .asst-status__dot { background: var(--ok); box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--ok) 25%, transparent); }
@@ -14,24 +19,39 @@
 
 /* ------------------------------------------------------------- transcript */
 .asst-body { display: flex; flex-direction: column; }
-.asst-log { display: flex; flex-direction: column; gap: 16px; padding: 6px 0 10px; margin-top: auto; }
+.asst-log { display: flex; flex-direction: column; gap: 18px; padding: 8px 0 12px; margin-top: auto; }
 .asst-msg {
-  max-width: 100%; color: var(--text-1); font: 400 16px/23px var(--font-ui);
+  max-width: 100%; color: var(--text-1); font: 400 16px/24px var(--font-ui);
+  font-variant-numeric: tabular-nums;          /* tide times and heights line up down a list */
   white-space: pre-wrap; overflow-wrap: anywhere; -webkit-user-select: text; user-select: text;
 }
 .asst-msg strong { font-weight: 600; }
 .asst-msg--user {
-  align-self: flex-end; max-width: 86%; padding: 9px 14px;
-  border-radius: 18px 18px 6px 18px; background: var(--control);
+  align-self: flex-end; max-width: 84%; padding: 10px 14px;
+  border-radius: 20px 20px 6px 20px; background: var(--control); line-height: 22px;
 }
 .asst-msg--bot { align-self: stretch; }
-.asst-msg.is-greeting { color: var(--text-2); }
-.asst-msg.is-greeting::first-line { color: var(--text-1); font-weight: 600; }
-.asst-msg.is-error { display: grid; grid-template-columns: 18px minmax(0, 1fr); column-gap: 10px; }
-.asst-msg__icon { margin-top: 3px; color: var(--alert-text); }
-.asst-msg__text { min-width: 0; }
+/* a user question right after an answer gets a little more air than the answer under it */
+.asst-msg--bot + .asst-msg--user { margin-top: 4px; }
 
-.asst-thinking { display: inline-flex; align-items: center; gap: 10px; min-height: 23px; color: var(--text-2); font: 500 14px/20px var(--font-ui); }
+/* RichText lines (layout only — the words are the reply's) */
+.asst-line { display: block; text-wrap: pretty; }
+.asst-line + .asst-line, .asst-li + .asst-line, .asst-line + .asst-li { margin-top: 2px; }
+.asst-gapline { display: block; height: 10px; }
+.asst-li { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 8px; }
+.asst-li + .asst-li { margin-top: 4px; }
+.asst-li__m { min-width: 10px; color: var(--text-2); font-weight: 600; text-align: center; }
+.asst-li__t { min-width: 0; }
+.asst-note { font: 500 14px/20px var(--font-ui); color: var(--text-2); }
+
+.asst-msg.is-greeting { color: var(--text-2); }
+.asst-msg.is-greeting .asst-line--lead { margin-bottom: 4px; color: var(--text-1); font: 600 18px/24px var(--font-ui); }
+.asst-msg.is-error { display: grid; grid-template-columns: 18px minmax(0, 1fr); column-gap: 10px; }
+.asst-msg__icon { margin-top: 3px; color: var(--text-2); }   /* a network fallback is information, not a safety alert */
+.asst-msg__text { min-width: 0; }
+.asst-msg.is-error .asst-msg__text > .asst-line:first-child { font-weight: 600; }
+
+.asst-thinking { display: inline-flex; align-items: center; gap: 10px; min-height: 24px; color: var(--text-2); font: 500 14px/20px var(--font-ui); }
 .asst-dots { display: inline-flex; gap: 4px; }
 .asst-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); animation: asst-dot 1.2s ease-in-out infinite; }
 .asst-dots i:nth-child(2) { animation-delay: .15s; }
@@ -39,16 +59,36 @@
 @keyframes asst-dot { 0%, 70%, 100% { opacity: .35; transform: none; } 35% { opacity: 1; transform: translateY(-3px); } }
 @media (prefers-reduced-motion: reduce) { .asst-dots i { animation: none; opacity: .7; } }
 
-.asst-retry { display: flex; margin-top: -6px; }
+.asst-retry { display: flex; margin-top: -6px; padding-left: 28px; }
 
 /* --------------------------------------------------------------- composer */
-.asst-composer { display: flex; flex-direction: column; gap: 8px; }
-.asst-chips { margin: 0 -16px; padding: 2px 16px 0; }
+.asst-composer { display: flex; flex-direction: column; gap: 10px; }
+/* The row bleeds to the sheet edges; the fade only shows on a side that has more chips. */
+.asst-chips-wrap { margin: 0 -16px; }
+.asst-chips-wrap .asst-chips {
+  padding: 2px 16px 0; scroll-padding: 0 16px;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, currentColor 28px, currentColor calc(100% - 40px), transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, currentColor 28px, currentColor calc(100% - 40px), transparent 100%);
+}
+.asst-chips-wrap.is-start .asst-chips {
+  -webkit-mask-image: linear-gradient(90deg, currentColor calc(100% - 40px), transparent 100%);
+  mask-image: linear-gradient(90deg, currentColor calc(100% - 40px), transparent 100%);
+}
+.asst-chips-wrap.is-end .asst-chips {
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, currentColor 28px);
+  mask-image: linear-gradient(90deg, transparent 0, currentColor 28px);
+}
+.asst-chips-wrap.is-start.is-end .asst-chips { -webkit-mask-image: none; mask-image: none; }
+
 .asst-bar { display: flex; align-items: flex-end; gap: 8px; }
 .asst-bar .asst-bar__input {
-  flex: 1; min-width: 0; min-height: 44px; max-height: calc(4 * 22px + 20px); padding: 10px 16px;
-  border-radius: 22px; line-height: 22px; resize: none; overflow-y: auto;
+  flex: 1; min-width: 0; height: 44px; min-height: 44px; max-height: calc(4 * 22px + 20px); padding: 10px 16px;
+  border-radius: 22px; line-height: 22px; resize: none; overflow-y: auto; scrollbar-width: thin;
 }
+/* an empty composer is always one line: a long placeholder ends in an ellipsis, never wraps */
+.asst-bar .asst-bar__input:placeholder-shown { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* focus is the inset signal ring (ui-input); the global focus outline would double it */
+.asst-bar .asst-bar__input:focus-visible { outline: none; }
 .asst-bar__mic.is-listening { box-shadow: 0 0 0 3px var(--signal-soft); }
 .asst-caption { margin: 0; text-align: center; font: 500 12px/16px var(--font-ui); color: var(--text-3); }
 
@@ -57,6 +97,15 @@
 .asst-settings { padding-top: 4px; }
 .asst-settings .ui-section > .ui-btn { margin-top: 2px; }
 .asst-settings .ui-section > .ui-btn + .ui-hint { margin-top: 10px; }
+.asst-settings .ui-section > .ui-group + .ui-hint { margin-top: 10px; }
+.asst-settings .ui-field > .ui-label { margin: 0 2px; }          /* line up with the section labels */
+.asst-settings .ui-field:last-child { margin-bottom: 0; }
+.asst-settings .ui-input:focus-visible { outline: none; }        /* inset ring only, as above */
+.asst-settings .ui-row__sub, .asst-settings .ui-hint { text-wrap: pretty; }
+/* an endpoint that won't be accepted reads as an error — alert ring and alert-coloured words
+   (the words say what is wrong, so it is never colour alone) */
+.asst-field--error .ui-input, .asst-field--error .ui-input:focus { box-shadow: inset 0 0 0 1.5px var(--alert); }
+.asst-field--error .ui-field__hint { color: var(--alert-text); font-weight: 600; }
 .asst-gap { height: 14px; }
-.asst-actions { display: grid; gap: 10px; margin: 0 0 16px; }
+.asst-actions { display: grid; gap: 10px; margin: 4px 0 16px; }
 .asst-caption--settings { margin-top: 14px; }

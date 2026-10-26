@@ -9,8 +9,8 @@
  * honesty states is the legacy wording, minus emoji. */
 import { useEffect, useMemo } from 'react';
 import {
-  Badge, Button, Group, Hint, Icon, IconButton, KeyValues, ListRow, LoadingRow, Num, Section, Sheet, Spinner,
-  useStoreValue, type IconName,
+  Badge, Button, Group, Hint, Icon, IconButton, KeyValues, ListRow, LoadingRow, Num, ProgressBar, Section, Sheet, Spinner,
+  StatStrip, useStoreValue, type IconName,
 } from '../../ui';
 import { RetryState } from './RetryState';
 import {
@@ -27,13 +27,13 @@ const DAY_MS = 86400000;
 function startOfDay(ms: number) { const d = new Date(ms); d.setHours(0, 0, 0, 0); return d.getTime(); }
 function nextDay(dayStart: number) { const d = new Date(dayStart); d.setDate(d.getDate() + 1); return d.getTime(); }  // DST-safe
 
-/** "Today" / "Tomorrow" / "Mon" for a row that isn't today. */
-function dayWord(ms: number, now: number): string | null {
-  const d0 = startOfDay(now), d = startOfDay(ms);
-  if (d === d0) return null;
-  if (d === nextDay(d0)) return 'Tomorrow';
-  if (d < d0 && d >= d0 - DAY_MS - 3600000) return 'Yesterday';
-  return new Date(ms).toLocaleDateString([], { weekday: 'short' });
+/** "Today" / "Tomorrow" / "Yesterday" / "Tuesday" for a day group. */
+function dayLabel(dayStart: number, now: number): string {
+  const d0 = startOfDay(now);
+  if (dayStart === d0) return 'Today';
+  if (dayStart === nextDay(d0)) return 'Tomorrow';
+  if (dayStart < d0 && dayStart >= d0 - DAY_MS - 3600000) return 'Yesterday';
+  return new Date(dayStart).toLocaleDateString([], { weekday: 'long' });
 }
 
 function refreshAll() { void loadTidesTimes(); void renderBiteWindows(); }
@@ -67,10 +67,12 @@ export default function TidesPanel() {
   return (
     <Sheet title="Tides & bite times" subtitle={subtitle}
       actions={<IconButton icon="refresh" label="Refresh tides and bite windows" size="sm" onClick={refreshAll} />}>
+      {/* The tide leads (the tab's namesake, and what most people open it for); then the
+          personal bite windows, then today's astronomy. */}
+      <TideSection />
       <BiteSection />
       <SolunarSection />
       <SunMoonSection />
-      <TideSection />
     </Sheet>
   );
 }
@@ -88,21 +90,27 @@ function BiteSection() {
   if (status === 'idle' || status === 'loading') {
     body = <LoadingRow>Reading your catch history…</LoadingRow>;
   } else if (status === 'too-few') {
+    const have = Math.min(n, need);
     body = (
-      <>
+      <div className="tide-bite__card">
+        <div className="tide-bite__meter">
+          <span className="ui-label">Catches logged</span>
+          <span className="tide-bite__count"><Num value={have} size="s" /><span className="tide-bite__of">of {need}</span></span>
+        </div>
+        <ProgressBar value={need > 0 ? (have / need) * 100 : 0} label={`${n} of ${need} catches logged`} />
         <Hint>Log <b>{need}</b> or more catches and I&apos;ll learn the conditions that work for you, then rank the next week against them. You have <b>{n}</b> so far.</Hint>
-        <Button icon="fish" className="tide-bite__cta" onClick={openCatchModal}>Log a catch</Button>
-      </>
+        <Button icon="fish" block className="tide-bite__cta" onClick={openCatchModal}>Log a catch</Button>
+      </div>
     );
   } else if (status === 'no-forecast') {
     body = (
-      <>
+      <div className="tide-bite__card">
         <Hint>Open the 10-day tab once with signal — I need a forecast to score against.</Hint>
-        <Button icon="cloud-sun" className="tide-bite__cta" onClick={() => openPanel('weather', { tab: '10day' })}>Open the 10-day forecast</Button>
-      </>
+        <Button icon="cloud-sun" block className="tide-bite__cta" onClick={() => openPanel('weather', { tab: '10day' })}>Open the 10-day forecast</Button>
+      </div>
     );
   } else if (status === 'nothing') {
-    body = <Hint>Nothing in the next week closely matches your logged catches.</Hint>;
+    body = <div className="tide-bite__card"><Hint>Nothing in the next week closely matches your logged catches.</Hint></div>;
   } else {
     body = (
       <>
@@ -125,9 +133,11 @@ function BiteWindow({ w, top, now }: { w: BiteWindowView; top: boolean; now: num
       <div className="tide-bw__head">
         <span className="tide-bw__when">{w.label}</span>
         <span className="tide-bw__score" aria-label={w.pct + '% match'}>
-          <Num value={w.pct} size="s" /><span className="tide-bw__pct">% match</span>
+          <Num value={w.pct} size="s" proportional /><span className="tide-bw__pct">% match</span>
         </span>
       </div>
+      {/* the match as a meter, so the ranking reads at a glance */}
+      <span className="tide-bw__meter" aria-hidden="true"><span style={{ width: Math.max(0, Math.min(100, w.pct)) + '%' }} /></span>
       {(top || live) && (
         <div className="tide-bw__tags">
           {live && <Badge tone="signal">Now</Badge>}
@@ -171,10 +181,14 @@ function SunMoonSection() {
   const items = [
     { key: 'sr', k: k('sunrise', 'Sunrise'), v: t(astro.sunrise) },
     { key: 'ss', k: k('sunset', 'Sunset'), v: t(astro.sunset) },
-    { key: 'mp', k: k('moon', astro.moonName), v: <><Num value={astro.moonLitPct} size="row" /><span className="tide-kv-unit">% lit</span></> },
+    { key: 'mp', k: k('moon', astro.moonName), v: <><Num value={astro.moonLitPct} size="row" proportional /><span className="tide-kv-unit">% lit</span></> },
   ];
-  if (astro.moonrise != null) items.push({ key: 'mr', k: k('moon', 'Moonrise'), v: t(astro.moonrise) });
-  if (astro.moonset != null) items.push({ key: 'ms', k: k('moon', 'Moonset'), v: t(astro.moonset) });
+  // moonrise and moonset in the order they happen today
+  const moon = [
+    { key: 'mr', label: 'Moonrise', ms: astro.moonrise },
+    { key: 'ms', label: 'Moonset', ms: astro.moonset },
+  ].filter((m): m is { key: string; label: string; ms: number } => m.ms != null).sort((a, b) => a.ms - b.ms);
+  for (const m of moon) items.push({ key: m.key, k: k('moon', m.label), v: t(m.ms) });
   return <Section label="Sun & moon"><KeyValues items={items} /></Section>;
 }
 
@@ -228,27 +242,31 @@ function TideSection() {
   );
 }
 
+/* Now · direction · next turn, as a glanceable instrument strip. The "Now" key dot is the
+   chart's now-marker, so the strip and the curve read as one. */
 function TideNowLine({ hilo, now }: { hilo: NoaaHiLo[]; now: number }) {
   const tn = useMemo(() => tideNow(hilo, now), [hilo, now]);
   if (!tn) return null;
   return (
-    <div className="tide-now">
-      <span className="tide-now__label ui-label">Now</span>
-      <Num value={tn.ft} digits={1} unit="ft" size="s" approx />
-      <span className="tide-now__dir">
-        <Icon name={tn.rising ? 'arrow-up' : 'arrow-down'} size={16} />{tn.rising ? 'Rising' : 'Falling'}
-      </span>
-      <span className="tide-now__next">
-        {tn.next.type === 'H' ? 'High' : 'Low'} <span className="tide-time">{fmtTime(tn.next.t)}</span>
-      </span>
-    </div>
+    <StatStrip className="tide-now" cells={[
+      { key: 'now', label: <span className="tide-now__key">Now</span>, value: <Num value={tn.ft} digits={1} unit="ft" size="s" approx /> },
+      {
+        key: 'dir', label: 'Tide',
+        value: <span className="tide-now__dir"><Icon name={tn.rising ? 'arrow-up' : 'arrow-down'} size={16} />{tn.rising ? 'Rising' : 'Falling'}</span>,
+      },
+      { key: 'next', label: tn.next.type === 'H' ? 'Next high' : 'Next low', value: <span className="tide-time">{fmtTime(tn.next.t)}</span> },
+    ]} />
   );
 }
 
 /* The curve for TODAY (local midnight to midnight, clipped to the predictions on hand):
    cosine-interpolated between NOAA's highs and lows, a dashed now-line, and each high/low
    labelled with its time and height. The SVG stretches horizontally (non-scaling strokes);
-   dots and labels are HTML so the type stays crisp at any width. */
+   dots and labels are HTML so the type stays crisp at any width. Labels sit on a knockout of
+   the card colour on two rails clear of the filled area (highs above, lows below), so the
+   now-line and the hour grid pass BEHIND them and never through the type. Extremes are hollow rings, now is a solid target: they differ by shape, not only by
+   colour (night mode is one hue). The axis names the now-line ("Now") and drops any hour
+   label it would crowd. */
 const CH_W = 320, CH_H = 140, PAD_X = 6, PAD_TOP = 36, PAD_BOTTOM = 36;
 
 function TideChart({ hilo, now }: { hilo: NoaaHiLo[]; now: number }) {
@@ -264,6 +282,8 @@ function TideChart({ hilo, now }: { hilo: NoaaHiLo[]; now: number }) {
   const ticks = [6, 12, 18].map((h) => { const d = new Date(day0); d.setHours(h, 0, 0, 0); return d.getTime(); })
     .filter((t) => t > curve.t0 && t < curve.t1);
   const edge = (x: number) => (pct(x) < 12 ? ' is-start' : pct(x) > 88 ? ' is-end' : '');
+  const nowPct = curve.nowX != null ? pct(curve.nowX) : null;
+  const axisTicks = ticks.filter((t) => nowPct == null || Math.abs(pct(xOf(t)) - nowPct) > 11);
   const highs = curve.marks.filter((m) => m.type === 'H').map((m) => `high ${m.v.toFixed(1)} feet at ${fmtTime(m.t)}`);
   const lows = curve.marks.filter((m) => m.type === 'L').map((m) => `low ${m.v.toFixed(1)} feet at ${fmtTime(m.t)}`);
 
@@ -276,48 +296,65 @@ function TideChart({ hilo, now }: { hilo: NoaaHiLo[]; now: number }) {
           ))}
           <path d={curve.area} className="tide-chart__area" />
           <path d={curve.line} className="tide-chart__line" />
-          {curve.nowX != null && <line className="tide-chart__now" x1={curve.nowX} x2={curve.nowX} y1={4} y2={CH_H - 4} />}
+          {curve.nowX != null && <line className="tide-chart__now" x1={curve.nowX} x2={curve.nowX} y1={4} y2={CH_H} />}
         </svg>
         {curve.marks.map((m) => (
-          <div key={m.t} className={'tide-chart__mark ' + (m.type === 'H' ? 'is-high' : 'is-low') + edge(m.x)}
-            style={{ left: pct(m.x) + '%', top: m.y }}>
-            <span className="tide-chart__dot" />
-            <span className="tide-chart__lbl">
-              <span className="tide-chart__t">{fmtTime(m.t)}</span>
-              <span className="tide-chart__v">{m.v.toFixed(1)} ft</span>
-            </span>
-          </div>
+          <span key={'d' + m.t} className="tide-chart__dot" style={{ left: pct(m.x) + '%', top: m.y }} />
+        ))}
+        {/* Labels ride two rails: highs above the curve's top, lows below its floor. Off the
+            filled area, their knockout hides only the now-line and the hour grid. */}
+        {curve.marks.map((m) => (
+          <span key={'l' + m.t} className={'tide-chart__lbl ' + (m.type === 'H' ? 'is-high' : 'is-low') + edge(m.x)}
+            style={{ left: pct(m.x) + '%', top: m.type === 'H' ? PAD_TOP - 7 : CH_H - PAD_BOTTOM + 7 }}>
+            <span className="tide-chart__t">{fmtTime(m.t)}</span>
+            <span className="tide-chart__v">{m.v.toFixed(1)} ft</span>
+          </span>
         ))}
         {curve.nowX != null && curve.nowY != null && (
           <span className="tide-chart__nowdot" style={{ left: pct(curve.nowX) + '%', top: curve.nowY }} />
         )}
       </div>
       <div className="tide-chart__axis" aria-hidden="true">
-        {ticks.map((t) => (
+        {axisTicks.map((t) => (
           <span key={t} style={{ left: pct(xOf(t)) + '%' }}>{new Date(t).toLocaleTimeString([], { hour: 'numeric' })}</span>
         ))}
+        {nowPct != null && (
+          <span className={'tide-chart__axisnow' + (nowPct < 7 ? ' is-start' : nowPct > 93 ? ' is-end' : '')} style={{ left: nowPct + '%' }}>Now</span>
+        )}
       </div>
     </figure>
   );
 }
 
-/* Upcoming highs and lows plus the one that just passed (dimmed). */
+type HiLoRow = ReturnType<typeof selectHiLoRows>[number];
+
+/* Upcoming highs and lows plus the one that just passed (dimmed, marked "Earlier"), grouped
+   under a day label so "Tomorrow" isn't repeated on every row. */
 function HiLoList({ hilo, now }: { hilo: NoaaHiLo[]; now: number }) {
   const rows = useMemo(() => selectHiLoRows(hilo, now), [hilo, now]);
   if (!rows.length) return null;
+  const days: Array<{ day: number; rows: HiLoRow[] }> = [];
+  for (const r of rows) {
+    const d = startOfDay(r.ms);
+    const last = days[days.length - 1];
+    if (last && last.day === d) last.rows.push(r); else days.push({ day: d, rows: [r] });
+  }
   return (
-    <Group className="tide-hilo">
-      {rows.map((r) => {
-        const day = dayWord(r.ms, now);
-        return (
-          <ListRow key={r.ms} className={'tide-hilo__row' + (r.past ? ' is-past' : '')}
-            icon={r.type === 'H' ? 'arrow-up' : 'arrow-down'}
-            title={r.type === 'H' ? 'High' : 'Low'}
-            subtitle={r.past ? 'Earlier' + (day ? ' · ' + day : '') : day ?? undefined}
-            trailing={<><span className="tide-time">{fmtTime(r.ms)}</span><Num value={r.ft} digits={1} unit="ft" size="row" /></>}
-          />
-        );
-      })}
-    </Group>
+    <div className="tide-hilo">
+      {days.map((g) => (
+        <div key={g.day} className="tide-hilo__day">
+          <h4 className="ui-label tide-hilo__daylabel">{dayLabel(g.day, now)}</h4>
+          <Group>
+            {g.rows.map((r) => (
+              <ListRow key={r.ms} className={'tide-hilo__row' + (r.past ? ' is-past' : '')}
+                icon={r.type === 'H' ? 'arrow-up' : 'arrow-down'}
+                title={<>{r.type === 'H' ? 'High' : 'Low'}{r.past && <Badge>Earlier</Badge>}</>}
+                trailing={<><span className="tide-time">{fmtTime(r.ms)}</span><Num value={r.ft} digits={1} unit="ft" size="row" className="tide-hilo__ft" /></>}
+              />
+            ))}
+          </Group>
+        </div>
+      ))}
+    </div>
   );
 }

@@ -4,7 +4,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import {
   Badge, Button, Field, Group, Hint, IconButton, ListRow, LoadingRow, Notice, Num, ProgressBar, RadioRow, Section, Sheet,
-  Spinner, StateBox, TextInput, useStoreValue,
+  Spinner, StateBox, StatStrip, TextInput, useStoreValue,
 } from '../../ui';
 import {
   DETAIL_LEVELS, cancelDownload, deleteArea, dlPanelOpened, dlStore, flyToArea, refreshAreas, setDlZoom, startDownload,
@@ -14,11 +14,22 @@ import { LAYERS } from '../../engine/tiles.js';
 import { layersStore } from '../../engine/layers.js';
 import { getMap } from '../../engine/app.js';
 import { useUi } from '../../services/ui';
+import { shortDate } from './format';
 import './spots.css';
 
-function Count({ n }: { n: number }) {
+function Count({ n, approx }: { n: number; approx?: boolean }) {
   // thousands separators with instrument figures (Num has no grouping)
-  return <span className="ui-num ui-num--row"><span className="ui-num__v">{Math.round(n).toLocaleString()}</span></span>;
+  return (
+    <span className="ui-num ui-num--row">
+      {approx && <span className="ui-num__approx">~</span>}<span className="ui-num__v">{Math.round(n).toLocaleString()}</span>
+    </span>
+  );
+}
+
+/** A stored area's size: whole MB, or "<1 MB" for a small area — never "0 MB" for tiles that exist. */
+function AreaSize({ a }: { a: AreaRow }) {
+  if (a.mb >= 1 || (a.mb <= 0 && a.tiles <= 0)) return <Num value={a.mb} unit="MB" size="row" />;
+  return <span className="ui-num ui-num--row"><span className="ui-num__v">&lt;1</span><span className="ui-num__unit">MB</span></span>;
 }
 
 function layerNames(ids: string[]): string {
@@ -38,25 +49,33 @@ function Estimate() {
   if (est.status === 'empty') return <Hint>Nothing to download here.</Hint>;
   return (
     <div className="dl-est" aria-live="polite">
-      <div className="dl-est__main">
-        <span>About</span><Count n={est.count} /><span>tiles ·</span>
-        <Num value={est.mb < 1 ? 1 : est.mb} approx unit="MB" size="row" />
-      </div>
-      <div className="dl-est__layers">Zoom {est.minZ}–{est.maxZ} · {layerNames(est.layerIds)}</div>
+      <StatStrip className="dl-est__strip" cells={[
+        { key: 'tiles', label: 'Tiles', value: <Count n={est.count} approx /> },
+        { key: 'size', label: 'Size', value: <Num value={est.mb < 1 ? 1 : est.mb} approx unit="MB" size="row" /> },
+        { key: 'zoom', label: 'Zoom', value: <span className="ui-num ui-num--row"><span className="ui-num__v">{est.minZ}–{est.maxZ}</span></span> },
+      ]} />
+      <div className="dl-est__layers">{layerNames(est.layerIds)}</div>
     </div>
   );
 }
 
-function Progress() {
+function Progress({ name }: { name: string }) {
   const pct = useStoreValue(dlStore, (s) => s.pct);
   const phase = useStoreValue(dlStore, (s) => s.phase);
   const statusText = useStoreValue(dlStore, (s) => s.statusText);
   const cancelling = useStoreValue(dlStore, (s) => s.cancelling);
   return (
     <div className="dl-progress" role="group" aria-label="Download progress">
+      <div className="dl-progress__head">
+        <span className="dl-progress__name">
+          <span className="ui-label">Downloading</span>
+          <span className="dl-progress__title">{name.trim() || 'This area'}</span>
+        </span>
+        <span className="ui-num ui-num--s dl-progress__pct"><span className="ui-num__v">{Math.round(pct)}</span><span className="ui-num__unit">%</span></span>
+      </div>
       <ProgressBar value={pct} label="Download progress" />
       <div className="dl-progress__status" aria-live="polite">
-        {phase !== 'tiles' && <Spinner size="sm" />}
+        {(phase !== 'tiles' || cancelling) && <Spinner size="sm" />}
         <span>{statusText}</span>
       </div>
       {/* Once the area record is being written the run is finished — a Cancel there would only
@@ -84,25 +103,31 @@ function AreaItem({ a }: { a: AreaRow }) {
   const sub = mine ? (
     <span className="dl-area__deleting"><Spinner size="sm" />Removing {mine.done.toLocaleString()} / {mine.total.toLocaleString()} tiles…</span>
   ) : (
-    <>
-      <span className="spot-meta">
-        <Count n={a.tiles} /> tiles · <Num value={a.mb < 1 && a.mb > 0 ? 1 : a.mb} unit="MB" size="row" approx={a.mb > 0 && a.mb < 1} /> · {new Date(a.ts).toLocaleDateString()}
-      </span>
-      <span className="dl-area__badges">
-        {dataBadge(a)}
-        {a.partial ? <Badge icon="alert">Cancelled — partial</Badge> : a.incomplete ? <Badge icon="alert">Incomplete</Badge> : null}
-      </span>
-      {a.data === 'partial' && a.dataMissing.length > 0 && <span>Missing: {a.dataMissing.join(', ')}</span>}
-    </>
+    <span className="spot-meta">
+      <Count n={a.tiles} /> tiles<span className="spot-meta__sep">·</span><AreaSize a={a} /><span className="spot-meta__sep">·</span>{shortDate(a.ts)}
+    </span>
   );
+  /* The status badges get the full row width under the title (beside the two buttons they
+     stacked one per line at phone width). */
   return (
-    <ListRow icon="layers" title={a.name} subtitle={sub}
-      trailing={(
-        <>
-          <IconButton icon="crosshair" label={`Show ${a.name} on the chart`} onClick={() => flyToArea(a)} />
-          <IconButton icon="trash" label={`Delete ${a.name}`} disabled={!!deleting || running || draining} onClick={() => { void deleteArea(a.id); }} />
-        </>
-      )} />
+    <div className="dl-area">
+      <ListRow icon="layers" title={a.name} subtitle={sub}
+        trailing={(
+          <>
+            <IconButton icon="crosshair" label={`Show ${a.name} on the chart`} onClick={() => flyToArea(a)} />
+            <IconButton icon="trash" label={`Delete ${a.name}`} disabled={!!deleting || running || draining} onClick={() => { void deleteArea(a.id); }} />
+          </>
+        )} />
+      {!mine && (
+        <div className="dl-area__extra">
+          <span className="dl-area__badges">
+            {dataBadge(a)}
+            {a.partial ? <Badge icon="alert">Cancelled — partial</Badge> : a.incomplete ? <Badge icon="alert">Incomplete</Badge> : null}
+          </span>
+          {a.data === 'partial' && a.dataMissing.length > 0 && <span className="dl-area__missing">Missing: {a.dataMissing.join(', ')}</span>}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -118,7 +143,9 @@ function SavedAreas() {
       Saved areas could not be read from this device's storage{error ? ` (${error})` : ''}.
     </StateBox>
   );
-  else if (!areas.length) body = <StateBox icon="download">Nothing downloaded yet.</StateBox>;
+  else if (!areas.length) body = (
+    <StateBox icon="download">Nothing downloaded yet. Move the chart over your fishing area, then tap Download this area.</StateBox>
+  );
   else body = <Group>{areas.map((a) => <AreaItem key={a.id} a={a} />)}</Group>;
   return (
     <Section label="Saved areas">
@@ -137,7 +164,7 @@ function StorageLine() {
   if (!st) return null;
   return (
     <Hint className="dl-storage">
-      Storage:{' '}
+      <span className="ui-label">Storage</span>{' '}
       {st.usedMB != null && <><Count n={st.usedMB} /> MB used</>}
       {st.usedMB != null && st.quotaGB != null && <> of ~<Num value={st.quotaGB} digits={1} unit="GB" size="row" /> available</>}
       {st.tiles != null && <>{st.usedMB != null ? ' · ' : ''}<Count n={st.tiles} /> tiles cached</>}
@@ -173,8 +200,8 @@ export default function DownloadPanel() {
   };
 
   return (
-    <Sheet title="Offline charts">
-      <Hint>Downloads the chart area <b>currently visible on screen</b>. Position the map over your fishing area first.</Hint>
+    <Sheet title="Offline charts" bodyClassName="spot-sheet">
+      <Hint className="dl-intro">Downloads the chart area <b>currently visible on screen</b>. Position the map over your fishing area first.</Hint>
       <Notice icon="cloud-off" title="Works with no signal">
         Also captures a 7-day wind, wave &amp; tide forecast, a water-temp grid, recent fish sightings and closures — so <b>First Mate can answer questions about this area offline</b>.
       </Notice>
@@ -195,7 +222,7 @@ export default function DownloadPanel() {
 
       <Estimate />
 
-      {running ? <Progress /> : (
+      {running ? <Progress name={name} /> : (
         <div className="dl-start">
           {!online && <Notice icon="wifi-off">You are offline — connect to download charts.</Notice>}
           {/* a delete in progress would remove tiles this run counts as already stored */}

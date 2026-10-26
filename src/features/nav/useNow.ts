@@ -20,3 +20,11 @@ export function ageText(ms: number): string {
   const m = Math.round(s / 60);
   return m < 60 ? m + ' min' : Math.round(m / 60) + ' h';
 }
+
+/** A duration for reading, not for instruments: "<1 min" / "17 min" / "1 h 5 min" (floors). */
+export function durWords(sec: number | null | undefined, fallback = '—'): string {
+  if (sec == null || !Number.isFinite(sec) || sec < 0) return fallback;
+  if (sec < 60) return '<1 min';
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
+  return h > 0 ? `${h} h ${m} min` : `${m} min`;
+}
