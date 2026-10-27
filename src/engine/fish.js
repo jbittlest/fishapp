@@ -171,7 +171,11 @@ export function relTime(days) {
   if (days <= 0) return 'today';
   if (days === 1) return 'yesterday';
   if (days < 30) return days + ' days ago';
-  if (days < 365) return Math.round(days / 30) + ' months ago';
+  if (days < 365) {
+    // 30–44 days rounds to 1: "1 month ago", never "1 months ago"
+    const mo = Math.max(1, Math.round(days / 30));
+    return mo === 1 ? '1 month ago' : mo + ' months ago';
+  }
   return (days / 365).toFixed(1) + ' years ago';
 }
 

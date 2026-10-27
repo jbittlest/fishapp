@@ -42,7 +42,7 @@ export default function MpaCard({ data }: CardProps) {
       </div>
       {data?.take && <p className="spot-mpa__take">{data.take}</p>}
       <Hint>{EXPLAIN[kind] ?? EXPLAIN.limited}</Hint>
-      <Hint className="spot-mpa__legal">Always confirm current CA DFW regulations before fishing.</Hint>
+      <Hint className="spot-mpa__legal">Boundaries shown are approximate. Always confirm current CA DFW regulations and boundaries before fishing.</Hint>
     </MapCard>
   );
 }

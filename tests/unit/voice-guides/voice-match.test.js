@@ -106,6 +106,10 @@ describe('command table', () => {
     ['knots', 'guides-knots'], ['open guides', 'guides'],
     ['emergency', 'emergency'], ['mayday', 'emergency'], ['menu', 'more'],
     ['tell me a joke', null],
+    // wh-questions are not zoom / follow / close commands (audit 2026-10-27)
+    ['how close is the nearest reef', null], ['how much closer is rock pile', null],
+    ['where is the center of the kelp', null], ['nothing is biting what should i throw', null],
+    ['nothing', 'close'], ['can you zoom in', 'zoom-in'], ['close', 'close'],
   ])('%s → %s', (phrase, id) => {
     expect(idOf(phrase)).toBe(id);
   });

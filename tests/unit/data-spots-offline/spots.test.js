@@ -47,6 +47,15 @@ describe('pure helpers', () => {
     expect(S._importKey({ start: 7, name: 'Trip' })).toBe('7|Trip||');
     expect(S._importKey({ ts: 5, species: 'Calico bass', lat: 1, lng: 2 })).toBe('5|Calico bass|1|2');
     expect(S._importKey({ ts: 5, species: 'Sheephead', lat: 1, lng: 2 })).not.toBe(S._importKey({ ts: 5, species: 'Calico bass', lat: 1, lng: 2 }));
+    expect(S._importKey(null)).toBe('');
+  });
+
+  it('spotPos: numbers or numeric strings in range, else null', () => {
+    expect(S.spotPos({ lat: 33.7, lng: -118.3 })).toEqual({ lat: 33.7, lng: -118.3 });
+    expect(S.spotPos({ lat: '33.7', lng: '-118.3' })).toEqual({ lat: 33.7, lng: -118.3 });
+    for (const bad of [null, 5, {}, { lat: 'abc', lng: 1 }, { lat: '', lng: 1 }, { lat: 91, lng: 0 }, { lat: 0, lng: 181 }, { lat: NaN, lng: 0 }]) {
+      expect(S.spotPos(bad)).toBeNull();
+    }
   });
 
   it('sortSpots: nearest first with a fix, newest first without', () => {
@@ -268,6 +277,19 @@ describe('backup export / import', () => {
     } finally { vi.mocked(native.isNativeShell).mockReturnValue(false); }
   });
 
+  it('a store it cannot read fails the export - never a "complete" backup missing your catches (audit 2026-10-27)', async () => {
+    await db.idb.put('catches', { lat: 1, lng: 2, species: 'Bass', ts: 2 });
+    vi.mocked(native.saveOrShareFile).mockClear();
+    const real = vi.mocked(db.idb.getAll).getMockImplementation();
+    vi.mocked(db.idb.getAll).mockImplementation((store) => (store === 'catches' ? Promise.reject(new Error('IDB read error')) : real(store)));
+    try {
+      await S.exportData();
+    } finally { vi.mocked(db.idb.getAll).mockImplementation(real); }
+    expect(native.saveOrShareFile).not.toHaveBeenCalled();
+    expect(lastToast()).toBe('Export failed — couldn\'t read your catches (IDB read error)');
+    expect(S.spotsStore.getState().exporting).toBe(false);
+  });
+
   it('says so when the share sheet was cancelled', async () => {
     vi.mocked(native.saveOrShareFile).mockResolvedValueOnce('cancelled');
     await S.exportData();
@@ -304,6 +326,42 @@ describe('backup export / import', () => {
 
     await S.importData(file({ app: 'FishApp', spots: [{ lat: 5, lng: 6, name: 'New', ts: 2 }] }));
     expect(lastToast()).toBe('Nothing new to import — it was all already here');
+  });
+
+  it('a damaged record is skipped and counted - it no longer stops the import or poisons the store (audit 2026-10-27)', async () => {
+    await S.importData(file({
+      app: 'FishApp', version: 2,
+      spots: [null, 7, ['x'], { name: 'NoPos' }, { name: 'BadLat', lat: 'abc', lng: -118 }, { name: 'Far', lat: 999, lng: 5 },
+        { name: 'Good', lat: 33.7, lng: -118.3, ts: 2 }, { name: 'StrPos', lat: '33.8', lng: '-118.4', ts: 3 }],
+      catches: [null, { species: 'GoodCatch', lat: 33.71, lng: -118.31, ts: 4 }],
+    }));
+    // before: "Import stopped: Cannot read properties of null (reading 'ts')" and nothing imported
+    expect(lastToast()).toBe('Imported 2 spots, 1 catches · 7 damaged records skipped');
+    const stored = [...db.idb.stores.spots.values()];
+    expect(stored.map((s) => s.name).sort()).toEqual(['Good', 'StrPos']);
+    expect(stored.find((s) => s.name === 'StrPos')).toMatchObject({ lat: 33.8, lng: -118.4 });   // numbers
+    expect(S.spotsStore.getState().status).toBe('ready');
+  });
+
+  it('a spot record with no usable position already in storage cannot hide every other spot (audit 2026-10-27)', async () => {
+    await db.idb.put('spots', { name: 'Good', lat: 33.7, lng: -118.3, ts: 2, type: 'fish' });
+    await db.idb.put('spots', { name: 'BadLat', lat: 'abc', lng: -118, ts: 3 });
+    S.Spots.layer = null;
+    // before: L.marker threw "Invalid LatLng", status stayed 'loading' - "Loading spots…" forever
+    await S.spotsInit(mocks.state.map);
+    expect(S.spotsStore.getState().status).toBe('ready');
+    expect(S.spotsStore.getState().items.map((s) => s.name).sort()).toEqual(['BadLat', 'Good']);
+    expect(Object.keys(S.Spots.markers)).toHaveLength(1);                 // only the drawable one
+    mocks.state.lastLatLng = L.latLng(33.69, -118.3);
+    S.spotsChanged();                                                       // with a fix: sort + distances
+    const items = S.spotsStore.getState().items;
+    expect(items.map((s) => s.name)).toEqual(['Good', 'BadLat']);           // unpositioned last
+    expect(items[1]).toMatchObject({ distNm: null, brgDeg: null });
+    const bad = S.Spots.all.find((s) => s.name === 'BadLat');
+    expect(await S.navigateToSpot(bad)).toBe(false);
+    expect(lastToast()).toBe('This spot has no usable position to navigate to');
+    expect(() => S.flyToSpot(bad)).not.toThrow();
+    expect(await S.deleteSpot(bad.id)).toBe(true);                          // and it can be removed
   });
 
   it('a store failure mid-import is reported honestly and still resyncs', async () => {

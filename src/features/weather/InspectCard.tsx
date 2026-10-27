@@ -138,7 +138,7 @@ export default function InspectCard({ data }: CardProps) {
         </div>
         <div className="wx-ins__foot">
           <p className="wx-ins__note">
-            Chart depth is from survey data, not your sounder. Conditions are model estimates.{' '}
+            Depth is an estimate from NOAA survey and elevation-model data, not your sounder or an official chart, and can be wrong. Conditions are model estimates.{' '}
             {/* wind, swell and water temp are Open-Meteo data: its CC BY credit, linked, right here */}
             <CreditLink href={OPEN_METEO_URL}>{OPEN_METEO_CREDIT}</CreditLink>
           </p>

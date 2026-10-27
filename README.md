@@ -72,6 +72,9 @@ link-preview image `og.png`, `/classic/` (the old vanilla app, rebuilt from `leg
 `README.md`, `MOTOR.md` and `proxy/`. `--ios` also refreshes `FishApp-iOS/FishApp/Web` with the app only
 (no service worker, web pages or `og.png`). `privacy.html` and `support.html` are rendered from
 `src/legal/privacy.js` by `node tools/make-legal-pages.mjs`; rerun it after editing the policy.
+Open-source licence notices (More › About › Open-source licences) come from `src/legal/licenses.json`,
+generated from `node_modules` by `node tools/make-licenses.mjs`; rerun it after changing a runtime dependency
+(a unit test fails while it is stale).
 `og.png` has the brand and URL drawn into it: after a rename or a URL change run
 `node tools/web/render-og.mjs`, or the deploy refuses the stale image.
 

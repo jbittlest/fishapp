@@ -21,6 +21,7 @@ import { watchCheck } from './bite.js';
 import { asstInit } from './assistant.js';
 import { Voice, voiceInit } from './voice.js';
 import { motorInit } from './motor.js';
+import { sstPreload } from './sst.js';
 import { isPanelOpen, markBooted, setBootStatus, toast as uiToast, uiStore } from '../services/ui';
 import { startTheme } from '../services/theme';
 import { creditsInit } from './attribution.js';
@@ -184,6 +185,9 @@ export async function boot() {
     safe('wind', () => wxInit(map));
     safe('fish', () => fishInit(map));
     safe('data overlays', () => initDataOverlays(reefsLoaded));
+    /* Sea temperature for the area around the map, fetched once the app is idle (small, bounded,
+       online only), so turning SST on is instant and still works out of signal. */
+    safe('sst preload', () => sstPreload());
 
     map.on('dragstart', () => { setFollow(false); scheduleRefollow(); });
     /* Only arm the timer for a zoom the user drove. Programmatic setView/fitBounds —
@@ -292,7 +296,9 @@ function registerServiceWorker() {
   // updateViaCache:'none' stops the browser serving sw.js from its own HTTP cache, so a
   // new build gets noticed on the next launch rather than whenever that cache expires.
   sw.register('./sw.js', { updateViaCache: 'none' })
-    .then((reg) => { try { reg.update(); } catch (e) {} })
+    /* update() REJECTS (not throws) when sw.js can't be fetched — every offline launch, which is
+       the app's normal state at sea. Unhandled, that surfaced as a page error on each one. */
+    .then((reg) => { try { Promise.resolve(reg.update()).catch(() => {}); } catch (e) {} })
     .catch(() => {});
   /* The new worker calls skipWaiting() + clients.claim(), so once it takes over the page is
      already being served new assets while running the old JS/CSS. Reload once to make them

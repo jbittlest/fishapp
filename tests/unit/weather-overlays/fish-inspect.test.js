@@ -58,6 +58,8 @@ describe('fish sightings', () => {
     expect(relTime(1)).toBe('yesterday');
     expect(relTime(12)).toBe('12 days ago');
     expect(relTime(95)).toBe('3 months ago');
+    expect(relTime(38)).toBe('1 month ago');   // was "1 months ago" (audit 2026-10-27)
+    expect(relTime(30)).toBe('1 month ago');
     expect(relTime(400)).toBe('1.1 years ago');
   });
 

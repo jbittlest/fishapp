@@ -13,7 +13,7 @@ import { Catch } from './catch.js';
 import { Nav, getRouteGph, getRouteSpeedKn, tripReset, tripToggle } from './nav.js';
 import { KNOTS } from './knots.js';
 import { FISH_ID } from './fish-id.js';
-import { AREA_TIPS, FISH_TIPS, TECHNIQUE_TIPS, areaTipsFor, fishTipsFor, techniqueTipsFor } from './fish-tips.js';
+import { AREA_TIPS, FISH_TIPS, MPA_TIP_NOTE, TECHNIQUE_TIPS, areaTipText, areaTipsFor, fishTipsFor, techniqueTipsFor } from './fish-tips.js';
 import { areaDailyForecast, areaDepthAt, areaFcstIndex, areaPackFor, areaPackSummary, areaSstStats, areaTidesNext } from './areadata.js';
 import { biteFmtWindow, biteReason, biteWindows } from './bite.js';
 import { Voice } from './voice.js';
@@ -367,9 +367,9 @@ export function asstRegsTable() {
 export function asstTipsTable() {
   if (typeof FISH_TIPS === 'undefined') return '';
   const fish = FISH_TIPS.map((f) => '- ' + f.name + ': ' + f.sum).join('\n');
-  const areas = (typeof AREA_TIPS !== 'undefined') ? AREA_TIPS.map((a) => '- ' + a.name + ': ' + a.text).join('\n') : '';
+  const areas = (typeof AREA_TIPS !== 'undefined') ? AREA_TIPS.map((a) => '- ' + a.name + ': ' + areaTipText(a)).join('\n') : '';
   const tech = (typeof TECHNIQUE_TIPS !== 'undefined') ? TECHNIQUE_TIPS.map((tp) => '- ' + tp.name + ': ' + tp.text).join('\n') : '';
-  return 'FIRST MATE FISHING KNOWLEDGE (Southern & Central California — general reference). Use this to give specific lure/jig/bait/technique advice; never tell the user to look it up elsewhere.\nTARGETS (species → go-to):\n' + fish +
+  return 'FIRST MATE FISHING KNOWLEDGE (Southern & Central California — general reference). Use this to give specific lure/jig/bait/technique advice. Areas marked "Check MPA boundaries" border marine protected areas — always pass that on.\nTARGETS (species → go-to):\n' + fish +
     '\nAREA GAME PLANS:\n' + areas + '\nTECHNIQUES:\n' + tech;
 }
 
@@ -381,13 +381,40 @@ export function asstIsQuestion(t) {
   return /^\s*(?:what|what's|whats|which|who|where|when|why|how|is|are|was|were|do|does|did|have|has)\b/.test(t) ||
     /\?\s*$/.test(t);
 }
+/* An unmistakable distress call. The emergency intent used to sit near the END of the router,
+   behind every other intent and with only a few keywords, so "my buddy fell overboard", "we're
+   taking on water", "engine fire" or "someone is bleeding badly" got the help menu, and
+   "mayday, we're sinking — nearest ramp?" got "You have no saved ramps". Checked FIRST now, and
+   narrow on purpose: fishing talk shares these words ("sinking lure", "the bite is on fire",
+   "bleed the fish", "flood tide"), so only the distress phrasings match here. The broader
+   'help me' / 'emergency' / 'coast guard' words stay at the old place in the router, where the
+   specific intents ("help me tie a knot") are tried first. */
+export const ASST_DISTRESS_RE = new RegExp([
+  '\\bmayday\\b', '\\bpan[- ]?pan\\b', '\\bsos\\b', '\\bdistress\\b',
+  '\\b(?:man|person|someone|somebody|crew|kid|child|fell|fallen|falls|falling|went|gone|washed)\\s+(?:\\w+\\s+)?overboard\\b',
+  '\\btaking (?:on )?water\\b', '\\bswamp(?:ed|ing)\\b', '\\bcapsiz', '\\b(?:we|boat|it)(?:\'re| are| is|\'s)? (?:rolled|flipped) over\\b',
+  '\\b(?:we|i|boat|it|she)(?:\'re| are| am|\'m| is|\'s) sinking\\b', '\\bsinking fast\\b', '\\b(?:boat|we) (?:is|are) going down\\b',
+  '\\b(?:ran|run|are|we\'re|went|hit|hard|stuck) aground\\b',
+  '\\bengine fire\\b', '\\bfire (?:aboard|on board|onboard|in the (?:engine|cabin|bilge|boat))\\b',
+  '\\b(?:boat|engine|motor|cabin|we)(?:\'re| are| is)? on fire\\b',
+  '\\bdrowning\\b', '\\bnot breathing\\b', '\\bunconscious\\b', '\\bunresponsive\\b', '\\bheart attack\\b', '\\bchest pain\\b',
+  '\\bbleeding (?:badly|heavily|a lot|bad|out)\\b', '\\b(?:won\'?t|can\'?t|cannot) stop (?:the )?bleeding\\b',
+  '\\b(?:badly|seriously|really) (?:hurt|injured)\\b', '\\b(?:hurt|injured) (?:badly|bad|seriously)\\b',
+].join('|'));
+export function asstIsDistress(text) {
+  return ASST_DISTRESS_RE.test(String(text || '').toLowerCase().replace(/[’‘]/g, "'"));
+}
+
 /* async because the bite-window intent reads cached tide predictions (and may refresh them);
    both call sites in asstSend already await it. */
 export async function asstOffline(q) {
-  const t = q.toLowerCase();
+  const t = String(q == null ? '' : q).toLowerCase();
   const { ll, live, stale } = asstPos();
   const has = (...w) => w.some((x) => t.includes(x));
   const word = (...w) => w.some((x) => new RegExp('\\b' + x + '\\b').test(t));
+
+  // Distress first — before anything else could answer it (see ASST_DISTRESS_RE).
+  if (asstIsDistress(t)) return asstAnsEmergency(ll, live, stale);
 
   /* Place a waypoint — a LOCAL action, so it works offline too.
      Requires a CREATE phrase. A bare 'waypoint' used to match here first, so
@@ -481,8 +508,14 @@ export async function asstOffline(q) {
     return asstAnsFishHistory(t);
   // Closures / protected areas  (note: avoid bare 'mpa' — it's a substring of "compare")
   if (has('closure', 'closed to fish', 'protected area', 'marine protected', ' mpa', 'mpas',
-    'can i fish here', 'legal to fish here', 'no-take', 'no take', 'reserve'))
+    'can i fish here', 'legal to fish here', 'no-take', 'no take', 'reserve')) {
+    /* A SPECIES closure ("rockfish depth closures", "is lingcod closed") is a regulation, not
+       a protected area — it used to get "No closure data captured offline here", as if there
+       were none. The species card carries its closure note and the CDFW warning. */
+    const spc = has('protected', ' mpa', 'mpas', 'reserve', 'no-take', 'no take') || word('here') ? null : asstFindSpecies(t);
+    if (spc) return asstFormatSpecies(spc);
     return asstAnsClosures();
+  }
   /* Waves / seas. 'seas' is a substring of 'season', so a bare match meant
      "what's the season for lingcod?" returned a swell report and the regulations
      intent below was unreachable. Word-boundary it, like the ' mpa' note above. */
@@ -526,7 +559,8 @@ export async function asstOffline(q) {
   if (has('spot', 'marked', 'my spots', 'waypoint', 'nearest spot'))
     return asstAnsSpots(ll);
   // Emergency
-  if (has('emergency', 'mayday', 'sos', 'sinking', 'help me', 'man overboard', 'distress', 'pan-pan', 'pan pan'))
+  if (has('emergency', 'mayday', 'sos', 'sinking', 'help me', 'man overboard', 'overboard', 'distress', 'pan-pan', 'pan pan',
+    'coast guard', 'channel 16', 'call for help'))
     return asstAnsEmergency(ll, live, stale);
   // Bare saved-spot name → distance/bearing
   if (typeof Spots !== 'undefined' && ll && Spots.all.length) {
@@ -536,6 +570,11 @@ export async function asstOffline(q) {
       const nm = nmBetween(here, there), brg = bearingBetween(here, there);
       return spot.name + ': ' + nm.toFixed(1) + ' nm, bearing ' + Math.round(brg) + '° ' + asstCompass(brg);
     }
+  }
+  /* A species AND a place with no other words ("calico bass at Catalina" — the example the
+     bait answer itself suggests) wants the game plan, not the limits card. */
+  if (typeof fishTipsFor === 'function' && typeof areaTipsFor === 'function' && fishTipsFor(t) && areaTipsFor(t)) {
+    const plan = asstAnsBait(t); if (plan) return plan;
   }
   // Species reference fallback (e.g. "yellowtail")
   const sp = asstFindSpecies(t);
@@ -623,17 +662,24 @@ export function asstAnsWeather(q) {
       return s;
     }
   }
+  /* Asked about a later time with no downloaded forecast: say so before giving the current
+     reading — "weather tomorrow afternoon" used to get today's wind with no word that it
+     wasn't the forecast that was asked for. */
+  const later = asstParseWhen((q || '').toLowerCase()).label;
+  const noFcst = later !== 'Now' && !/^this /i.test(later) ? "I don't have a forecast for " + later.toLowerCase() +
+    ' offline — download this area while online to capture a 7-day forecast.' : '';
   const wx = asstCachedWx();
-  if (!wx || !wx.wx || !wx.wx.current) return asstNoWx();
+  if (!wx || !wx.wx || !wx.wx.current) return noFcst ? noFcst + ' ' + asstNoWx() : asstNoWx();
+  const ahead = noFcst ? noFcst + ' What I have is the latest reading:\n\n' : '';
   const c = wx.wx.current, age = Math.round((Date.now() - wx.ts) / 60000);
-  let s = "Wind now (cached " + age + " min ago):\n" + Math.round(c.wind_speed_10m) + ' kn from ' +
+  let s = ahead + "Wind now (cached " + age + " min ago):\n" + Math.round(c.wind_speed_10m) + ' kn from ' +
     asstCompass(c.wind_direction_10m) + ', gusting ' + Math.round(c.wind_gusts_10m) + ' kn\nAir ' + Math.round(c.temperature_2m) + '°F';
   if (wx.marine && wx.marine.current) {
     const m = wx.marine.current;
     s += '\nSeas ' + (m.wave_height * 3.28084).toFixed(1) + ' ft @ ' + Math.round(m.wave_period) + 's';
   }
   const g = Math.round(c.wind_gusts_10m);
-  if (g >= 25) s += '\n\n**' + g + ' kn gusts — rough. Check conditions before heading out.**';
+  if (g >= 25) s += '\n\n**' + g + ' kn gusts — rough. Check the NWS marine forecast (VHF WX) before heading out.**';
   else if (g >= 18) s += '\n\nBreezy — expect a chop.';
   return s;
 }
@@ -650,7 +696,7 @@ export function asstAnsWaves() {
     s += '\nSwell: ' + (m.swell_wave_height * 3.28084).toFixed(1) + ' ft @ ' + Math.round(m.swell_wave_period) + 's from ' + asstCompass(m.swell_wave_direction);
   if (ft >= 5) s += '\n\n**Big — small boats beware.**';
   else if (ft >= 3) s += '\n\nModerate chop — bumpy ride.';
-  else s += '\n\nCalm-ish. Good conditions.';
+  else s += '\n\nCalm-ish on this reading.';
   return s;
 }
 export function asstAnsTides(q) {
@@ -705,7 +751,7 @@ export function asstAnsFishHistory(t) {
   }
   // No downloaded sightings — fall back to the area game-plan / general targets so we still help.
   const area = (typeof areaTipsFor === 'function') ? areaTipsFor(t || '') : null;
-  if (area) return 'What to target — ' + area.name + '\n' + area.text +
+  if (area) return 'What to target — ' + area.name + '\n' + areaTipText(area) +
     '\n\n(That\'s the general game plan. Download this area with signal to also see recent community sightings.)';
   return "What to target here depends on the spot — tell me where (e.g. \"at Catalina\", \"the flats\") or what you're after, and I'll give you species, lures and how to fish them. " +
     "Popular SoCal targets: calico bass, sand bass, halibut, yellowtail, white seabass, barracuda, bonito, rockfish, lingcod, sheephead.";
@@ -818,7 +864,7 @@ export function asstAnsGoNoGo() {
   else if (g >= 12 || (w != null && w >= 2.5)) { verdict = 'A little chop, but generally fishable.'; }
   else { verdict = 'Looks calm and fishable.'; }
   return '**' + verdict + '**\nWind ~' + Math.round(wind) + ' kn (gust ' + g + ')' + (w != null ? ', seas ~' + w.toFixed(1) + ' ft' : '') + ' (' + src + ').' +
-    '\n\n**Rough read only — always get an official marine forecast (VHF WX / NOAA) before you head out.**';
+    '\n\n**Rough read only — the call is the skipper\'s. Get the NWS marine forecast (VHF WX / NOAA) before you head out.**';
 }
 
 /* Nearest saved spot of a given type (ramp, anchorage, hazard, wreck). */
@@ -858,7 +904,12 @@ export function asstAnsBait(t) {
     // Area-specific note if the question names one this species has tips for.
     if (sp.areas) {
       const ak = Object.keys(sp.areas).find((k) => t.includes(k));
-      if (ak) s += '\n• ' + ak.replace(/\b\w/g, (c) => c.toUpperCase()) + ': ' + sp.areas[ak];
+      if (ak) {
+        s += '\n• ' + ak.replace(/\b\w/g, (c) => c.toUpperCase()) + ': ' + sp.areas[ak];
+        // The species' spot notes name grounds beside MPAs too (Catalina front side, PV, the islands).
+        const ap = areaTipsFor(ak) || areaTipsFor(t);
+        if (ap && ap.mpa) s += '\n' + MPA_TIP_NOTE;
+      }
     }
     // Fold in the user's own catch log if it has data for this species.
     if (typeof Catch !== 'undefined' && Catch.all && Catch.all.length) {
@@ -874,7 +925,7 @@ export function asstAnsBait(t) {
     return s + '\n\n**Confirm size/bag limits with CDFW before keeping fish.**';
   }
 
-  if (area) return area.name + '\n' + area.text +
+  if (area) return area.name + '\n' + areaTipText(area) +
     '\n\n(Ask about a species — e.g. "what should I throw for yellowtail here" — for lure/bait specifics.)';
 
   // Nothing matched — nudge with useful options rather than punting.
@@ -997,7 +1048,13 @@ export function asstFindSpecies(t) {
   // direct name / word overlap
   let best = FISH_ID.find((f) => t.includes(f.name.toLowerCase()));
   if (best) return best;
-  const words = t.replace(/[^a-z ]/g, ' ').split(/\s+/).filter((w) => w.length > 3);
+  /* Generic words never name a species: "fish" is inside "Rockfish" and "Ocean Whitefish", so
+     "how many fish can I keep?" or "is it legal to keep this fish" answered with the ROCKFISH
+     limits as if that were the user's fish. */
+  const stop = ['fish', 'fishes', 'fishing', 'what', 'this', 'that', 'here', 'there', 'keep', 'legal', 'many', 'much',
+    'with', 'from', 'about', 'have', 'season', 'catch', 'caught', 'when', 'where', 'limit', 'limits', 'size', 'open',
+    'rules', 'regs', 'closure', 'closures', 'depth', 'inch', 'inches', 'long', 'tell', 'know', 'they', 'them'];
+  const words = t.replace(/[^a-z ]/g, ' ').split(/\s+/).filter((w) => w.length > 3 && stop.indexOf(w) < 0);
   best = FISH_ID.find((f) => words.some((w) => f.name.toLowerCase().includes(w)));
   return best || null;
 }
@@ -1015,9 +1072,33 @@ export function asstFindKnot(t) {
   return KNOTS.find((k) => t.includes(k.name.toLowerCase())) ||
     KNOTS.find((k) => words.some((w) => k.name.toLowerCase().includes(w))) || null;
 }
+/* "Which knot for X?" — by what the knot is FOR when no knot is named. "best knot for braid to
+   fluoro" and "what knot for a swivel" used to get only the list of names. Ordered: the most
+   specific job first. Returns the knot (by name, so a trimmed list just finds nothing). */
+export const ASST_KNOT_USES = [
+  { re: /\bbraid\b.*\b(?:fluoro\w*|leader|mono\w*)\b|\b(?:fluoro\w*|leader|mono\w*)\b.*\bbraid\b/, name: 'FG Knot', also: 'Albright Knot or Double Uni Knot if you want an easier one' },
+  { re: /\b(?:spool|reel|arbor)\b/, name: 'Arbor Knot' },
+  { re: /\bleader\b|\bjoin\w*\b|\btwo lines\b|\bline to line\b|\bsplice\b/, name: 'Double Uni Knot' },
+  { re: /\bdropper\b|\bmulti.?hook\b|\bteaser\b/, name: 'Dropper Loop' },
+  { re: /\bbait hook\b|\bcircle hook\b|\bsnell\w*\b/, name: 'Snell Knot' },
+  { re: /\bjig\w*\b|\biron\b/, name: 'San Diego Jam Knot' },
+  { re: /\bswimbait\b|\bplug\b|\bfree action\b/, name: 'Non-Slip Loop Knot' },
+  { re: /\bswivel\b|\bhook\b|\blure\b|\bsnap\b|\bterminal\b/, name: 'Palomar Knot' },
+];
+export function asstKnotForUse(t) {
+  if (typeof KNOTS === 'undefined') return null;
+  for (const u of ASST_KNOT_USES) {
+    if (!u.re.test(t)) continue;
+    const k = KNOTS.find((x) => x.name === u.name);
+    if (k) return { k, also: u.also || '' };
+  }
+  return null;
+}
 export function asstAnsKnot(t) {
   const k = asstFindKnot(t);
   if (k) return asstFormatKnot(k);
+  const byUse = asstKnotForUse(t);
+  if (byUse) return asstFormatKnot(byUse.k) + (byUse.also ? '\n(Alternatives: ' + byUse.also + '.)' : '');
   if (typeof KNOTS === 'undefined' || !KNOTS.length) return "No knot guide loaded.";
   return "Which knot? I know: " + KNOTS.map((k2) => k2.name).join(', ') +
     ".\nOpen Guides → Knots for illustrated steps.";
@@ -1120,8 +1201,12 @@ export async function asstOfflinePlaceWaypoint(q) {
   const { ll } = asstPos();
   if (!ll) return "I can't drop a waypoint without a position — I need a GPS fix (or pan the map there first).";
   const source = asstPositionSource(null) || 'map center — no GPS fix yet';
-  const t = q.toLowerCase();
-  const name = asstParseWaypointName(q) || ('Waypoint ' + ((typeof Spots !== 'undefined' ? Spots.all.length : 0) + 1));
+  const given = asstParseWaypointName(q);
+  const name = given || ('Waypoint ' + ((typeof Spots !== 'undefined' ? Spots.all.length : 0) + 1));
+  /* The type comes from the request, not from the name: "drop a pin here called Rock Pile"
+     used to save a HAZARD (the name contains "rock"), and "… named Anchor Bay" an anchorage. */
+  let t = q.toLowerCase();
+  if (given) t = t.split(given.toLowerCase()).join(' ');
   let type = 'fish';
   if (t.includes('anchor')) type = 'anchor';
   else if (t.includes('hazard') || t.includes('danger') || t.includes('rock')) type = 'hazard';
@@ -1148,6 +1233,14 @@ export async function asstOfflinePlaceWaypoint(q) {
 /* What both cloud brains are told about formatting: the transcript renders plain text with
    **bold** only (never HTML), on a phone, and the app carries no emoji. */
 export const ASST_FORMAT_RULE = "Format for a small screen: plain text, short lines, '-' bullets when listing, **bold** only for the key number or a warning. No headings, tables, links or emoji.";
+/* Where First Mate must NOT be the last word (legal review, docs/launch/legal-review.md). Both
+   cloud prompts carry it, after the "be the local" fishing instruction it limits; the offline
+   answers follow the same rules (CDFW lines on regs/closures, the skipper-decides line on the
+   go/no-go read, the emergency script with no treatment advice). */
+export const ASST_LIMITS_RULE = "Limits — these ALWAYS override the above: " +
+  "(1) Regulations and MPA boundaries: give the general reference, then tell them to confirm current size/bag limits, seasons, depth closures and MPA lines with CDFW; never say a spot is open or legal to fish. " +
+  "(2) Go/no-go, weather and sea state: give the numbers and a plain read, but the decision is the skipper's — point them to the NWS marine forecast / VHF WX before heading out; never say it is safe. " +
+  "(3) Medical or any emergency: VHF Ch 16 / call 911 or the Coast Guard and the app's SOS button first; no treatment advice beyond basic first aid.";
 export function asstSystemPrompt() {
   return [
     "You are First Mate, a calm, concise assistant built into an offline marine navigation app for a recreational boater and angler.",
@@ -1159,7 +1252,8 @@ export function asstSystemPrompt() {
     "You can take real actions in the app via tools: place / list / delete waypoints, toggle map layers, start or stop trip tracking, center the map, and pull LIVE weather & tides for a point. For current weather, seas, water temp or tides, CALL get_conditions / get_tides — don't answer those from the cached snapshot alone. Default every location to the boat's current position unless the user gives coordinates or names a saved spot. After acting, confirm briefly and naturally what you did. If a tool result says it used the map center because there was no GPS fix, say so.",
     "If the user is offline (get_conditions / get_tides can't reach the network) or asks about a downloaded area, call get_area_intel — it reads the offline data pack captured when the area was downloaded (multi-day forecast, a week of tides, water-temp grid, fish-sighting history, closures). Always mention when the data was captured so they know its age.",
     "Catch logging and knots aren't automated yet — for those, point them to Nav tools & catch log and to Guides → Knots in the app.",
-    "You are a knowledgeable local deckhand: you have a built-in fishing brain (below) covering species, lures/jigs/baits, techniques, and area game-plans for Southern & Central California. When asked what to throw, what bait, how to catch something, or what's biting at a spot, give a SPECIFIC, confident recommendation from it. NEVER tell the user to ask a local, hire a guide, google it, buy a book, or check somewhere else — you are the local. The only thing to defer is confirming legal size/bag limits with CDFW.",
+    "You are a knowledgeable local deckhand: you have a built-in fishing brain (below) covering species, lures/jigs/baits, techniques, and area game-plans for Southern & Central California. When asked what to throw, what bait, how to catch something, or what's biting at a spot, give a SPECIFIC recommendation from it — don't tell the user to ask a local, hire a guide, google it or buy a book for FISHING ADVICE.",
+    ASST_LIMITS_RULE,
     "",
     asstSnapshot(),
     "",
@@ -1225,7 +1319,7 @@ export function asstFocusNotes(text) {
   const sp = (typeof fishTipsFor === 'function') ? fishTipsFor(t) : null;
   if (sp) out.push('- ' + sp.name + ' — lures/jigs: ' + sp.lures + ' Bait: ' + sp.baits + ' How: ' + sp.method + ' Where/when: ' + sp.where + ' ' + sp.when);
   const area = (typeof areaTipsFor === 'function') ? areaTipsFor(t) : null;
-  if (area) out.push('- ' + area.name + ': ' + area.text);
+  if (area) out.push('- ' + area.name + ': ' + areaTipText(area));
   const tech = (typeof techniqueTipsFor === 'function') ? techniqueTipsFor(t) : null;
   if (tech) out.push('- ' + tech.name + ': ' + tech.text);
   const reg = asstFindSpecies(t);
@@ -1237,10 +1331,11 @@ export function asstProxySystem(userText, live) {
     "You are First Mate, a concise, friendly assistant inside an offline marine navigation app for a recreational boater and angler.",
     "Use the LIVE boat data below — prefer it over guessing. Units: nautical miles, knots, °F, feet. Be brief; this is read on a phone on a boat. Lead with the answer.",
     ASST_FORMAT_RULE,
-    "A LIVE CONDITIONS / LIVE TIDES block below is real data just fetched for the location it names (the boat, or a place the user asked about). Answer weather, wind, seas, WAVE HEIGHT, SWELL, water-temp and tide questions DIRECTLY from those numbers — report the exact figures (wave_ft, swell_ft, water_temp_f, etc.). This app is hands-free: NEVER tell the user to open the Weather/Tides panel, check a buoy, or look it up themselves. If a wave/swell figure is missing because the point is inland, briefly say so and ask them to name a coastal spot — do not deflect to a panel. Only when NO live block is present at all (fully offline) may you mention the Weather / Tides panels.",
+    "A LIVE CONDITIONS / LIVE TIDES block below is real data just fetched for the location it names (the boat, or a place the user asked about). Answer weather, wind, seas, WAVE HEIGHT, SWELL, water-temp and tide questions DIRECTLY from those numbers — report the exact figures (wave_ft, swell_ft, water_temp_f, etc.). This app is hands-free: for the NUMBERS, don't tell the user to open the Weather/Tides panel, check a buoy, or look it up themselves (a go/no-go decision still points to the NWS marine forecast — see Limits). If a wave/swell figure is missing because the point is inland, briefly say so and ask them to name a coastal spot — do not deflect to a panel. Only when NO live block is present at all (fully offline) may you mention the Weather / Tides panels.",
     "You can't place waypoints, start trips, or navigate the map yourself — for those actions, point them to the on-screen buttons.",
     "Fishing regulations are general reference — tell them to confirm current limits with the state agency (CDFW in California) before keeping fish. For emergencies: VHF Channel 16 / Coast Guard and the app's SOS button.",
-    "You are a knowledgeable local deckhand with a built-in fishing brain (below): species, lures/jigs/baits, techniques, and area game-plans for Southern & Central California. When asked what to throw, what bait, how to catch something, or what's biting at a spot, answer with SPECIFIC, confident picks from it. NEVER tell the user to ask a local, hire a guide, google it, or check elsewhere — you ARE the local. Only defer on confirming legal size/bag limits (CDFW).",
+    "You are a knowledgeable local deckhand with a built-in fishing brain (below): species, lures/jigs/baits, techniques, and area game-plans for Southern & Central California. When asked what to throw, what bait, how to catch something, or what's biting at a spot, answer with SPECIFIC picks from it — don't send them to a local, a guide or google for FISHING ADVICE.",
+    ASST_LIMITS_RULE,
   ].join('\n');
   return asstFitSections([
     { text: head },
@@ -1499,6 +1594,7 @@ export function asstRelayFailHead(e) {
     if (r.why === 'slow') return "The free AI didn't answer in time (" + when + '). Offline answer:';
     return 'The free AI is unavailable right now (' + when + '). Offline answer:';
   }
+  if (e && e.empty) return 'The free AI sent back an empty answer. Offline answer:';
   const s = e && e.status;
   // 413 can't come from the FishApp relay any more (asstProxyBody fits its cap); a relay with a smaller one can.
   const why = s === 403 ? 'the free AI relay refused this app'
@@ -1531,8 +1627,13 @@ export async function asstAskProxy(userText, botId) {
     throw err;
   }
   if (!resp.ok) throw await asstRelayFailure(resp, 'chat');   // 403 also stops offering the relay
-  const j = await resp.json();
-  return (j.reply || '').trim() || '(no reply)';
+  /* An empty (or unreadable) reply used to land in the chat as a bare "(no reply)" — and go
+     into the history sent with every later question. It is a failed answer: asstSend shows the
+     offline one under a line saying what happened. */
+  const j = await resp.json();     // not JSON (a captive portal's page) → "no connection"
+  const reply = String((j && j.reply) || '').trim();
+  if (!reply) { const err = new Error('empty reply'); err.empty = true; throw err; }
+  return reply;
 }
 
 /* Adaptive thinking is on every model in the picker (Opus 5.5, Sonnet 5.5, Haiku 5.5) and on
@@ -1645,7 +1746,8 @@ export async function asstAskOnline(userText, botId) {
     return "I ran out of steps before finishing that one. Here's what I did do: " +
       uniq.join(', ') + '.\n\nAsk me again — more simply, or one part at a time.';
   }
-  return '(no reply)';
+  // Nothing said and nothing done: a failed answer, not "(no reply)" (see asstAskProxy).
+  const err = new Error('empty reply'); err.empty = true; throw err;
 }
 
 export function asstToolLabel(n) {
@@ -2282,8 +2384,12 @@ export async function asstSend(text) {
      every later message, the Enter key and every suggestion chip until a reload. */
   const gen = ASST._gen || 0;
   try {
-    let brain = asstPickBrain(asstBrainInputs());
-    let note = '';                                 // why this was answered on the phone (shown, not spoken)
+    /* A distress call is answered on the phone, at once: the emergency script (Ch 16, position,
+       MAYDAY words, SOS button) is the vetted answer, and a cloud round-trip on one bar of
+       signal could keep a sinking boat on "Thinking…" for up to 90 s — or behind the cloud-AI
+       consent question. */
+    let brain = asstIsDistress(text) ? 'data' : asstPickBrain(asstBrainInputs());
+    let note = '';                               // why this was answered on the phone (shown, not spoken)
     if ((brain === 'claude' || brain === 'proxy') && asstCloudConsent() == null) {
       if (!asstPanelOpen()) {
         /* Hands-free with the sheet closed (voice.js): nobody may be looking, and a question
@@ -2322,6 +2428,8 @@ export async function asstSend(text) {
         if (e && e.refusal) {
           const done = (e.didTools || []).filter((v, i, a) => a.indexOf(v) === i);
           head = "The AI wouldn't answer that one" + (done.length ? ' (before stopping it did: ' + done.join(', ') + ')' : '') + '. Offline answer:';
+        } else if (useClaude && e && e.empty) {
+          head = 'The AI sent back an empty answer. Offline answer:';
         } else if (useClaude) {
           const why = e.status === 401 ? 'bad API key' : (e.message || 'network');
           head = "Couldn't reach the AI (" + why + "). Offline answer:";

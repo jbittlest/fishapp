@@ -141,10 +141,26 @@ export function spotsReload() {
   return spotsInit(map).catch(() => {});
 }
 
+/* A spot's position, or null when the record has none Leaflet can draw. Records normally carry
+   numbers, but a backup import used to store whatever the file held: ONE record with lat 'abc'
+   made L.marker throw inside rebuildSpotMarkers, spotsInit never reached 'ready', and every
+   saved spot vanished from the list ("Loading spots…" forever, the panel in its error boundary)
+   on every launch. Numeric strings are accepted (Leaflet takes them too). Pure. */
+const spotCoord = (v) => (typeof v === 'number' ? v : (typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN));
+/** @returns {{lat: number, lng: number}|null} */
+export function spotPos(s) {
+  if (!s || typeof s !== 'object') return null;
+  const lat = spotCoord(s.lat), lng = spotCoord(s.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+  return { lat, lng };
+}
+
+/* One bad record never takes the rest down: it gets no marker, but still lists (so it can be
+   found and deleted). */
 function rebuildSpotMarkers() {
   if (!Spots.layer) return;
   Spots.layer.clearLayers(); Spots.markers = {};
-  Spots.all.forEach(addSpotMarker);
+  Spots.all.forEach((s) => { try { addSpotMarker(s); } catch (e) { /* skip this marker */ } });
 }
 
 /** Marker HTML: an ink disc with a white type glyph, and the name on an ink chip. */
@@ -159,18 +175,20 @@ export function addSpotMarker(spot) {
   /* Idempotent: the assistant used to call this after pushing into Spots.all, and
      spotsChanged() also reconciles markers — never draw the same spot twice. */
   if (Spots.markers[spot.id]) { Spots.layer.removeLayer(Spots.markers[spot.id]); delete Spots.markers[spot.id]; }
+  const pos = spotPos(spot);
+  if (!pos) return;   // nothing to draw (a damaged record); it still lists
   const icon = L.divIcon({
     className: 'spot-mk-wrap',
     html: spotMarkerHtml(spot),
     iconSize: [28, 28],
     iconAnchor: [14, 14],
   });
-  const m = L.marker([spot.lat, spot.lng], { icon, title: spot.name, alt: spot.name, riseOnHover: true });
+  const m = L.marker([pos.lat, pos.lng], { icon, title: spot.name, alt: spot.name, riseOnHover: true });
   /* Leaflet popups are gone: a tap opens the spot's map card (Navigate / Edit / Delete).
      When the route planner or the measure tool is active the tap is theirs — a saved spot
      is the most natural waypoint there is, so it snaps to the spot's exact position. */
   m.on('click', () => {
-    const ll = L.latLng(spot.lat, spot.lng);
+    const ll = L.latLng(pos.lat, pos.lng);
     if (typeof navHandleClick === 'function' && navHandleClick(ll)) return;
     openSpotCard(spot.id);
   });
@@ -184,21 +202,26 @@ export function openSpotCard(id) {
   const s = Spots.all.find((x) => x.id === id);
   if (!s) return;
   publishSpots();
-  openCard('spot', { id: s.id }, { lat: s.lat, lng: s.lng });
+  openCard('spot', { id: s.id }, spotPos(s) || undefined);
 }
 
 /* ---- Sorting / distances (pure) ---- */
-/** Nearest-first from `here` (an L.LatLng), else newest-first. Returns a new array. */
+/** Nearest-first from `here` (an L.LatLng), else newest-first. A spot with no usable position
+ *  sorts last (it has no distance). Returns a new array. */
 export function sortSpots(all, here) {
   return all.slice().sort((a, b) => {
-    if (!here) return b.ts - a.ts;
-    return here.distanceTo(L.latLng(a.lat, a.lng)) - here.distanceTo(L.latLng(b.lat, b.lng));
+    if (!here) return (Number(b.ts) || 0) - (Number(a.ts) || 0);
+    const pa = spotPos(a), pb = spotPos(b);
+    if (!pa || !pb) return (pa ? 0 : 1) - (pb ? 0 : 1);
+    return here.distanceTo(L.latLng(pa.lat, pa.lng)) - here.distanceTo(L.latLng(pb.lat, pb.lng));
   });
 }
-/** Distance (nm) and true bearing (°) from `here` to a spot; nulls without a fix. */
+/** Distance (nm) and true bearing (°) from `here` to a spot; nulls without a fix (or without a
+ *  usable position on the spot). */
 export function spotDistBrg(here, spot) {
-  if (!here || spot == null || spot.lat == null || spot.lng == null) return { distNm: null, brgDeg: null };
-  const ll = L.latLng(spot.lat, spot.lng);
+  const pos = spotPos(spot);
+  if (!here || !pos) return { distNm: null, brgDeg: null };
+  const ll = L.latLng(pos.lat, pos.lng);
   const from = L.latLng(here.lat, here.lng);
   return { distNm: nmBetween(from, ll), brgDeg: Math.round(bearingBetween(from, ll)) % 360 };
 }
@@ -347,8 +370,10 @@ export async function confirmDeleteSpot(spot) {
 export function flyToSpot(spot) {
   const map = theMap();
   if (!map || !spot) return;
-  const ll = L.latLng(spot.lat, spot.lng);
+  const pos = spotPos(spot);
   closePanels();
+  if (!pos) { openSpotCard(spot.id); return; }   // nowhere to fly to; the card says so
+  const ll = L.latLng(pos.lat, pos.lng);
   setFollow(false);
   mapProgrammatic(() => map.setView(ll, Math.max(map.getZoom(), 14)));
   openSpotCard(spot.id);
@@ -358,8 +383,10 @@ export function flyToSpot(spot) {
  *  so it is awaited (it resolves false when the user backs out). */
 export async function navigateToSpot(spot) {
   if (!spot) return false;
+  const pos = spotPos(spot);
+  if (!pos) { toast('This spot has no usable position to navigate to'); return false; }
   closeCard('spot');
-  return !!(await gotoStart({ lat: spot.lat, lng: spot.lng }, spot.name));
+  return !!(await gotoStart(pos, spot.name));
 }
 
 /** Create a spot without the editor (First Mate's place_waypoint, voice "mark this spot").
@@ -869,7 +896,13 @@ export async function exportData() {
   if (spotsStore.getState().exporting) return;   // a double-tap must not open two share sheets
   spotsStore.setState({ exporting: true });
   try {
-    const grab = async (store) => { try { return await idb.getAll(store); } catch (e) { return []; } };
+    /* A store that can't be read FAILS the export. It used to be swallowed as an empty list, so
+       the toast said "Backup exported — … 0 catches" for a file with none of them in it — and
+       people export precisely so they can wipe or replace the phone. Area metadata is the one
+       exception: it is re-creatable (the charts themselves are never in a backup). */
+    const grab = async (store) => {
+      try { return await idb.getAll(store); } catch (e) { throw new Error('couldn\'t read your ' + store + ' (' + ((e && e.message) || e) + ')', { cause: e }); }
+    };
     const data = {
       app: 'FishApp', version: 2, exported: new Date().toISOString(),
       spots: await grab('spots'),
@@ -877,7 +910,7 @@ export async function exportData() {
       catches: await grab('catches'),
       trips: await grab('trips'),
       // area metadata only — the tile blobs are gigabytes and are re-downloadable
-      areas: (await grab('areas')).map((a) => Object.assign({}, a, { data: undefined })),
+      areas: (await grab('areas').catch(() => [])).map((a) => Object.assign({}, a, { data: undefined })),
     };
     const counts = ['spots', 'tracks', 'catches', 'trips'].map((k) => data[k].length + ' ' + k);
     /* The download goes through the platform: the share sheet in the iOS app (Save to Files,
@@ -908,6 +941,7 @@ export async function exportData() {
    Catches have no `name` — their species stands in, so two different fish logged at the
    same second and place are not collapsed into one. */
 export function _importKey(r) {
+  if (!r || typeof r !== 'object') return '';
   return [r.ts || r.start || '', r.name || r.species || '', r.lat || '', r.lng || ''].join('|');
 }
 
@@ -935,6 +969,7 @@ async function importDataInner(file) {
     return;
   }
   const added = {}, skipped = {};
+  let damaged = 0;
   try {
     for (const store of ['spots', 'tracks', 'catches', 'trips']) {
       const incoming = Array.isArray(data[store]) ? data[store] : [];
@@ -944,18 +979,27 @@ async function importDataInner(file) {
       const seen = new Set(existing.map(_importKey));
       added[store] = 0; skipped[store] = 0;
       for (const rec of incoming) {
+        /* A backup is untrusted input (hand-edited, truncated, another tool's). A record that
+           isn't an object used to throw here ("Import stopped") and abandon every good record
+           after it; a spot with no usable position was stored, and then made the whole spot
+           list unreadable on every launch (see spotPos). Skip those and say how many. */
+        if (!rec || typeof rec !== 'object' || Array.isArray(rec)) { damaged++; continue; }
+        const pos = store === 'spots' ? spotPos(rec) : null;
+        if (store === 'spots' && !pos) { damaged++; continue; }
         if (seen.has(_importKey(rec))) { skipped[store]++; continue; }
         seen.add(_importKey(rec));
         const copy = Object.assign({}, rec);
         delete copy.id;
+        if (pos) { copy.lat = pos.lat; copy.lng = pos.lng; }   // stored as numbers
         await idb.put(store, copy);
         added[store]++;
       }
     }
     const parts = Object.keys(added).map((k) => added[k] + ' ' + k).filter((s) => !s.startsWith('0 '));
     const dupes = Object.keys(skipped).reduce((a, k) => a + skipped[k], 0);
-    toast(parts.length ? ('Imported ' + parts.join(', ') + (dupes ? ' · ' + dupes + ' already present' : ''))
-      : 'Nothing new to import — it was all already here');
+    const bad = damaged ? ' · ' + damaged + ' damaged record' + (damaged === 1 ? '' : 's') + ' skipped' : '';
+    toast(parts.length ? ('Imported ' + parts.join(', ') + (dupes ? ' · ' + dupes + ' already present' : '') + bad)
+      : (damaged ? 'Nothing imported' + bad : 'Nothing new to import — it was all already here'), damaged ? { ms: 6000 } : undefined);
   } catch (e) {
     // Be honest about WHICH failure this was: a valid backup that hit a full store
     // used to be reported as "not a FishApp backup".

@@ -31,9 +31,11 @@ import {
   radarCoversView, RADAR_CAPS_URL, RADAR_WMS, RADAR_LAYER, RAIN_FRAME_MS,
 } from '../../../src/engine/rain.js';
 import {
-  SST, sstStore, sstEnable, sstDate, sstRangeFrom, sstImgUrl, sstSavedPalette, sstSetPalette, sstTogglePlay, C_TO_F,
-  SST_PALETTE_BAR, SST_PALETTES, getSstRange,
+  SST, sstStore, sstEnable, sstDate, sstRangeFrom, sstSavedPalette, sstSetPalette, sstTogglePlay, C_TO_F,
+  SST_PALETTE_BAR, SST_PALETTES, SST_RENDER_MAX_Z, getSstRange, sstLoopDates, sstRangeChanged, sstTileCoords,
 } from '../../../src/engine/sst.js';
+import { SstLatest, sstResetMemory, sstTileUrl } from '../../../src/engine/sst-tiles.js';
+import { MUR_SST_ATTRIBUTION } from '../../../src/engine/datasources.js';
 
 /* The radar layer's real capabilities, as nowCOAST served them on 2026-10-26 (97 mosaics,
    18:04:03Z to 00:32:17Z, one gap of 8 min at 18:27:47Z). */
@@ -391,9 +393,16 @@ describe('radar time handling', () => {
 });
 
 describe('SST', () => {
+  /** A GIBS tile answer: the newest day in Layer-Time-Actual, as GIBS sends it. */
+  const gibs = (day = '2026-10-26') => Promise.resolve({
+    ok: true, status: 200,
+    blob: () => Promise.resolve(new Blob([new Uint8Array(200)], { type: 'image/png' })),
+    headers: { get: (k) => (k.toLowerCase() === 'layer-time-actual' ? day + 'T00:00:00Z' : null) },
+  });
+  beforeEach(() => { sstResetMemory(); SstLatest.date = null; SstLatest.at = 0; });
   afterEach(async () => { await sstEnable(false); });
 
-  it('sstDate is the UTC day, 2 days back by default', () => {
+  it('sstDate is the UTC day, 2 days back by default (the fallback when GIBS cannot be asked)', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-25T03:00:00Z'));
     expect(sstDate()).toBe('2026-10-23');
@@ -408,18 +417,33 @@ describe('SST', () => {
     expect(sstRangeFrom([15, null])).toBeNull();
   });
 
+  it('a new view keeps the colours on screen unless an end moves 0.2 °C or more', () => {
+    expect(sstRangeChanged(null, [14, 18])).toBe(true);
+    expect(sstRangeChanged([14, 18], [14.1, 18.1])).toBe(false);
+    expect(sstRangeChanged([14, 18], [14, 18.3])).toBe(true);
+    expect(sstRangeChanged([14, 18], null)).toBe(false);
+  });
+
   it('C_TO_F', () => {
     expect(C_TO_F(0)).toBe(32);
     expect(C_TO_F(20)).toBe(68);
   });
 
-  it('image URL keeps the ERDDAP griddap shape with the palette and range', () => {
-    SST.range = [14.2, 18.9];
-    SST.palette = 'Rainbow';
-    const u = sstImgUrl('2026-10-23');
-    expect(u).toBe('https://coastwatch.pfeg.noaa.gov/erddap/griddap/jplMURSST41.transparentPng?' +
-      'analysed_sst%5B(2026-10-23T09:00:00Z)%5D%5B(33.1000):(34.2000)%5D%5B(-119.3000):(-117.9000)%5D' +
-      '&.size=800|629&.colorBar=' + encodeURIComponent('Rainbow|C|Linear|14.2|18.9|'));
+  it('tiles have ONE stable URL per day and tile (reusable, storable) — never the view in the URL', () => {
+    expect(sstTileUrl('2026-10-23', 7, 21, 51)).toBe('https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/' +
+      'GHRSST_L4_MUR_Sea_Surface_Temperature/default/2026-10-23/GoogleMapsCompatible_Level7/7/51/21.png');
+    expect(sstTileUrl(null, 7, 21, 51)).toBe('https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/' +
+      'GHRSST_L4_MUR_Sea_Surface_Temperature/default/GoogleMapsCompatible_Level7/7/51/21.png');
+  });
+
+  it('drawn tiles past z7 come from their z7 data tile (which slice of it, how much upsampling)', () => {
+    expect(sstTileCoords(7, 21, 51)).toMatchObject({ dz: 7, dx: 21, dy: 51, f: 1, sx: 0, sy: 0 });
+    expect(sstTileCoords(10, 175, 413)).toMatchObject({ dz: 7, dx: 21, dy: 51, f: 8, sx: 7, sy: 5 });
+    expect(sstTileCoords(4, 2, 6)).toMatchObject({ dz: 4, dx: 2, dy: 6, f: 1 });
+  });
+
+  it('loop days: SST_LOOP_DAYS ending on the newest, oldest first, across a month end', () => {
+    expect(sstLoopDates('2026-11-02')).toEqual(['2026-10-29', '2026-10-30', '2026-10-31', '2026-11-01', '2026-11-02']);
   });
 
   it('saved palette: survives blocked storage and ignores unknown names', () => {
@@ -445,17 +469,38 @@ describe('SST', () => {
     expect(SST.palette).toBe('Rainbow');
   });
 
-  it('offline: refuses, module state OFF, toggle corrected', async () => {
+  it('offline with nothing stored: refuses, module state OFF, toggle corrected, no request', async () => {
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    globalThis.fetch = vi.fn(() => gibs());
     await sstEnable(true);
     expect(SST.on).toBe(false);
     expect(reportDataOverlay).toHaveBeenCalledWith('sst', false);
     expect(uiStore.getState().toast.msg).toBe('SST needs internet');
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
-  it('turned off while the range loads: no overlay is painted afterwards', async () => {
+  it('on: ONE tile layer on a fixed grid (z7 data drawn smooth to z10), credited, newest day from GIBS', async () => {
+    globalThis.fetch = vi.fn(() => gibs('2026-10-26'));
+    await sstEnable(true);
+    expect(h.added).toHaveLength(1);
+    const layer = h.added[0];
+    expect(layer).toBeInstanceOf(L.GridLayer);
+    expect(layer.options).toMatchObject({ maxNativeZoom: SST_RENDER_MAX_Z, className: 'sst-tiles', attribution: MUR_SST_ATTRIBUTION, opacity: 0.75 });
+    expect(SST.latest).toBe('2026-10-26');
+    expect(SST.shownDate).toBe('2026-10-26');
+    // the newest day is asked with one probe tile (no date in the URL) and then trusted for hours
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(globalThis.fetch.mock.calls[0][0]).toBe(sstTileUrl(null, 0, 0, 0));
+    await sstEnable(false);
+    expect(h.removed).toContain(layer);
+    await sstEnable(true);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(h.added).toHaveLength(2);                 // a fresh grid each time it is turned on
+  });
+
+  it('turned off while the newest day is looked up: nothing is added to the map afterwards', async () => {
     let release;
-    globalThis.fetch = vi.fn(() => new Promise((r) => { release = () => r({ ok: true, json: () => Promise.resolve([]) }); }));
+    globalThis.fetch = vi.fn(() => new Promise((r) => { release = () => r(gibs()); }));
     const p = sstEnable(true);
     await settle(1);
     await sstEnable(false);
@@ -465,59 +510,48 @@ describe('SST', () => {
     expect(sstStore.getState().on).toBe(false);
   });
 
-  it('Play tapped while the first range is sampled: the loop is queued, then built with that range', async () => {
+  it('Play tapped while the newest day is looked up: the loop is queued, then played over the 5 days', async () => {
     vi.useFakeTimers();
     let release;
-    const samples = Array.from({ length: 30 }, (_, i) => ({ current: { sea_surface_temperature: 15 + (i % 10) * 0.3 } }));
-    globalThis.fetch = vi.fn(() => new Promise((r) => { release = () => r({ ok: true, json: () => Promise.resolve(samples) }); }));
-    SST.range = [1, 2];                              // a stale range from an earlier session
+    globalThis.fetch = vi.fn(() => new Promise((r) => { release = () => r(gibs('2026-10-26')); }));
     const p = sstEnable(true);
     sstTogglePlay();
     expect(sstStore.getState()).toMatchObject({ playing: true, loadingLoop: true });
-    expect(h.added).toHaveLength(0);                 // nothing built with no / a stale range
+    expect(h.added).toHaveLength(0);
     release();
     await vi.advanceTimersByTimeAsync(0);
     await p;
-    expect(h.added).toHaveLength(5);                 // the 5-day loop, not a static frame
-    expect(h.added.every((ov) => !ov._url.includes(encodeURIComponent('|C|Linear|1|2|')))).toBe(true);
-    expect(sstStore.getState()).toMatchObject({ playing: true, loadingLoop: true });   // still "Loading loop…"
-    await vi.advanceTimersByTimeAsync(15000);        // preload timeout → the loop starts
-    expect(sstStore.getState()).toMatchObject({ playing: true, loadingLoop: false });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(SST.frames).toEqual(sstLoopDates('2026-10-26'));
+    expect(sstStore.getState()).toMatchObject({ playing: true, loadingLoop: false, date: '2026-10-22' });
     expect(SST.timer).not.toBeNull();
+    await vi.advanceTimersByTimeAsync(800);
+    expect(sstStore.getState().date).toBe('2026-10-23');   // frames swap on the clock, no network
     sstTogglePlay();
-    expect(sstStore.getState().playing).toBe(false);
+    expect(sstStore.getState()).toMatchObject({ playing: false, date: '2026-10-26' });   // back on the newest day
   });
 
-  it('Stop while the first range is still sampled builds nothing early (one static frame afterwards)', async () => {
+  it('Stop while the newest day is still looked up starts nothing (the static day afterwards)', async () => {
     vi.useFakeTimers();
     let release;
-    globalThis.fetch = vi.fn(() => new Promise((r) => { release = () => r({ ok: true, json: () => Promise.resolve([]) }); }));
-    SST.range = [1, 2];
+    globalThis.fetch = vi.fn(() => new Promise((r) => { release = () => r(gibs()); }));
     const p = sstEnable(true);
     sstTogglePlay();
     sstTogglePlay();
-    expect(h.added).toHaveLength(0);
     expect(sstStore.getState()).toMatchObject({ playing: false, loadingLoop: false });
     release();
     await vi.advanceTimersByTimeAsync(0);
     await p;
     expect(h.added).toHaveLength(1);
-    expect(getSstRange()).toEqual([13, 23]);         // the fallback, sampled now — not the stale one
+    expect(SST.timer).toBeNull();
+    expect(SST.frames).toEqual([]);
   });
 
-  it('legend °F ends are published with the image that uses that range', async () => {
-    vi.useFakeTimers();
-    const samples = Array.from({ length: 30 }, (_, i) => ({ current: { sea_surface_temperature: 15 + (i % 10) * 0.3 } }));
-    globalThis.fetch = vi.fn(() => res(samples));
-    const p = sstEnable(true);
-    await vi.advanceTimersByTimeAsync(0);
-    await p;
-    expect(h.added).toHaveLength(1);                 // one static frame
-    expect(sstStore.getState().rangeF).toBeNull();   // not before the image is revealed
-    await vi.advanceTimersByTimeAsync(8000);         // load timeout → reveal
-    const r = getSstRange();
-    expect(sstStore.getState().rangeF).toEqual([Math.round(C_TO_F(r[0])), Math.round(C_TO_F(r[1]))]);
-    expect(h.added[0]._url).toContain(encodeURIComponent('|C|Linear|' + r[0] + '|' + r[1] + '|'));
-    expect(sstStore.getState().date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  it('a stale range from another place is never used to colour a new view', async () => {
+    globalThis.fetch = vi.fn(() => gibs());
+    SST.range = [1, 2];
+    await sstEnable(true);
+    expect(getSstRange()).toBeNull();                // refitted from the tiles as they arrive
+    expect(sstStore.getState().rangeF).toBeNull();   // the legend shows no numbers until then
   });
 });

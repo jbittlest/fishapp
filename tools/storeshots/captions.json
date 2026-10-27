@@ -21,9 +21,9 @@
     {
       "id": "anchor",
       "screen": "08-anchor",
-      "headline": "Anchor alarm that wakes you",
-      "accent": "wakes you",
-      "subline": "Sounds the moment you drag past your circle"
+      "headline": "Anchor alarm, even when locked",
+      "accent": "even when locked",
+      "subline": "Alerts when GPS puts you past your circle"
     },
     {
       "id": "inspect",

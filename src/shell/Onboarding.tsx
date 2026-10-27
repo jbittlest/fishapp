@@ -2,8 +2,9 @@
  * and AI answers come from public data and can be wrong or late. Saying so plainly, once, before
  * anyone relies on it underway is both the right thing to do and what App Review expects of a
  * navigation app (guideline 1.4.1). Also states the privacy basics up front. */
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Button, Icon } from '../ui';
+import { useModalFocus } from '../ui/Overlays';
 import { openCard, openPanel, uiStore } from '../services/ui';
 import { SITE } from '../services/site';
 
@@ -32,13 +33,21 @@ export function openAboutKeepingCard(): void {
 export function Onboarding() {
   const [show, setShow] = useState(() => !acked());
   if (!show) return null;
+  return <Notice onDone={() => setShow(false)} />;
+}
+
+/* A modal like any other for the keyboard and screen readers: focus moves onto the card, Tab
+   stays inside it (it blocks the whole app until acknowledged), and Escape does not dismiss it. */
+function Notice({ onDone }: { onDone: () => void }) {
+  const card = useRef<HTMLDivElement>(null);
+  const onKeyDown = useModalFocus(card);
   const accept = () => {
     try { localStorage.setItem(KEY, VERSION); } catch { /* private mode: ask again next time */ }
-    setShow(false);
+    onDone();
   };
   return (
-    <div className="shell-onboard" role="dialog" aria-modal="true" aria-labelledby="onboard-title">
-      <div className="shell-onboard__card surface-paper">
+    <div className="shell-onboard">
+      <div ref={card} tabIndex={-1} onKeyDown={onKeyDown} className="shell-onboard__card surface-paper" role="dialog" aria-modal="true" aria-labelledby="onboard-title">
         <div className="shell-onboard__mark" aria-hidden><Icon name="hull" size={28} /></div>
         <h1 id="onboard-title" className="ui-title-1">Before you head out</h1>
         <ul className="shell-onboard__list">

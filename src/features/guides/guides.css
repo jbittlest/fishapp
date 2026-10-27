@@ -68,6 +68,8 @@
 /* ---- fish ---- */
 .guide-id { margin: 0 0 12px; font: 400 15px/22px var(--font-ui); color: var(--text-1); }
 .guide-facts { margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+/* "Limits checked against CDFW on <date> — rules change": under each species' limits */
+p.guide-asof { margin: 8px 0 0; color: var(--text-2); }
 .guide-facts__cell { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .guide-facts dd { margin: 0; font: 600 15px/20px var(--font-inst); font-variant-numeric: tabular-nums; color: var(--text-1); overflow-wrap: anywhere; }
 

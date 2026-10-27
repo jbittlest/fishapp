@@ -3,6 +3,7 @@
  * the shell down (each is wrapped in an error boundary by its host). */
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react';
 import type { CardState, PanelId } from '../services/ui';
+import { SITE } from '../services/site';
 
 type Lazy<P = object> = LazyExoticComponent<ComponentType<P>>;
 
@@ -24,7 +25,7 @@ export const PANELS: Record<PanelId, Lazy> = {
 export const PANEL_TITLES: Record<string, string> = {
   weather: 'Weather & waves', tides: 'Tides & bite times', spots: 'Spots & tracks', download: 'Offline charts',
   tools: 'Nav tools & catch log', guides: 'Guides', assistant: 'First Mate', motor: 'Trolling motor',
-  more: 'More', layers: 'Map layers', emergency: 'Emergency', about: 'About FishApp',
+  more: 'More', layers: 'Map layers', emergency: 'Emergency', about: `About ${SITE.brandName}`,
 };
 
 export interface CardProps { data: any; card: CardState }

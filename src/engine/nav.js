@@ -149,7 +149,7 @@ export function routeIcon(n) {
 }
 export function routeAddPoint(ll) {
   Nav.route.pts.push(ll);
-  const m = L.marker(ll, { draggable: true, icon: routeIcon(Nav.route.pts.length), zIndexOffset: 1000 })
+  const m = L.marker(ll, { draggable: true, keyboard: false, icon: routeIcon(Nav.route.pts.length), zIndexOffset: 1000 })   // drag-only: not an unlabelled focusable "button"
     .addTo(Nav.route.layerGroup);
   m.on('drag', () => { const i = Nav.route.markers.indexOf(m); if (i >= 0) { Nav.route.pts[i] = m.getLatLng(); routeRedraw(); } });
   Nav.route.markers.push(m);
@@ -262,6 +262,10 @@ export function measureReset() {
   Nav.measure.layer.clearLayers(); Nav.measure.a = null; Nav.measure.result = null;
   navStore.setState({ measure: null, measurePending: false });
 }
+/** The on-chart measure label (plain text: digits and units only, so no escaping needed). */
+export function measureChipText(r) {
+  return r.nm.toFixed(r.nm < 10 ? 2 : 1) + ' nm · ' + r.brg + '°T';
+}
 export function measureClick(ll) {
   if (!Nav.measure.a) {
     Nav.measure.layer.clearLayers();
@@ -275,6 +279,12 @@ export function measureClick(ll) {
     L.polyline([Nav.measure.a, b], { weight: 2, dashArray: '5 4', className: 'nav-measure-line', interactive: false }).addTo(Nav.measure.layer);
     const nm = nmBetween(Nav.measure.a, b), brg = Math.round(bearingBetween(Nav.measure.a, b));
     Nav.measure.result = { nm: nm, mi: nm * 1.15078, brg: brg };
+    /* The answer also goes ON the chart, at the line's midpoint like a route leg's chip: the
+       measure mode keeps working with the Tools sheet closed (legacy: close the panel, tap two
+       points), and the result used to exist only in that closed sheet — a bare dashed line. */
+    const mid = L.latLng((Nav.measure.a.lat + b.lat) / 2, (Nav.measure.a.lng + b.lng) / 2);
+    L.marker(mid, { interactive: false, keyboard: false, icon: L.divIcon({ className: 'nav-leg-icon', iconSize: [0, 0],
+      html: '<span class="map-chip nav-leg-chip nav-measure-chip">' + measureChipText(Nav.measure.result) + '</span>' }) }).addTo(Nav.measure.layer);
     navStore.setState({ measure: Nav.measure.result, measurePending: false });
     Nav.measure.a = null;
   }

@@ -158,21 +158,26 @@ export const FISH_TIPS = [
   },
 ];
 
-/* Named-area game plans (Southern & Central CA). Keyed by lowercase substrings. */
+/* Named-area game plans (Southern & Central CA). Keyed by lowercase substrings.
+   `mpa: true` = the named grounds sit inside or next to marine protected areas (Catalina's front
+   side — Casino Point, Lover's Cove, Blue Cavern; Point Vicente / Abalone Cove; Point Dume; La Jolla
+   and the Matlahuayl SMR; the Channel Islands reserves; Morro Bay and Point Buchon). Every answer
+   that hands out one of these game plans carries MPA_TIP_NOTE (areaTipText), so a spot tip never
+   reads as permission to fish a no-take zone. */
 export const AREA_TIPS = [
-  { keys: ['catalina', 'avalon', 'two harbors', 'isthmus'], name: 'Catalina Island',
+  { keys: ['catalina', 'avalon', 'two harbors', 'isthmus'], name: 'Catalina Island', mpa: true,
     text: 'Front side (Avalon→isthmus) is calico & yellowtail structure — swimbaits and surface iron on the kelp and boiler rocks. West end, the ridge and boilers for yellowtail on the yo-yo iron. Squid grounds hold white seabass at gray light. Whitefish and sheephead on the hard bottom.' },
-  { keys: ['palos verdes', ' pv ', 'point vicente', 'lunada'], name: 'Palos Verdes',
+  { keys: ['palos verdes', ' pv ', 'point vicente', 'lunada'], name: 'Palos Verdes', mpa: true,
     text: 'Cobble, kelp and boiler rock close to the beach — quality calicos on swimbaits, sheephead and whitefish on the bottom, and yellowtail when the water\'s warm. Barracuda and bonito up top.' },
-  { keys: ['santa monica bay', 'malibu', 'redondo', 'marina del rey'], name: 'Santa Monica Bay',
+  { keys: ['santa monica bay', 'malibu', 'redondo', 'marina del rey'], name: 'Santa Monica Bay', mpa: true,
     text: 'Sand flats for halibut (drift swimbaits/live bait) and summer sand bass on the boils; rockfish on the hard bottom out deep; barracuda/bonito on the surface in warm water.' },
   { keys: ['huntington', 'belmont', 'the flats'], name: 'Huntington / Belmont Flats',
     text: 'The classic summer barred-sand-bass grounds — dropper-loop squid and leadhead grubs on the open sand 60–130 ft when the boil shows. Halibut on the drift.' },
-  { keys: ['san diego', 'point loma', 'coronado islands', 'la jolla', 'mission bay'], name: 'San Diego',
+  { keys: ['san diego', 'point loma', 'coronado islands', 'la jolla', 'mission bay'], name: 'San Diego', mpa: true,
     text: 'Point Loma kelp for calicos & bonito; La Jolla for yellowtail and (seasonal) WSB; the Coronado Islands (Mexico permit) for yellowtail on the iron and sardines; San Diego/Mission Bay for spotted bay bass and halibut.' },
-  { keys: ['channel islands', 'santa cruz island', 'santa rosa', 'anacapa', 'ventura', 'oxnard'], name: 'Channel Islands',
+  { keys: ['channel islands', 'santa cruz island', 'santa rosa', 'anacapa', 'ventura', 'oxnard'], name: 'Channel Islands', mpa: true,
     text: 'Big-fish country — quality rockfish and lingcod on the reefs, white seabass on the squid grounds, calicos on the kelp, and yellowtail/halibut in season. Watch the weather in the channel.' },
-  { keys: ['morro bay', 'morro', 'los osos', 'estero', 'central coast', 'port san luis', 'avila'], name: 'Morro Bay / Central Coast',
+  { keys: ['morro bay', 'morro', 'los osos', 'estero', 'central coast', 'port san luis', 'avila'], name: 'Morro Bay / Central Coast', mpa: true,
     text: 'Rockfish and lingcod are the bread and butter on the reefs and pinnacles — shrimp flies and big swimbaits/jigs. Halibut on the sand in the bay, and albacore/tuna offshore in warm years. Cold, fishy water.' },
 ];
 
@@ -193,6 +198,14 @@ export const TECHNIQUE_TIPS = [
   { keys: ['flat fall', 'flat-fall', 'flatfall', 'knife jig', 'vertical jig'], name: 'Flat-fall / knife jig',
     text: 'A weighted vertical jig dropped to the meter mark and ripped up with a fast sweep-and-drop; the flutter on the fall gets bit. Primary for meter-mark bluefin (glow at night) and yellowtail.' },
 ];
+
+/* The warning that goes with an mpa-flagged area tip. */
+export const MPA_TIP_NOTE = "Check MPA boundaries before fishing here — parts of this area are marine protected areas (no-take or limited take). Turn on the MPA layer; CDFW has the exact lines and rules.";
+/** An area tip's text, with the MPA warning when the area is flagged. */
+export function areaTipText(a) {
+  if (!a) return '';
+  return a.text + (a.mpa ? ' ' + MPA_TIP_NOTE : '');
+}
 
 /* Look-ups used by the assistant. */
 export function fishTipsFor(text) {

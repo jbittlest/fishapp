@@ -89,11 +89,13 @@ export const OPEN_METEO_URL = 'https://open-meteo.com/';
 export const OPEN_METEO_CREDIT = 'Weather data by Open-Meteo.com';
 export const OPEN_METEO_ATTRIBUTION = creditLink(OPEN_METEO_URL, OPEN_METEO_CREDIT);
 
-/* The MUR SST dataset (NOAA CoastWatch ERDDAP) asks for this acknowledgement. The overlay's
-   colour scale is stretched to temperatures sampled from Open-Meteo, so that is credited too. */
-export const MUR_SST_URL = 'https://coastwatch.pfeg.noaa.gov/erddap/info/jplMURSST41/index.html';
+/* The MUR SST dataset asks for this acknowledgement, and NASA GIBS (which serves the overlay's
+   tiles, engine/sst-tiles.js) asks to be acknowledged too. The colour scale is fitted to the MUR
+   pixels themselves, so no other source is involved. */
+export const MUR_SST_URL = 'https://podaac.jpl.nasa.gov/dataset/MUR-JPL-L4-GLOB-v4.1';
+export const GIBS_URL = 'https://nasa-gibs.github.io/gibs-api-docs/';
 export const MUR_SST_ACK = 'These data were provided by JPL under support by NASA MEaSUREs program.';
-export const MUR_SST_ATTRIBUTION = 'Sea temperature: MUR SST provided by JPL under support by NASA MEaSUREs program, via ' +
-  creditLink(MUR_SST_URL, 'NOAA CoastWatch') + '; scale from ' + creditLink(OPEN_METEO_URL, 'Open-Meteo.com');
+export const MUR_SST_ATTRIBUTION = 'Sea temperature: ' + creditLink(MUR_SST_URL, 'MUR SST') +
+  ' provided by JPL under support by NASA MEaSUREs program; imagery from ' + creditLink(GIBS_URL, 'NASA GIBS') + ' (ESDIS)';
 
 export const INAT_ATTRIBUTION = 'Fish sightings: ' + creditLink(INAT_URL, 'iNaturalist') + ' observers';

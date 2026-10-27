@@ -17,6 +17,12 @@ const SHELL = __SHELL__;
    silently drops out of the critical set instead of bricking offline support. */
 const CRITICAL = __CRITICAL__.filter((u) => SHELL.indexOf(u) !== -1);
 
+/* Cache lookups ignore Vary. Everything in this cache is a same-origin static file, but a host can
+   still send Vary: Origin (vite preview does; so do some CDNs and custom-domain proxies), and the
+   page's module scripts carry an Origin header the install-time requests don't — so every
+   precached script would MISS and an offline launch would hang on the splash. */
+const MATCH = { ignoreVary: true };
+
 self.addEventListener('install', (e) => {
   // cache: 'reload' forces fresh fetches from the network (bypass HTTP cache) so an
   // update never caches a stale/mismatched file mix.
@@ -70,7 +76,7 @@ function webPage(request, url) {
       caches.open(CACHE).then((c) => c.put(key, copy)).catch(() => {});
     }
     return resp;
-  }).catch(() => caches.match(key).then((hit) => hit || offlinePage()));
+  }).catch(() => caches.match(key, MATCH).then((hit) => hit || offlinePage()));
 }
 
 function offlinePage() {
@@ -96,7 +102,7 @@ self.addEventListener('fetch', (e) => {
   }
 
   e.respondWith(
-    caches.match(e.request, { ignoreSearch: true }).then((cached) => {
+    caches.match(e.request, { ...MATCH, ignoreSearch: true }).then((cached) => {
       if (cached) return cached;
       return fetch(e.request).then((resp) => {
         if (resp.ok) {
@@ -105,7 +111,7 @@ self.addEventListener('fetch', (e) => {
         }
         return resp;
       }).catch(() => {
-        if (e.request.mode === 'navigate') return caches.match('./index.html');
+        if (e.request.mode === 'navigate') return caches.match('./index.html', MATCH);
         return Response.error();
       });
     })

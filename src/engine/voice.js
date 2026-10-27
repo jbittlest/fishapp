@@ -120,13 +120,19 @@ export const VOICE_COMMANDS = [
     run: (cmd) => voiceTrack(cmd) },
   // animate:false — a zoom that depends on an animation completing can silently do nothing
   // if the compositor is stalled, and by voice there's no visual cue to retry.
-  { id: 'zoom-in', re: /\bzoom in\b|\bcloser\b/,
+  /* `wh`: skipped when the command is a wh-question. These rules match ordinary words — "how
+     close is the nearest reef?" answered "Closed." and shut the screen, "how much closer is
+     Rock Pile?" zoomed the chart, "where is the center of the kelp?" said "Following you." —
+     while "can you zoom in" (a request phrased as a question) still zooms. */
+  { id: 'zoom-in', wh: 1, re: /\bzoom in\b|\bcloser\b/,
     run: () => voiceZoom(1, 'Zooming in.') },
-  { id: 'zoom-out', re: /\bzoom out\b|\bwider\b/,
+  { id: 'zoom-out', wh: 1, re: /\bzoom out\b|\bwider\b/,
     run: () => voiceZoom(-1, 'Zooming out.') },
-  { id: 'follow', re: /\b(?:follow me|center|centre|recenter|recentre|find me)\b/,
+  { id: 'follow', wh: 1, re: /\b(?:follow me|center|centre|recenter|recentre|find me)\b/,
     run: () => { if (typeof setFollow === 'function') setFollow(true); return 'Following you.'; } },
-  { id: 'close', re: /\b(?:close|dismiss|hide|never mind|go back|nothing)\b/,
+  /* "nothing" only on its own (the answer to "Aye?"): "nothing is biting, what should I throw"
+     closed the screen. */
+  { id: 'close', wh: 1, re: /\b(?:close|dismiss|hide|never mind|go back)\b|^nothing$/,
     run: () => { if (typeof closePanels === 'function') closePanels(); return 'Closed.'; } },
 
   // --- personal bite prediction (must precede the "tide"/"weather" panel rules, which
@@ -171,8 +177,10 @@ export const VOICE_COMMANDS = [
 export function voiceMatch(cmd) {
   if (!cmd) return null;
   const asking = voiceIsQuestion(cmd);
+  const wh = VOICE_WH_RE.test(cmd);
   for (const c of VOICE_COMMANDS) {
     if (c.panel && asking) continue;   // a question isn't a request to open a screen
+    if (c.wh && wh) continue;          // …nor is "how close is …" a request to close one
     if (c.re.test(cmd)) return c;
   }
   return null;
@@ -455,6 +463,8 @@ export async function voiceHandleTranscript(raw) {
    can geocode a named place and speak the result back. Only the panel rules are skipped;
    actions ("mark this spot at the point") and the direct readouts still match first. */
 export const VOICE_QUESTION_RE = /^(?:what|whats|when|where|why|how|is|are|was|will|should|can|could|do|does|did|any)\b/;
+/* A wh-question (not "can you…", which is how people ask for an action). */
+export const VOICE_WH_RE = /^(?:what|whats|which|when|where|wheres|why|how|hows|is|are|was|were)\b/;
 export const VOICE_ELSEWHERE_RE = /\b(?:in|at|near|around|off|by|over)\s+[a-z]/;   // "…in catalina", not "…in 30 feet"
 /* …but "near me" / "around here" is THIS boat's position — the one thing the panel
    does answer. Treating it as somewhere-else meant "tides near me" never opened

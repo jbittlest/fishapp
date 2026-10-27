@@ -28,6 +28,7 @@
 .emg-pos > .ui-btn { margin-top: 6px; }
 .emg-pos__dm { font: 600 26px/30px var(--font-inst); font-variant-numeric: tabular-nums; letter-spacing: .01em; -webkit-user-select: text; user-select: text; }
 .emg-pos__dec { font: 500 15px/18px var(--font-inst); font-variant-numeric: tabular-nums; color: var(--ink-text-2); -webkit-user-select: text; user-select: text; }
+.emg-pos__old { display: flex; align-items: center; gap: 6px; margin-top: 4px; font: 600 14px/18px var(--font-ui); color: var(--alert-text); }
 .emg-pos__wait { display: flex; align-items: center; gap: 10px; min-height: 30px; font: 600 18px/24px var(--font-ui); color: var(--ink-text-2); }
 .emg-pos .ui-btn--secondary { background: var(--ink-control); color: var(--ink-text-1); }
 /* who the help text goes to, with its edit action */
@@ -55,3 +56,5 @@
 .about-head__mark { width: 52px; height: 52px; border-radius: 16px; display: grid; place-items: center; background: var(--chrome-solid); color: var(--signal); flex-shrink: 0; }
 .about-para { margin: 0 0 10px; font: 400 14.5px/21px var(--font-ui); color: var(--text-2); overflow-wrap: anywhere; }
 .about-para:last-child { margin-bottom: 0; }
+.about-licences { margin-bottom: 14px; }
+.about-licence { margin: 0; max-height: 40vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 400 12px/17px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--text-2); }

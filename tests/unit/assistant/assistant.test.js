@@ -292,8 +292,9 @@ describe('offline intent router', () => {
   });
   it('drops and names a waypoint at the live fix, awaiting the write', async () => {
     const out = await A.asstOffline('drop a pin here and call it Rock Pile');
-    expect(idb.put).toHaveBeenCalledWith('spots', expect.objectContaining({ name: 'Rock Pile', type: 'hazard' }));
-    expect(out).toMatch(/^Dropped "Rock Pile" \(hazard\) at 33\.60000, -118\.00000\.\nSaved and on the map/);
+    // the type comes from the request, not the name ("Rock" Pile used to save a hazard)
+    expect(idb.put).toHaveBeenCalledWith('spots', expect.objectContaining({ name: 'Rock Pile', type: 'fish' }));
+    expect(out).toMatch(/^Dropped "Rock Pile" \(fish\) at 33\.60000, -118\.00000\.\nSaved and on the map/);
     expect(out).not.toMatch(/map center/);
     expect(addSpotMarker).toHaveBeenCalled();
     expect(spotsChanged).toHaveBeenCalled();
@@ -339,7 +340,7 @@ describe('offline intent router', () => {
     saveWx();
     const out = await A.asstOffline('is it too rough today?');
     expect(out).toMatch(/^\*\*Rough — think hard before going\./);
-    expect(out).toMatch(/\*\*Rough read only — always get an official marine forecast \(VHF WX \/ NOAA\) before you head out\.\*\*$/);
+    expect(out).toMatch(/\*\*Rough read only — the call is the skipper's\. Get the NWS marine forecast \(VHF WX \/ NOAA\) before you head out\.\*\*$/);
     saveWx({ wx: { current: { wind_speed_10m: 5, wind_direction_10m: 0, wind_gusts_10m: 8, temperature_2m: 60 } }, marine: { current: { wave_height: 0.4, wave_period: 8, wave_direction: 0 } } });
     expect(await A.asstOffline('is it calm enough')).toMatch(/^\*\*Looks calm and fishable\.\*\*/);
   });

@@ -2,7 +2,7 @@
    privacy.html / support.html pages (tools/make-legal-pages.mjs) that App Store Connect links to.
    Plain JS on purpose: imported by Vite and by Node. Keep it truthful to what the code does. */
 
-export const POLICY_UPDATED = 'October 26, 2026';
+export const POLICY_UPDATED = 'October 27, 2026';
 export const SUPPORT_URL = 'https://github.com/jbittlest/fishapp/issues';
 export const PRIVACY_URL = 'https://jbittlest.github.io/fishapp/privacy.html';
 
@@ -12,6 +12,7 @@ export const POLICY = [
     body: [
       'FishApp has no accounts, no ads, no analytics and no tracking. Everything you create — spots, tracks, catches and their photos, voyages, downloaded charts and settings — is stored only on your device.',
       'FishApp only sends data off your device when it needs to fetch something for you, and only to the services listed below — or when you choose to share something.',
+      'Because FishApp does not track you across other apps or websites, and lets no third party do so, it treats every user the same whether or not a browser sends a “Do Not Track” signal.',
     ],
   },
   {
@@ -19,6 +20,7 @@ export const POLICY = [
     body: [
       'Your location is used on your device to show your boat on the chart, record tracks you start, run the anchor watch and Go-To navigation, and to look up conditions where you are.',
       'When you ask for weather, waves, tides, water temperature, depth or recent fish sightings, the app sends the coordinates of the place you asked about — not your name or any identifier — to the public data service that answers. Those services return data for that place.',
+      'When you ask First Mate about a place by name, that name (for example “Catalina”) is sent to Open-Meteo’s geocoding service to find its coordinates.',
       'In the iPhone app, location keeps updating with the screen locked only while an anchor watch, a track recording or a Go-To route is active.',
     ],
   },
@@ -87,7 +89,7 @@ export const SOURCES = [
   { name: 'NOAA National Bathymetric Source (BlueTopo) via nowCOAST', what: 'US survey bathymetry and hillshade', url: 'https://nauticalcharts.noaa.gov/data/bluetopo.html' },
   { name: 'NOAA NCEI', what: 'Coastal elevation (depth at a tapped point) and the GEBCO base map it publishes', url: 'https://www.ncei.noaa.gov/' },
   { name: 'NOAA CO-OPS Tides & Currents', what: 'Tide predictions', url: 'https://tidesandcurrents.noaa.gov/' },
-  { name: 'NOAA CoastWatch ERDDAP (MUR SST)', what: 'Sea surface temperature. These data were provided by JPL under support by NASA MEaSUREs program.', url: 'https://coastwatch.pfeg.noaa.gov/erddap/' },
+  { name: 'NASA GIBS (MUR SST)', what: 'Sea surface temperature map tiles for the area on the chart, fetched in the background a few seconds after launch and kept on your device for about 10 days (with offline areas, until a newer day replaces them). These data were provided by JPL under support by NASA MEaSUREs program; imagery from NASA’s Global Imagery Browse Services (GIBS), part of NASA’s ESDIS.', url: 'https://nasa-gibs.github.io/gibs-api-docs/' },
   { name: 'Esri (ArcGIS Online)', what: 'Ocean base map (Esri, GEBCO, NOAA, Garmin, and other contributors) and satellite imagery (Esri, Vantor, Earthstar Geographics, and the GIS User Community), shown live and never saved offline; its ArcGIS Online servers (tiles.arcgis.com) also deliver the GEBCO base map', url: 'https://www.esri.com/' },
   { name: 'GEBCO', what: 'Global bathymetry base map (GEBCO, NOAA NCEI), delivered from Esri ArcGIS Online; saved with offline areas', url: 'https://www.gebco.net/' },
   { name: 'GMRT (Lamont-Doherty Earth Observatory)', what: 'Seafloor relief detail, CC BY 4.0 (Ryan et al., 2009)', url: 'https://www.gmrt.org/' },

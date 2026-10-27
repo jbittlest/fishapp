@@ -94,8 +94,9 @@ describe('credit strings', () => {
     const text = new DOMParser().parseFromString(MUR_SST_ATTRIBUTION, 'text/html').body.textContent;
     expect(MUR_SST_ACK).toBe('These data were provided by JPL under support by NASA MEaSUREs program.');
     expect(text).toContain('provided by JPL under support by NASA MEaSUREs program');
-    expect(text).toContain('NOAA CoastWatch');
-    expect(text).toContain('Open-Meteo.com');
+    // tiles from NASA GIBS, which asks to be acknowledged; the scale is fitted to MUR itself (no Open-Meteo)
+    expect(text).toContain('NASA GIBS');
+    expect(text).not.toContain('Open-Meteo');
     expect(creditLink('https://x.test/', 'X')).toBe('<a href="https://x.test/" target="_blank" rel="noopener noreferrer">X</a>');
   });
 });
@@ -232,13 +233,33 @@ describe('Credits control', () => {
     expect(document.documentElement.style.getPropertyValue('--credits-clear')).toBe('102px');
   });
 
-  it('on a wide screen the full text always shows, so nothing is published', () => {
+  it('on a wide screen the always-shown line reserves its own height, so the legends never cover it', () => {
+    /* Beside an open side panel the line wraps to several rows (base.css), and the legend column
+       next to the panel used to sit on top of the first ones. */
     vi.stubGlobal('matchMedia', (q) => ({ matches: !q.includes('max-width'), media: q, addEventListener() {}, removeEventListener() {} }));
     const map = makeMap();
     const ctl = creditsInit(map);
+    let h = 25;
+    box().getBoundingClientRect = () => ({ x: 0, y: 0, width: 366, height: h, top: 0, left: 0, right: 366, bottom: h, toJSON() {} });
+    const clear = () => document.documentElement.style.getPropertyValue('--credits-clear');
     L.layerGroup([], { attribution: 'GEBCO, NOAA NCEI' }).addTo(map);
-    box().getBoundingClientRect = () => ({ x: 0, y: 0, width: 366, height: 120, top: 0, left: 0, right: 366, bottom: 120, toJSON() {} });
-    ctl.setOpen(true);
+    expect(clear()).toBe('35px');   // 25 + 10 gap
+    h = 48;   // re-wrapped (the panel opened): the ResizeObserver / resize re-measures
+    window.dispatchEvent(new Event('resize'));
+    expect(clear()).toBe('58px');
+    ctl.setOpen(true);   // no list to open on a wide screen: same room
+    expect(clear()).toBe('58px');
+    map.removeControl(ctl);
+    expect(clear()).toBe('0px');
+  });
+
+  it('on a wide screen, no credits reserve no room', () => {
+    vi.stubGlobal('matchMedia', (q) => ({ matches: !q.includes('max-width'), media: q, addEventListener() {}, removeEventListener() {} }));
+    const map = makeMap();
+    creditsInit(map);
+    const layer = L.layerGroup([], { attribution: 'GEBCO, NOAA NCEI' }).addTo(map);
+    box().getBoundingClientRect = () => ({ height: 25 });
+    map.removeLayer(layer);
     expect(document.documentElement.style.getPropertyValue('--credits-clear')).toBe('0px');
   });
 

@@ -17,8 +17,13 @@ const section = (title: string) => POLICY.find((s) => s.title === title);
 const text = (title: string) => (section(title)?.body ?? []).join(' ');
 
 describe('privacy policy text', () => {
-  it('is dated the day the sharing, rating and relay lines went in', () => {
-    expect(POLICY_UPDATED).toBe('October 26, 2026');
+  it('is dated the day the Do Not Track and geocoding lines went in', () => {
+    expect(POLICY_UPDATED).toBe('October 27, 2026');
+  });
+
+  it('states its Do Not Track response (CalOPPA) and discloses place-name geocoding', () => {
+    expect(text('The short version')).toMatch(/Do Not Track/);
+    expect(text('Location')).toMatch(/geocoding/);
   });
 
   it('every section has a unique title and non-empty paragraphs (About keys them by title)', () => {

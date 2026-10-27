@@ -1,6 +1,6 @@
 /* Weather & overlays feature (WeatherPanel, MapLegends, InspectCard, FishCard).
  * Prefix: wx-. Tokens only — the one exception is the SST gradient bar, whose colours ARE the
- * data (they must match the ERDDAP palette baked into the image) and come from engine/sst.js. */
+ * data (the engine paints the SST tiles from these same stops) and come from engine/sst.js. */
 
 /* ----------------------------------------------------------- panel basics */
 .wx-tabs { margin: 2px 0 14px; }
@@ -294,6 +294,7 @@
 :root[data-theme="night"] .wx-windarrow svg + div { color: var(--text-1) !important; text-shadow: 0 1px 2px var(--chart-ink) !important; }
 :root[data-theme="night"] .leaflet-overlay-pane img.leaflet-image-layer,
 :root[data-theme="night"] .leaflet-layer.rain-tiles,
+:root[data-theme="night"] .leaflet-layer.sst-tiles,
 :root[data-theme="night"] .wx-sstbar {
   filter: grayscale(1) brightness(.45) sepia(1) hue-rotate(-35deg) saturate(5);
 }

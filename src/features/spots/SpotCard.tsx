@@ -7,7 +7,7 @@ import { Button, Num, useStoreValue } from '../../ui';
 import { MapCard } from '../../shell/MapCard';
 import type { CardProps } from '../../shell/registry';
 import { closeCard } from '../../services/ui';
-import { confirmDeleteSpot, navigateToSpot, openSpotModal, shareSpot, spotDistBrg, spotsStore, spotTypeLabel } from '../../engine/spots.js';
+import { confirmDeleteSpot, navigateToSpot, openSpotModal, shareSpot, spotDistBrg, spotPos, spotsStore, spotTypeLabel } from '../../engine/spots.js';
 import { formatCoord } from '../../engine/gps.js';
 import { SpotDisc } from './SpotGlyph';
 import { fromText, useFix } from './useFix';
@@ -25,6 +25,7 @@ export default function SpotCard({ data }: CardProps) {
 
   /* From the boat while the fix is live; from the last fix — dimmed, with its age — once it
      has gone quiet or been lost (the store keeps the last position). */
+  const pos = spotPos(spot);   // null for a damaged record (bad backup import) — never print NaN°
   const { distNm, brgDeg } = spotDistBrg(fix.here, spot);
   const subtitle = distNm != null && brgDeg != null ? (
     <span className="spot-meta">
@@ -45,7 +46,9 @@ export default function SpotCard({ data }: CardProps) {
       )}>
       {spot.notes && <p className="spot-card__notes">{spot.notes}</p>}
       <p className="ui-caption spot-card__foot">
-        <span className="spot-card__pos">{formatCoord(spot.lat, 'lat')}  {formatCoord(spot.lng, 'lon')}</span> · Saved {shortDate(spot.ts)}
+        {pos
+          ? <span className="spot-card__pos">{formatCoord(pos.lat, 'lat')}  {formatCoord(pos.lng, 'lon')}</span>
+          : <span className="spot-card__pos">No usable position saved</span>} · Saved {shortDate(spot.ts)}
       </p>
     </MapCard>
   );

@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { IconButton } from './primitives';
 import { closePanels, setDetent, useUi } from '../services/ui';
 import { useIsDesktop } from './useMedia';
+import { modalLayerAbove } from './Overlays';
 
 export interface SheetProps {
   title: ReactNode;
@@ -43,9 +44,10 @@ export function Sheet({ title, subtitle, actions, footer, children, onClose, pap
 
   const close = useCallback(() => { (onClose ?? closePanels)(); }, [onClose]);
 
-  // Escape closes the sheet on keyboards (desktop / iPad).
+  // Escape closes the sheet on keyboards (desktop / iPad) — unless a modal or dialog is open
+  // over it: that layer takes the key.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !e.defaultPrevented) close(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !e.defaultPrevented && !modalLayerAbove()) close(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [close]);

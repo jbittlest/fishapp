@@ -73,7 +73,12 @@ export function gpsFixIsSane(c, ts) {
   if (!c || !isFinite(c.latitude) || !isFinite(c.longitude)) return false;
   if (Math.abs(c.latitude) > 90 || Math.abs(c.longitude) > 180) return false;
   if (c.latitude === 0 && c.longitude === 0) return false;             // null island
-  if (GPS.lastLatLng && GPS.lastFixTs) {
+  /* Only a TRUSTED previous fix can make a new one a teleport. A phone's first fix is often a
+     wifi/cell guess ±1-2 km off; the real GPS lock seconds later then "moved" kilometres in a
+     few seconds and was dropped — and so was every fix after it for up to a minute, leaving the
+     HUD, the Go-To start and the anchor drop stuck on the guess. A sharper fix superseding a
+     coarse one is a correction, not a jump. */
+  if (GPS.lastLatLng && GPS.lastFixTs && !GPS.coarse) {
     /* Compare FIX times when we have them. Fixes delivered in a burst (the iOS app resuming
        after the web view was suspended) arrive within milliseconds of each other in wall-clock
        time, so a wall-clock dt would reject every one of them as a teleport. */
@@ -133,7 +138,7 @@ export function gpsOnFix(map, pos) {
 
   /* Boat marker */
   if (!GPS.marker) {
-    GPS.marker = L.marker(ll, { icon: boatIcon(heading), zIndexOffset: 1000, interactive: false }).addTo(map);
+    GPS.marker = L.marker(ll, { icon: boatIcon(heading), zIndexOffset: 1000, interactive: false, keyboard: false }).addTo(map);
     GPS._renderedHeading = heading;
     GPS.accCircle = L.circle(ll, {
       radius: c.accuracy || 0, weight: 1, className: 'gps-acc-circle', interactive: false,

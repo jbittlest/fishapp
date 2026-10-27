@@ -11,7 +11,7 @@ import { Button, Disclosure, Group, Hint, Icon, Notice, Num, Section, Segmented,
 import { toast, useUi } from '../../services/ui';
 import { isNativeShell, openExternal } from '../../services/native';
 import { KNOTS, knotFrames } from '../../engine/knots.js';
-import { CDFW_URL, FISH_ID, FISH_REG_WARN } from '../../engine/fish-id.js';
+import { CDFW_URL, FISH_ID, FISH_REG_WARN, FISH_REGS_AS_OF_TEXT } from '../../engine/fish-id.js';
 import { guidesStore, isGuidesTab, setGuideOpen, setGuidesTab, type GuidesTab } from './guidesState';
 import { FISH_SECTIONS, KNOT_SECTIONS, noteIsLegal } from './guidesLists';
 import './guides.css';
@@ -147,6 +147,7 @@ function FishRow({ f }: { f: Fish }) {
         <div className="guide-facts__cell"><dt className="ui-label">Min size</dt><dd>{f.size}</dd></div>
         <div className="guide-facts__cell"><dt className="ui-label">Bag limit</dt><dd>{f.bag}</dd></div>
       </dl>
+      <p className="ui-caption guide-asof">{FISH_REGS_AS_OF_TEXT}</p>
       {f.note && <Tip legal={noteIsLegal(f.note)}>{f.note}</Tip>}
     </Disclosure>
   );
@@ -158,6 +159,7 @@ function RegsNotice() {
       {FISH_REG_WARN.before}
       <a className="guide-link" href={CDFW_URL} target="_blank" rel="noopener noreferrer" onClick={onRegsLink}>{FISH_REG_WARN.link}</a>
       {FISH_REG_WARN.after}
+      <span className="guide-asof"> {FISH_REGS_AS_OF_TEXT}</span>
       <span className="guide-regs-btn">
         <Button icon="external" onClick={openRegs}>Official CDFW regulations</Button>
       </span>

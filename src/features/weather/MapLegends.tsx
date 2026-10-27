@@ -14,7 +14,7 @@ import { useTheme } from '../../services/theme';
 import { SST_PALETTES, SST_PALETTE_BAR, SST_PALETTE_LABELS, sstSetPalette, sstStore, sstTogglePlay } from '../../engine/sst.js';
 import { rainScrub, rainStore, rainTogglePlay } from '../../engine/rain.js';
 import { WIND_LOOP_HOURS, windLoopToggle, windScrub, wxStore } from '../../engine/weather.js';
-import { MUR_SST_URL, OPEN_METEO_URL } from '../../engine/datasources.js';
+import { GIBS_URL, MUR_SST_URL } from '../../engine/datasources.js';
 import { CreditLink } from './DataCredit';
 import './weather.css';
 
@@ -100,7 +100,7 @@ export function MapLegends() {
 }
 
 /* ------------------------------------------------------------------- SST */
-/** ERDDAP day "2026-10-23" → "Oct 23 · 2 days old" (MUR runs ~2 days behind; say so). */
+/** MUR day "2026-10-23" → "Oct 23 · 2 days old" (MUR runs a day or two behind; say so). */
 function sstDateText(date: string): string {
   if (!date) return '';
   const t = Date.parse(date + 'T12:00:00Z');
@@ -118,9 +118,10 @@ function SstLegend({ chip, onCollapse, onExpand }: { chip: boolean; onCollapse: 
   const loading = useStoreValue(sstStore, (s) => s.loading);
   const playing = useStoreValue(sstStore, (s) => s.playing);
   const loadingLoop = useStoreValue(sstStore, (s) => s.loadingLoop);
+  const stored = useStoreValue(sstStore, (s) => s.stored);
   const online = useUi((s) => s.online);
   const night = useTheme().theme === 'night';
-  // The gradient is DATA: it must match the palette baked into the image on screen.
+  // The gradient is DATA: the engine paints the map from these same stops (engine/sst.js).
   const bar = SST_PALETTE_BAR[shownPalette as keyof typeof SST_PALETTE_BAR] || SST_PALETTE_BAR.Rainbow;
 
   if (chip) {
@@ -143,7 +144,7 @@ function SstLegend({ chip, onCollapse, onExpand }: { chip: boolean; onCollapse: 
       <div className="wx-sst__head">
         <div className="wx-sst__titles">
           <span className="ui-label">Water temp</span>
-          <span className="wx-sst__date">{date ? sstDateText(date) : loading ? 'Loading…' : ''}</span>
+          <span className="wx-sst__date">{date ? sstDateText(date) + (stored ? ' · saved' : '') : loading ? 'Loading…' : ''}</span>
         </div>
         {loading && <Spinner size="sm" label="Loading water temperature" />}
         <IconButton icon="chevron-down" label="Collapse the legend" size="sm" tone="plain" onClick={onCollapse} />
@@ -159,10 +160,11 @@ function SstLegend({ chip, onCollapse, onExpand }: { chip: boolean; onCollapse: 
             {SST_PALETTES.map((p) => <option key={p} value={p}>{SST_PALETTE_LABELS[p as keyof typeof SST_PALETTE_LABELS]}</option>)}
           </Select>
         </span>
-        {/* Tappable while the first image loads too: the engine queues the loop until the colour
-            range is known (sstPlay), and the button says "Loading loop…" meanwhile. */}
+        {/* Tappable while the first tiles load too: the engine queues the loop until the newest
+            day is known (sstPlay), and the button says "Loading loop…" meanwhile. Offline it
+            plays the days stored on the device (the engine says so if there are not enough). */}
         <Button compact className="wx-sst__play" icon={loadingLoop ? undefined : playing ? 'pause' : 'play'}
-          disabled={!online && !playing} onClick={sstTogglePlay}
+          onClick={sstTogglePlay}
           aria-label={loadingLoop ? 'Loading the 5-day loop — tap to stop' : undefined}>
           {loadingLoop ? <><Spinner size="sm" /> {label}</> : label}
         </Button>
@@ -171,13 +173,12 @@ function SstLegend({ chip, onCollapse, onExpand }: { chip: boolean; onCollapse: 
         {/* Night draws the overlay in red light only, by brightness — a hue scale (blue to red,
             rainbow) loses its order there, a brightness scale (Reds, Blues) keeps it. */}
         {night && (shownPalette === 'BlueWhiteRed' || shownPalette === 'Rainbow') && <>Reds or Blues read best at night. </>}
-        {online ? 'Tap anywhere for exact °F' : 'Needs internet — tap anywhere for exact °F once online'}
+        {online ? 'Tap anywhere for exact °F' : 'Saved on this device — tap anywhere for exact °F once online'}
       </p>
-      {/* The dataset's requested NASA/JPL acknowledgement, short form (the map's Credits carry
-          it in full), and the scale's source: the range is sampled from Open-Meteo. */}
+      {/* The dataset's requested NASA/JPL acknowledgement and the GIBS one, short form (the
+          map's Credits carry them in full). The scale is fitted to these same MUR pixels. */}
       <p className="wx-sst__credit">
-        MUR SST from JPL (NASA MEaSUREs) via <CreditLink href={MUR_SST_URL}>NOAA CoastWatch</CreditLink>.
-        {' '}Scale: <CreditLink href={OPEN_METEO_URL}>Open-Meteo.com</CreditLink>
+        <CreditLink href={MUR_SST_URL}>MUR SST</CreditLink> from JPL (NASA MEaSUREs) via <CreditLink href={GIBS_URL}>NASA GIBS</CreditLink>
       </p>
     </section>
   );

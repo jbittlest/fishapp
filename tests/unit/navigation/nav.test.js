@@ -671,7 +671,13 @@ describe('measure', () => {
     expect(r.mi).toBeCloseTo(1.15078, 3);
     expect(r.brg).toBe(90);
     expect(navStore.getState().measurePending).toBe(false);
+    /* the result is drawn on the chart too, not only in the Tools sheet (which may be closed) */
+    const chips = Nav.measure.layer.getLayers().filter((l) => l.options.icon && /nav-measure-chip/.test(l.options.icon.options.html));
+    expect(chips).toHaveLength(1);
+    expect(chips[0].options.icon.options.html).toContain('1.00 nm · 90°T');
+    expect(chips[0].getLatLng().lng).toBeCloseTo((BASE.lng + llAt(BASE, 0, 1852).lng) / 2, 6);
     measureClick(BASE);
+    expect(Nav.measure.layer.getLayers().filter((l) => l.options.icon)).toHaveLength(0);   // a new measure clears the old label
     expect(navStore.getState().measure).toBeNull();
     expect(navStore.getState().measurePending).toBe(true);
   });

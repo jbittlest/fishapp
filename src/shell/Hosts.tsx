@@ -3,6 +3,7 @@
 import { Component, Suspense, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import L from 'leaflet';
 import { LoadingRow, Sheet, StateBox, Modal } from '../ui';
+import { modalLayerAbove } from '../ui/Overlays';
 import { closeCard, closeModal, closePanels, useUi } from '../services/ui';
 import { getMap } from '../engine/app.js';
 import { CARDS, MODALS, PANELS, PANEL_TITLES } from './registry';
@@ -57,10 +58,10 @@ export function CardHost() {
     const m = L.marker([lat, lng], { icon: selIcon, interactive: false, keyboard: false, zIndexOffset: 900 }).addTo(map);
     return () => { m.remove(); };
   }, [id, lat, lng]);
-  // Escape closes the card
+  // Escape closes the card — unless a modal or dialog is open over it (that layer takes the key)
   useEffect(() => {
     if (!id) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeCard(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !e.defaultPrevented && !modalLayerAbove()) closeCard(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [id]);

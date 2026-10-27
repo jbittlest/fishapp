@@ -54,6 +54,9 @@ export const CreditsControl = L.Control.Attribution.extend({
     map.on('dragstart click', this._close, this);   // the user went back to the chart
     this._onMedia = () => this._publish();
     window.addEventListener('resize', this._onMedia);
+    // the wide line re-wraps when the side panel opens or closes (base.css): re-measure then too
+    this._ro = typeof ResizeObserver === 'function' ? new ResizeObserver(this._onMedia) : null;
+    if (this._ro) this._ro.observe(box);
     this._update();
     return box;
   },
@@ -62,6 +65,7 @@ export const CreditsControl = L.Control.Attribution.extend({
     L.Control.Attribution.prototype.onRemove.call(this, map);
     map.off('dragstart click', this._close, this);
     window.removeEventListener('resize', this._onMedia);
+    if (this._ro) { this._ro.disconnect(); this._ro = null; }
     this._open = false;
     this._publish();
   },
@@ -97,12 +101,19 @@ export const CreditsControl = L.Control.Attribution.extend({
 
   _close() { if (this._open) this.setOpen(false); },
 
-  /* Room the open list takes above the bottom chrome on a phone (0 when closed or wide, and 0
+  /* Room the credits take above the bottom chrome: on wide screens the whole (always shown) line;
+     on a phone the open list (0 when closed, and 0
      when the legend column is on screen beside it rather than above it: a landscape phone,
      where base.css narrows the list to fit right of the column). */
   _publish() {
     let h = 0;
-    if (this._open && this._container && compactNow()) {
+    const box = this._container;
+    if (box && box.parentNode && !compactNow()) {   // (detached = the control is being removed)
+      /* Wide screens always show the full line, and it wraps to two or three rows when the side
+         panel narrows it (base.css) — the legend column beside an open panel then sat on top of
+         it. Its height is reserved above the bottom chrome on every wide layout. */
+      if (!box.classList.contains('is-empty')) h = Math.ceil(box.getBoundingClientRect().height) + CREDITS_GAP;
+    } else if (this._open && box) {
       const r = this._container.getBoundingClientRect();
       const leg = document.querySelector('.wx-legends');
       const lr = leg ? leg.getBoundingClientRect() : null;

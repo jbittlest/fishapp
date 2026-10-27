@@ -191,6 +191,7 @@ function AnchorWatch() {
       ) : (
         <Hint>Keep the app open with the screen on — iOS pauses GPS when the phone locks, so a background alarm isn't possible in a web app.</Hint>
       )}
+      <Hint>An aid only: it depends on GPS and on the phone staying on and charged. It is not a substitute for keeping an anchor watch.</Hint>
     </Section>
   );
 }

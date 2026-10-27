@@ -5,6 +5,7 @@ import { Reefs } from './reefs.js';
 import { FISH_TAXA } from './fish.js';
 import { nearestTideStation } from './tides.js';
 import { coopsHiLoUrl, inatObservationsUrl } from './datasources.js';
+import { sstSaveArea } from './sst-tiles.js';
 
 /* Offline "area intelligence pack": when you download an area, we also capture
    the environmental data for it — a multi-day wind/wave/tide/water-temp
@@ -94,6 +95,10 @@ async function buildAreaPackSections(bounds, c, step, stop) {
      indistinguishable from a complete one — First Mate just omitted water temp or
      depth, and nothing ever prompted a re-download. */
   try { step('sea-temperature grid'); pack.sstGrid = await fetchSstGrid(bounds); } catch (e) { if (e instanceof PackCancelled) throw e; pack.sstError = true; }
+  /* The sea-temperature MAP for the area too (newest MUR day, z3-z7, at most 48 small tiles), into
+     the SST overlay's own store, pinned, so the overlay draws here with no signal. Not a pack
+     section: it adds no progress step, never fails the pack, and never throws. */
+  if (!stop()) await sstSaveArea(pack.bounds, stop);
   try { step('depth grid'); pack.depthGrid = await fetchDepthGrid(bounds); } catch (e) { if (e instanceof PackCancelled) throw e; pack.depthError = true; }
 
   // A week of tide highs/lows at the nearest station

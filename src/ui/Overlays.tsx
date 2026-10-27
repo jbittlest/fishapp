@@ -29,7 +29,20 @@ function tabbables(box: HTMLElement): HTMLElement[] {
     && !(el as HTMLButtonElement).disabled && !el.closest('[hidden], [inert]') && (!laidOut || el.getClientRects().length > 0));
 }
 
-function useModalFocus(box: RefObject<HTMLDivElement | null>) {
+/** Escape belongs to the top-most layer only. True when a modal layer (aria-modal="true": a
+ *  modal, a dialog, the first-run notice, the anchor alarm) is open above `el` — painted later in
+ *  the DOM — or, with no `el`, when any is open (sheets and map cards sit under all of them).
+ *  Every layer listens on window, so without this one Escape closed the sheet BEHIND a confirm
+ *  and left the confirm up, or closed a modal and the sheet under it together. */
+export function modalLayerAbove(el?: Element | null): boolean {
+  if (typeof document === 'undefined') return false;
+  const open = document.querySelectorAll('[aria-modal="true"]');
+  if (!el) return open.length > 0;
+  for (const m of open) if (m !== el && !el.contains(m) && (el.compareDocumentPosition(m) & Node.DOCUMENT_POSITION_FOLLOWING)) return true;
+  return false;
+}
+
+export function useModalFocus(box: RefObject<HTMLDivElement | null>) {
   // read while rendering, before a child's effect can move focus into the card
   const [opener] = useState(() => document.activeElement);
   useEffect(() => {
@@ -73,12 +86,12 @@ export interface ModalProps {
 /** Centred card; scrolls when the keyboard or a photo makes it taller than the screen.
  *  Tapping the backdrop cancels (legacy behaviour). Paper surface in the sun theme. */
 export function Modal({ title, children, onCancel, primaryLabel, onPrimary, primaryBusy, primaryDisabled, destructive, cancelLabel = 'Cancel', label }: ModalProps) {
+  const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); onCancel(); } };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !modalLayerAbove(box.current)) { e.preventDefault(); onCancel(); } };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onCancel]);
-  const box = useRef<HTMLDivElement>(null);
   const onKeyDown = useModalFocus(box);
   return (
     <div className="ui-modal-wrap" onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
@@ -104,6 +117,19 @@ function DialogView({ d }: { d: DialogState }) {
   const onKeyDown = useModalFocus(box);
   const cancel = () => d.resolve(d.kind === 'confirm' ? false : d.kind === 'prompt' ? null : undefined);
   const ok = () => d.resolve(d.kind === 'confirm' ? true : d.kind === 'prompt' ? vals : undefined);
+  /* Escape = Cancel (an alert's only button), like a backdrop tap — and, like it, not for a
+     decision that must be made on purpose (dismissible: false). */
+  const cancelRef = useRef(cancel);
+  cancelRef.current = cancel;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || d.dismissible === false || modalLayerAbove(box.current)) return;
+      e.preventDefault();
+      cancelRef.current();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [d.dismissible]);
   return (
     <div className="ui-modal-wrap" onClick={(e) => { if (e.target === e.currentTarget && d.dismissible !== false) cancel(); }}>
       <div ref={box} tabIndex={-1} onKeyDown={onKeyDown} className="ui-modal surface-paper" role="alertdialog" aria-modal="true" aria-label={d.title}>

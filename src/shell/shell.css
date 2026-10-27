@@ -99,6 +99,14 @@
 /* chart tiles loading: a small ring in the Map layers button's corner */
 .shell-ctl__busy { position: absolute; top: 5px; right: 5px; pointer-events: none; display: grid; }
 .shell-ctl__busy .ui-spinner { width: 11px; height: 11px; border-width: 1.75px; }
+/* A landscape phone is too short for the Map layers / Follow column above the zoom keys: the
+   zoom keys covered the bottom of Follow, and the map's Credits button (attribution.js, above the
+   zoom keys) ended up hidden behind the column — a licence credit nobody could open. Lay the two
+   controls side by side there, so the column ends well above the Credits button. */
+@media (max-height: 500px) {
+  .shell.is-phone .shell-mapctl { flex-direction: row; }
+  .shell.is-phone .shell-mapctl .shell-ctl + .shell-ctl { box-shadow: inset 1px 0 0 var(--line); }
+}
 
 /* OFFLINE marker: top-left of the chart, under the persistent layer */
 .shell-left {
@@ -221,6 +229,7 @@
   animation: fade-in var(--t-base) var(--ease-out);
 }
 .shell-onboard__card { width: 100%; max-width: 420px; margin: auto; padding: 24px 20px 16px; background: var(--sheet); color: var(--text-1); border-radius: var(--r-xl); box-shadow: var(--e3), inset 0 0 0 1px var(--line); }
+.shell-onboard__card:focus-visible { outline: none; }   /* focus parks on the card (Onboarding.tsx); its buttons keep their rings */
 .shell-onboard__mark { width: 52px; height: 52px; border-radius: 16px; display: grid; place-items: center; background: var(--chrome-solid); color: var(--signal); margin-bottom: 14px; }
 .shell-onboard__list { list-style: none; margin: 14px 0 20px; padding: 0; display: flex; flex-direction: column; gap: 14px; }
 .shell-onboard__list li { display: flex; gap: 12px; font: 400 15px/21px var(--font-ui); color: var(--text-2); }
