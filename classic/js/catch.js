@@ -270,7 +270,8 @@ async function makeCatchCard(c) {
   const l2 = [cond.sst != null ? '🌡️ ' + cond.sst + '°F' : '', cond.tide ? '🌊 ' + cond.tide : '', cond.moon ? cond.moon : ''].filter(Boolean).join('    ');
   ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.font = '400 38px' + F; if (l2) ctx.fillText(l2, 56, S - 150);
   ctx.fillStyle = 'rgba(255,255,255,0.72)'; ctx.font = '400 34px' + F;
-  ctx.fillText(new Date(c.ts).toLocaleDateString() + '    ' + formatCoord(c.lat, 'lat') + '  ' + formatCoord(c.lng, 'lon'), 56, S - 100);
+  // date only: a shared card never gives the spot away (the new app prints it only when asked)
+  ctx.fillText(new Date(c.ts).toLocaleDateString(), 56, S - 100);
   ctx.fillStyle = '#4aa3e0'; ctx.font = '700 42px' + F; ctx.fillText('🎣 FishApp', 56, S - 44);
 
   cv.toBlob(async (blob) => {

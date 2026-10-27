@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://jbittlest.github.io/fishapp/sitemap.xml

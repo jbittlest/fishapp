@@ -1,0 +1,69 @@
+# First Mate relay (Cloudflare Worker). From this folder:
+#   npx wrangler@4 login     once; you sign in to Cloudflare in the browser
+#   npx wrangler@4 deploy
+# See README.md. No account_id here on purpose: wrangler takes it from the login
+# (and asks which account, if there is more than one).
+
+name = "first-mate"
+main = "first-mate-worker.js"
+compatibility_date = "2026-10-01"
+# Serves at https://first-mate.<your workers.dev subdomain>.workers.dev, the address
+# ASST_PROXY in src/engine/assistant.js points the app at.
+workers_dev = true
+
+[vars]
+# Browser origins allowed to call the relay, comma-separated: the web app (the origin of
+# siteUrl in src/site.config.json) and the iPhone app. After a rename or a custom domain, add
+# the new origin here and redeploy BEFORE switching the site over; a unit test fails until
+# you do. Requests with no Origin header (not a browser) are let through regardless.
+ALLOWED_ORIGINS = "https://jbittlest.github.io,fishapp://app"
+# Daily ceilings in estimated Workers AI neurons, reset at 00:00 UTC (README section 5).
+# The whole relay: 10000 is the account's free allowance, so this costs nothing beyond the
+# plan. On Workers Paid, raising it to N costs at most (N - 10000) x $0.011 / 1000 a day.
+DAILY_NEURON_BUDGET = "10000"
+# One client (an IP address, or an IPv6 /64): about 16 typical questions with the voice on.
+CLIENT_DAILY_NEURONS = "2500"
+
+# Workers AI: the chat model and the /tts voice both run on this binding.
+[ai]
+binding = "AI"
+
+# Per-client rate limits (per IP, per Cloudflare location, approximate). The period
+# must be 10 or 60 seconds. Keep limit/period in step with LIMITS in
+# first-mate-worker.js, whose in-isolate fallback applies the same numbers when a
+# binding is missing. namespace_id only has to be unique within the account.
+[[ratelimits]]
+name = "CHAT_LIMITER"
+namespace_id = "1001"
+
+  [ratelimits.simple]
+  limit = 10
+  period = 60
+
+[[ratelimits]]
+name = "TTS_LIMITER"
+namespace_id = "1002"
+
+  [ratelimits.simple]
+  limit = 20
+  period = 60
+
+# The daily ledger behind the two budgets above: one Durable Object shared by every
+# Cloudflare location. SQLite-backed, the only kind the Workers Free plan allows.
+[[durable_objects.bindings]]
+name = "BUDGET"
+class_name = "FirstMateBudget"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["FirstMateBudget"]
+
+# Keeps the Worker's own console.log lines (Workers AI failures, budget spent) in the
+# dashboard's Logs tab. The per-request invocation log is off: it would keep every
+# caller's IP address and location for days, which the privacy policy doesn't allow.
+# (New Workers have it on by default, so it has to be switched off explicitly.)
+[observability]
+enabled = true
+
+[observability.logs]
+invocation_logs = false

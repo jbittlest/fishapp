@@ -5,35 +5,37 @@
    a new worker automatically; there is no version number to remember to bump any more. */
 'use strict';
 
-const CACHE = "fishapp-2026.10.25-1818-35f64574";
+const CACHE = "fishapp-2026.10.27-1457-783db610";
 const SHELL = [
   "./",
   "./index.html",
-  "./assets/AboutPanel-C_Gt4f6_.js",
+  "./assets/AboutPanel-CSErYQZ2.js",
+  "./assets/AssistantPanel-CLw4iBj8.js",
   "./assets/AssistantPanel-Gv6AocjK.css",
-  "./assets/AssistantPanel-kkQ9kW0U.js",
-  "./assets/CatchCard-oCAB-jfl.js",
-  "./assets/CatchModal-DcEUllfn.js",
-  "./assets/DownloadPanel-AUCJWOTa.js",
-  "./assets/EmergencyPanel-B3Xy5B_w.js",
-  "./assets/FishCard-iRr08hQE.js",
-  "./assets/GuidesPanel-5-nO5Xxu.css",
-  "./assets/GuidesPanel-p0sGGyEh.js",
-  "./assets/HistoryCard-DIK2RZhq.js",
-  "./assets/InspectCard-BxVXY9xn.js",
-  "./assets/LayersPanel-_KLifNif.js",
-  "./assets/MorePanel-3YIKbcGA.js",
-  "./assets/MotorPanel-CRCL8HaY.js",
-  "./assets/MpaCard-CI_d3ztH.js",
-  "./assets/ReefCard-BkCZRnYC.js",
-  "./assets/RetryState-CEUZbcPg.js",
-  "./assets/SpotCard-CAsZd3RU.js",
-  "./assets/SpotGlyph-DsBRN8n2.js",
-  "./assets/SpotModal-BPT9ULPj.js",
-  "./assets/SpotsPanel-DnmyMrnJ.js",
-  "./assets/TidesPanel-D8HSYSC8.js",
-  "./assets/ToolsPanel-CVr5FdXr.js",
-  "./assets/WeatherPanel-C3q_qF8r.js",
+  "./assets/CatchCard-d2peQQAj.js",
+  "./assets/CatchModal-B37VEE_p.js",
+  "./assets/DownloadPanel-CtZPzGt9.js",
+  "./assets/EmergencyPanel-DG_EENbq.js",
+  "./assets/FishCard-oz_inUWs.js",
+  "./assets/GuidesPanel-DMuENBuU.js",
+  "./assets/GuidesPanel-DaMDjdbD.css",
+  "./assets/HistoryCard-Do6HrtUW.js",
+  "./assets/InspectCard-BVczJwYH.js",
+  "./assets/LayersPanel-DNxQ2mI8.js",
+  "./assets/LicensesModal-DEU-969a.js",
+  "./assets/MorePanel-W-G9zvXr.js",
+  "./assets/MotorPanel-T6dogIMt.js",
+  "./assets/MpaCard-CgJO76C7.js",
+  "./assets/ReefCard-ytfT4n-5.js",
+  "./assets/RetryState-CnFN7pts.js",
+  "./assets/SharedSpotCard-BPNc_iTw.js",
+  "./assets/SpotCard-DAHk0Pst.js",
+  "./assets/SpotGlyph-CzzRvH31.js",
+  "./assets/SpotModal-Cji7jt2V.js",
+  "./assets/SpotsPanel-DVvW7dny.js",
+  "./assets/TidesPanel-D7ptMis5.js",
+  "./assets/ToolsPanel-FJxCCiNK.js",
+  "./assets/WeatherPanel-C5Y-5cfZ.js",
   "./assets/barlow-latin-400-normal-fsAxiSwU.woff",
   "./assets/barlow-latin-400-normal-qiz4-Cze.woff2",
   "./assets/barlow-latin-500-normal-BPAOfeC8.woff2",
@@ -48,18 +50,25 @@ const SHELL = [
   "./assets/barlow-semi-condensed-latin-600-normal-DyOfdMBA.woff",
   "./assets/barlow-semi-condensed-latin-700-normal-BMyZXq_9.woff",
   "./assets/barlow-semi-condensed-latin-700-normal-BpqDG8I9.woff2",
-  "./assets/catchActions-BzAfjQnz.js",
+  "./assets/catchActions-DACtyRCM.js",
+  "./assets/download-2hJ3OG8s.js",
+  "./assets/fish-id-BBhzpHWG.js",
   "./assets/format-CByDRuXD.js",
-  "./assets/index-DFRAd8yj.css",
-  "./assets/index-DutYgsuj.js",
+  "./assets/goto-D5lYS5Fl.js",
+  "./assets/goto-qFgsZmkf.css",
+  "./assets/index-DD3e0AiN.js",
+  "./assets/index-boW4UEW4.css",
   "./assets/layers-2x-Bpkbi35X.png",
   "./assets/layers-BWBAp2CZ.png",
   "./assets/marker-icon-hN30_KVU.png",
-  "./assets/native-DKaPQVWV.js",
-  "./assets/rolldown-runtime-hePW80VL.js",
-  "./assets/spots-Dn2C42WE.css",
-  "./assets/tides-3S3BBB3Y.css",
-  "./assets/useFix-aITqQrAy.js",
+  "./assets/native-WZNc8FW3.js",
+  "./assets/review-BGTxVzuv.js",
+  "./assets/spots-CA-3KImd.css",
+  "./assets/tides-DGhdK2nv.css",
+  "./assets/ui-BgJecMf9.js",
+  "./assets/ui-CZ1hXV09.js",
+  "./assets/useFix-BJ6FDPRu.js",
+  "./assets/weather-CwzQRbJF.css",
   "./data/mpa-ca.json",
   "./data/reefs-ca.json",
   "./data/tide-stations-ca.json",
@@ -78,7 +87,13 @@ const SHELL = [
    or a file renamed later) would 404, reject the install, and leave the app with NO
    service worker and no offline mode at all. Intersecting means a stale entry
    silently drops out of the critical set instead of bricking offline support. */
-const CRITICAL = ["./","./index.html","./assets/index-DutYgsuj.js","./assets/AssistantPanel-Gv6AocjK.css","./assets/GuidesPanel-5-nO5Xxu.css","./assets/index-DFRAd8yj.css","./assets/spots-Dn2C42WE.css","./assets/tides-3S3BBB3Y.css"].filter((u) => SHELL.indexOf(u) !== -1);
+const CRITICAL = ["./","./index.html","./assets/index-DD3e0AiN.js","./assets/AssistantPanel-Gv6AocjK.css","./assets/GuidesPanel-DaMDjdbD.css","./assets/goto-qFgsZmkf.css","./assets/index-boW4UEW4.css","./assets/spots-CA-3KImd.css","./assets/tides-DGhdK2nv.css","./assets/weather-CwzQRbJF.css"].filter((u) => SHELL.indexOf(u) !== -1);
+
+/* Cache lookups ignore Vary. Everything in this cache is a same-origin static file, but a host can
+   still send Vary: Origin (vite preview does; so do some CDNs and custom-domain proxies), and the
+   page's module scripts carry an Origin header the install-time requests don't — so every
+   precached script would MISS and an offline launch would hang on the splash. */
+const MATCH = { ignoreVary: true };
 
 self.addEventListener('install', (e) => {
   // cache: 'reload' forces fresh fetches from the network (bypass HTTP cache) so an
@@ -114,6 +129,38 @@ self.addEventListener('message', (e) => {
   if (e.data === 'version' && e.source) e.source.postMessage({ type: 'version', cache: CACHE });
 });
 
+/* The public web pages (get/, places/, privacy, support — tools/make-web-pages.mjs) are separate
+   documents that only happen to sit inside this worker's scope. A search visitor must get THAT
+   page: fresh from the network, else its last copy, else an honest offline note. Never the app
+   shell booting under a place page's URL, which is what the navigation fallback below would do. */
+const WEB_PAGES = /^(?:get(?:\/|$)|places(?:\/|$)|privacy\.html$|support\.html$|sitemap\.xml$|robots\.txt$)/;
+
+function isWebPage(url) {
+  const base = new URL(self.registration.scope).pathname;
+  return url.pathname.startsWith(base) && WEB_PAGES.test(url.pathname.slice(base.length));
+}
+
+function webPage(request, url) {
+  const key = url.origin + url.pathname;   // ?c=<campaign> variants of get/ share one copy
+  return fetch(request).then((resp) => {
+    if (resp.ok) {
+      const copy = resp.clone();
+      caches.open(CACHE).then((c) => c.put(key, copy)).catch(() => {});
+    }
+    return resp;
+  }).catch(() => caches.match(key, MATCH).then((hit) => hit || offlinePage()));
+}
+
+function offlinePage() {
+  return new Response('<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">' +
+    '<meta name="viewport" content="width=device-width, initial-scale=1"><title>Offline</title>' +
+    '<style>html{background:#0F1A25;color:#F3F6F9;font:16px/1.55 system-ui,-apple-system,sans-serif}' +
+    'body{max-width:560px;margin:0 auto;padding:48px 22px}a{color:#FFB547}</style></head><body>' +
+    '<h1>You are offline</h1><p>This page needs an internet connection. The app itself works offline.</p>' +
+    '<p><a href="' + self.registration.scope + '">Open the app</a></p></body></html>',
+    { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+}
+
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (url.origin !== location.origin) return; // chart tiles are handled by IndexedDB, not here
@@ -121,9 +168,13 @@ self.addEventListener('fetch', (e) => {
      buffered and never read. A same-origin proxy URL in the assistant settings is
      enough to hit this on every POST. */
   if (e.request.method !== 'GET') return;
+  if (e.request.mode === 'navigate' && isWebPage(url)) {
+    e.respondWith(webPage(e.request, url));
+    return;
+  }
 
   e.respondWith(
-    caches.match(e.request, { ignoreSearch: true }).then((cached) => {
+    caches.match(e.request, { ...MATCH, ignoreSearch: true }).then((cached) => {
       if (cached) return cached;
       return fetch(e.request).then((resp) => {
         if (resp.ok) {
@@ -132,7 +183,7 @@ self.addEventListener('fetch', (e) => {
         }
         return resp;
       }).catch(() => {
-        if (e.request.mode === 'navigate') return caches.match('./index.html');
+        if (e.request.mode === 'navigate') return caches.match('./index.html', MATCH);
         return Response.error();
       });
     })
