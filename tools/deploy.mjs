@@ -1,6 +1,9 @@
 // tools/deploy.mjs — copy the production build (dist/) into the GitHub Pages working copy.
 //
-//   node tools/deploy.mjs [--dry] [--target <dir>]
+//   node tools/deploy.mjs [--dry] [--target <dir>] [--dist <build dir>]
+//
+// --dry changes nothing anywhere, dist/ included: the public web pages are generated into a
+// throwaway copy of the build, so a dry run still proves they build and lists what would be copied.
 //
 // The Pages repo serves branch `main` from its root, so the built site has to live at the root
 // of that checkout. This source tree (branch `ui-src`, outside OneDrive so node_modules never
@@ -11,20 +14,25 @@
 // removed. .git, .claude, .gitignore and anything unlisted are left alone.
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { makeWebPages, WEB_OUTPUTS } from './make-web-pages.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const DIST = path.join(ROOT, 'dist');
 const DEFAULT_TARGET = 'C:/Users/jbitt/OneDrive/Desktop/Projects/FishApp';
 
 const argv = process.argv.slice(2);
 const dry = argv.includes('--dry');
 const ti = argv.indexOf('--target');
 const TARGET = path.resolve(ti >= 0 ? argv[ti + 1] : (process.env.FISHAPP_DEPLOY_DIR || DEFAULT_TARGET));
+const di = argv.indexOf('--dist');
+const DIST = path.resolve(di >= 0 ? argv[di + 1] : path.join(ROOT, 'dist'));
 
 /* Paths the build owns in the deploy checkout: replaced wholesale on every deploy. */
-const MANAGED = ['index.html', 'sw.js', 'manifest.webmanifest', '.nojekyll', 'assets', 'icons', 'data', 'privacy.html', 'support.html', 'classic'];
+const MANAGED = ['index.html', 'sw.js', 'manifest.webmanifest', '.nojekyll', 'assets', 'icons', 'data', 'privacy.html', 'support.html', 'classic', 'og.png', ...WEB_OUTPUTS];
+/* Website-only files: crawlers, link previews and the public pages. Never part of the iOS bundle. */
+const WEB_ONLY = ['sw.js', '.nojekyll', 'og.png', ...WEB_OUTPUTS];
 /* The pre-React vanilla app. Removed if present; they are not part of the new build. */
 const LEGACY = ['js', 'css', 'libs'];
 /* Docs + infra that live in this source tree and are mirrored so the public repo stays readable. */
@@ -52,10 +60,21 @@ const cp = (from, rel) => {
   if (!dry) fs.cpSync(from, path.join(TARGET, rel), { recursive: true });
 };
 
+/* get/, places/, sitemap and the app page's social tags are generated into the build here (not by
+   vite build), so they always match the data and site config being shipped. A dry run generates
+   them into a throwaway copy: same checks, same listing, and dist/ is left exactly as it was. */
+let SRC = DIST;
+if (dry) {
+  SRC = fs.mkdtempSync(path.join(os.tmpdir(), 'fishapp-deploy-dry-'));
+  process.on('exit', () => { fs.rmSync(SRC, { recursive: true, force: true }); });
+  fs.cpSync(DIST, SRC, { recursive: true });
+}
+try { await makeWebPages({ outDir: SRC }); } catch (e) { fail('web pages: ' + e.message); }
+
 for (const rel of [...MANAGED, ...LEGACY]) rm(rel);
-for (const name of fs.readdirSync(DIST)) {
+for (const name of fs.readdirSync(SRC)) {
   if (!MANAGED.includes(name)) fail(`dist/${name} is not in the MANAGED list — add it to tools/deploy.mjs so it is cleaned up on the next deploy`);
-  cp(path.join(DIST, name), name);
+  cp(path.join(SRC, name), name);
 }
 for (const rel of DOCS) if (fs.existsSync(path.join(ROOT, rel))) { rm(rel); cp(path.join(ROOT, rel), rel); }
 
@@ -94,9 +113,9 @@ if (argv.includes('--ios')) {
   if (!dry) {
     fs.rmSync(iosWeb, { recursive: true, force: true });
     fs.mkdirSync(iosWeb, { recursive: true });
-    for (const name of fs.readdirSync(DIST)) {
-      if (name === 'sw.js' || name === '.nojekyll') continue;     // no service worker inside the app
-      fs.cpSync(path.join(DIST, name), path.join(iosWeb, name), { recursive: true });
+    for (const name of fs.readdirSync(SRC)) {
+      if (WEB_ONLY.includes(name)) continue;     // no service worker or public web pages inside the app
+      fs.cpSync(path.join(SRC, name), path.join(iosWeb, name), { recursive: true });
     }
   }
 }

@@ -53,18 +53,70 @@ svg { flex-shrink: 0; }
 .leaflet-tile-pane img { image-rendering: auto; }
 .leaflet-container { font: inherit; background: transparent; }
 .leaflet-control-container .leaflet-top { top: calc(var(--persist-bottom) + 8px); }
-/* Attribution is a licence requirement (OSM, Esri, CARTO, OpenSeaMap): keep it visible, just
-   above the bottom chrome, small and quiet. (The old tab bar covered it entirely.) */
+/* Map credits (engine/attribution.js). Attribution is a licence requirement (OSM, OpenSeaMap,
+   Esri, Open-Meteo, MUR SST…), so it is never cut off: wide screens show the full text above the
+   bottom chrome, wrapped if it must be; phones show a "Credits" button above the zoom keys that
+   opens the full list. All of it lives inside #map (z 0), under every piece of shell chrome. */
 .leaflet-container .leaflet-control-attribution {
   background: color-mix(in srgb, var(--chrome-solid) 70%, transparent) !important;
   color: var(--text-3) !important;
   font-size: 9px !important; line-height: 1.3 !important;
   padding: 1px 6px !important; border-radius: var(--r-xs) 0 0 0;
-  max-width: 62vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 62vw;
 }
 .leaflet-container .leaflet-control-attribution a { color: var(--text-2) !important; }
 .leaflet-bottom.leaflet-right { bottom: var(--chrome-bottom); right: calc(var(--rail-w) * 0); }
 .leaflet-bottom .leaflet-control { margin-bottom: 0; }
+.fa-credits.is-empty { display: none; }
+.fa-credits__item + .fa-credits__item::before { content: '\00b7'; margin: 0 .45em; color: var(--text-3); }
+.fa-credits__toggle { display: none; }
+/* Phones: the shell's phone layout (< 900 px; attribution.js CREDITS_COMPACT_QUERY). */
+@media (max-width: 899.98px) {
+  .leaflet-container .fa-credits.leaflet-control-attribution {
+    display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+    max-width: none; padding: 0 !important; border-radius: 0; background: none !important;
+    /* right edge in line with the zoom keys, 8 px above them (two actions a thumb could confuse) */
+    margin: 0 calc(var(--safe-right) + 12px) 8px 0;
+  }
+  .fa-credits__text { display: none; }
+  .fa-credits__toggle {
+    position: relative; display: block; min-width: 48px; height: 22px; padding: 0 6px;
+    border-radius: var(--r-pill); background: var(--chrome); color: var(--text-2);
+    box-shadow: inset 0 0 0 1px var(--line);
+    font: 600 11px/22px var(--font-ui); letter-spacing: .01em; white-space: nowrap;
+  }
+  /* 44 px tall hit area (DESIGN §3): up and down from the 22 px pill; the zoom keys sit above the
+     whole map, so the strip that overlaps them still goes to them */
+  .fa-credits__toggle::before { content: ''; position: absolute; inset: -14px -4px -8px; }
+  .fa-credits__toggle:active { background: var(--control); }
+  .fa-credits.is-open .fa-credits__toggle { color: var(--signal-fg); box-shadow: inset 0 0 0 1px var(--line-2); }
+  .fa-credits.is-open .fa-credits__text {
+    display: block; order: -1;
+    width: min(420px, calc(100vw - 24px - var(--safe-left) - var(--safe-right)));
+    /* never up under the HUD (--persist-bottom) or the right-hand control column: 158 = the
+       button, gaps and a margin (52) + the column (96 + 10). A longer list scrolls itself (its
+       own pan, not the chart's). */
+    max-height: max(64px, min(40vh, calc(100vh - var(--persist-bottom, 0px) - var(--chrome-bottom, 0px) - 158px)));
+    overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y;
+    padding: 8px 12px; border-radius: var(--r-md); background: var(--chrome); color: var(--text-2);
+    box-shadow: var(--e1), inset 0 0 0 1px var(--line);
+    font: 500 12px/17px var(--font-ui);
+  }
+  .fa-credits.is-open .fa-credits__item { display: block; padding: 3px 0; overflow-wrap: anywhere; }
+  .fa-credits.is-open .fa-credits__item + .fa-credits__item { box-shadow: inset 0 1px 0 var(--line); }
+  .fa-credits.is-open .fa-credits__item + .fa-credits__item::before { content: none; }
+  .leaflet-container .fa-credits.is-open a { color: var(--text-1) !important; text-decoration: underline; text-underline-offset: 2px; }
+}
+/* A landscape phone has no height to lift the map legends over the list, so the list fits
+   between their column and the right-hand control column instead: 500 = 12 + the legends' 400
+   max width (weather.css) + 20 + the controls' 48 + 8 + 12. */
+@media (max-width: 899.98px) and (max-height: 500px) {
+  .fa-credits.is-open .fa-credits__text {
+    margin-right: 56px;
+    width: min(420px, max(240px, calc(100vw - var(--safe-left) - var(--safe-right) - 500px)));
+    max-height: max(64px, calc(100vh - var(--persist-bottom, 0px) - var(--chrome-bottom, 0px) - 52px));
+  }
+}
 
 /* Leaflet popups (a few engine surfaces still use them, e.g. route points) */
 .leaflet-popup-content-wrapper, .leaflet-popup-tip {

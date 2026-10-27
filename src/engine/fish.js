@@ -3,6 +3,7 @@ import { createStore } from 'zustand/vanilla';
 import { GPS, bearingBetween, mapBoundsClamped, nmBetween } from './gps.js';
 import { getMap } from './app.js';
 import { openCard, toast } from '../services/ui';
+import { INAT_ATTRIBUTION, inatObservationsUrl, inatOpenPhoto, inatPhotoCredit } from './datasources.js';
 
 /* Recent fish sightings overlay — iNaturalist open citizen-science data (online only).
    Real species-with-location records (angler catches + diver/tidepool sightings), free API.
@@ -42,7 +43,7 @@ export const fishStore = createStore(() => /** @type {FishView} */ ({ on: false,
  */
 
 export function fishInit(map) {
-  Fish.layer = L.layerGroup();
+  Fish.layer = L.layerGroup([], { attribution: INAT_ATTRIBUTION });   // credited in the map's Credits while shown
   /* Follow mode pans the map on every GPS fix (a user drag switches follow off — app.js), so a
      move while GPS.follow is on was not the user's doing. */
   map.on('moveend', () => { if (Fish.on) scheduleFishRefresh(!GPS.follow); });
@@ -87,12 +88,9 @@ export function fishToast(kind, msg, userAction) {
   return true;
 }
 
+/* Only observations with an openly licensed photo (datasources.js INAT_PHOTO_LICENSES). */
 export function fishSearchUrl(c) {
-  return 'https://api.inaturalist.org/v1/observations?taxon_id=' + FISH_TAXA +
-    '&nelat=' + c.n.toFixed(4) + '&nelng=' + c.e.toFixed(4) +
-    '&swlat=' + c.s.toFixed(4) + '&swlng=' + c.w.toFixed(4) +
-    '&per_page=100&order_by=observed_on&order=desc&geo=true&photos=true' +
-    '&quality_grade=research&geoprivacy=open'; // open = not location-obscured
+  return inatObservationsUrl(FISH_TAXA, c);
 }
 
 /** @param {boolean} [userAction] the refresh follows something the user did (switching on, their own pan/zoom) */
@@ -182,10 +180,14 @@ export function fishCardData(o, days) {
   const t = o.taxon || {};
   const name = t.preferred_common_name || t.name || 'Fish';
   const sci = t.name && t.preferred_common_name ? t.name : '';
+  /* Only a photo with an open licence is shown, and only with its credit (observer and
+     licence): no credit, no photo. */
   let photo = '', photoCredit = '';
-  if (o.photos && o.photos[0] && o.photos[0].url) {
-    photo = o.photos[0].url.replace('square', 'small');
-    photoCredit = o.photos[0].attribution || '';
+  const p = inatOpenPhoto(o.photos);
+  const credit = p ? inatPhotoCredit(p, o.user) : '';
+  if (p && credit) {
+    photo = p.url.replace('square', 'small');
+    photoCredit = credit;
   }
   let distNm = null, brgDeg = null;
   if (GPS.lastLatLng && o.geojson) {

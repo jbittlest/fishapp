@@ -26,7 +26,8 @@ describe('first-mate worker origin lock', () => {
     const e = env();
     const r = await worker.fetch(req(origin), e);
     expect(r.status).toBe(403);
-    expect(r.headers.get('Access-Control-Allow-Origin')).toBe('https://jbittlest.github.io');
+    // Its own origin is echoed so the refusal is a readable 403, not a CORS failure; the Worker refuses, not the browser.
+    expect(r.headers.get('Access-Control-Allow-Origin')).toBe(origin);
     expect(e.AI.run).not.toHaveBeenCalled();
   });
   it('/tts stays on Workers AI even if an old OPENAI_KEY secret is still set (no undisclosed processor)', async () => {

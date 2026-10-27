@@ -7,6 +7,7 @@ import { Goto, gotoApplyUpdateIfSafe, navUnderWay } from './goto.js';
 import { getMap } from './app.js';
 import { closeCard, closePanels, confirmDialog, openCard, toast, uiStore, updateCard } from '../services/ui';
 import { saveOrShareFile } from '../services/native';
+import { REVIEW_TRIP_MIN_NM, reviewMoment } from '../services/review';
 
 /* Track recording: breadcrumb trail of where you've driven the boat.
 
@@ -98,6 +99,7 @@ export async function trackStop() {
     await idb.put('tracks', track);
     renderTracksList();
     toast('Track saved (' + track.nm.toFixed(2) + ' nm)');
+    if (track.nm > REVIEW_TRIP_MIN_NM) reviewMoment('trip');
   } catch (e) {
     /* The write used to fail silently (quota, private mode, storage gone) with the
        recording state already cleared — the track was just gone. Say so, and keep it in

@@ -44,7 +44,6 @@ export function layersMock() {
   const chartLayerIds = (state) => {
     const s = state || layersStoreMock.getState();
     const ids = [s.base];
-    if (s.base === 'gmrt' || s.base === 'bluetint' || s.base === 'sat') ids.push('labels');
     if (s.base === 'gmrt') ids.push('reliefhi');
     if (s.base === 'bluetint') ids.push('blueshade');
     if (s.enc) ids.push('enc');
@@ -94,13 +93,63 @@ export function makeIdb() {
   return idb;
 }
 
+/* Just enough of db.js's raw `_store` / `_req` for the launch sweep (download.js
+ * sweepUnkeepableTiles) over the same Maps as `idb`: getAllKeys over a key range, getAll and put,
+ * each answered asynchronously, in a transaction that commits once its last request has been
+ * handled — or, with `ctl.abortNext = '<store>'`, the next transaction on that store aborts and
+ * drops its writes. `ctl.open = false` is storage that never opened (the real _store throws).
+ * Key ranges are { lower, upper } (stub IDBKeyRange). */
+function fakeRawStore(idb) {
+  const ctl = { open: true, abortNext: null };
+  const inRange = (k, r) => !r || (k >= r.lower && k <= r.upper);
+  function _store(name, mode) {
+    if (!ctl.open) throw new Error('Offline storage is unavailable on this device');
+    const map = idb.stores[name];
+    const tx = { oncomplete: null, onabort: null, onerror: null, error: null };
+    const abort = ctl.abortNext === name;
+    if (abort) ctl.abortNext = null;
+    const writes = [];
+    let pending = 0;
+    const settle = () => setTimeout(() => {
+      if (pending > 0) return;
+      if (abort) { tx.error = new Error('aborted'); if (tx.onabort) tx.onabort(); return; }
+      writes.forEach((w) => w());
+      if (tx.oncomplete) tx.oncomplete();
+    }, 0);
+    const request = (answer) => {
+      const req = { transaction: tx, result: undefined, error: null, onsuccess: null, onerror: null };
+      pending++;
+      setTimeout(() => { req.result = answer(); if (req.onsuccess) req.onsuccess(); if (--pending === 0) settle(); }, 0);
+      return req;
+    };
+    return {
+      transaction: tx,
+      getAllKeys: (range) => request(() => [...map.keys()].filter((k) => inRange(k, range)).sort()),
+      getAll: () => request(() => [...map.values()].map((v) => (v && typeof v === 'object' && !(v instanceof Blob) ? { ...v } : v))),
+      put: (value, key) => {
+        if (mode !== 'readwrite') throw new Error('ReadOnlyError');
+        return request(() => { const k = key !== undefined ? key : value.id; writes.push(() => map.set(k, value)); return k; });
+      },
+    };
+  }
+  const _req = (request) => new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  return { _store, _req, ctl };
+}
+
 /* db.js stand-in: `idb` plus the tile helpers download.js and tiles.js import. */
 export function dbMock() {
   const idb = makeIdb();
   const TileKeys = new Set();
+  const raw = fakeRawStore(idb);
   return {
     idb,
     TileKeys,
+    _store: raw._store,
+    _req: raw._req,
+    _storeCtl: raw.ctl,
     tileKeysReady: false,
     tileKey: (layerId, z, x, y) => layerId + '/' + z + '/' + x + '/' + y,
     getTileBlob: vi.fn(async (key) => idb.stores.tiles.get(key) || null),

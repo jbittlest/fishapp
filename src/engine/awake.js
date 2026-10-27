@@ -1,7 +1,7 @@
 import { createStore } from 'zustand/vanilla';
 import { GPS, WakeLock } from './gps.js';
 import { Tracks } from './tracks.js';
-import { Nav } from './nav.js';
+import { Nav, anchorScreenCopy } from './nav.js';
 import { Goto } from './goto.js';
 import { backgroundLocation, isNativeShell } from '../services/native';
 
@@ -73,7 +73,7 @@ export function awakeKeepAliveOk() {
  * @property {boolean} visible        a watch or recording is armed
  * @property {boolean} warn           it cannot fully do its job right now (no GPS, screen may sleep, keep-alive down)
  * @property {string} what            "Anchor watch · Recording"
- * @property {string} detail          problems, or "GPS 4s ago · keep the screen on"
+ * @property {string} detail          problems, or "GPS 4s ago · keep the screen on" (iPhone app anchor watch: "OK to lock the screen")
  * @property {boolean} anchor
  * @property {boolean} track
  * @property {number|null} fixAgeS
@@ -267,12 +267,17 @@ export function awakeHealth() {
     screenLock: !!(typeof WakeLock !== 'undefined' && WakeLock.lock),
     screenLockWanted: !!(typeof WakeLock !== 'undefined' && WakeLock.enabled && WakeLock.supported),
     notify: (typeof window !== 'undefined' && 'Notification' in window) ? Notification.permission : 'unsupported',
+    // the iPhone app: its native monitor keeps the anchor watch going with the phone locked
+    native: isNativeShell(),
     fixAgeS: fixAgeS,
     gpsOk: fixAgeS != null && fixAgeS < 60,
   };
 }
 
-/** Pure: the watch-band model from a health reading (legacy copy, emoji removed). */
+/** Pure: the watch-band model from a health reading (legacy copy, emoji removed). With an anchor
+ *  watch armed in the iPhone app (h.native) the healthy line says it is OK to lock the screen
+ *  instead of "keep the screen on" (nav.js ANCHOR_SCREEN_COPY). A recording on its own keeps the
+ *  browser wording: only the anchor watch has a native monitor behind it. */
 export function awakeBannerModel(h, anchor, track) {
   if (!h.armed) return { visible: false, warn: false, what: '', detail: '' };
   const what = [];
@@ -282,13 +287,14 @@ export function awakeBannerModel(h, anchor, track) {
   if (!h.gpsOk) problems.push(h.fixAgeS == null ? 'no GPS fix yet' : 'no GPS for ' + h.fixAgeS + 's');
   if (!h.screenLock && h.screenLockWanted) problems.push('screen may sleep');
   if (!h.keepAlive && h.keepAliveWanted) problems.push('background keep-alive not running');
+  const ok = anchorScreenCopy(!!h.native && !!anchor).band;
   return {
     visible: true,
     warn: problems.length > 0,
     what: what.join(' · ') || 'Watching',
     detail: problems.length
       ? problems.join(' · ')
-      : (h.fixAgeS != null ? 'GPS ' + h.fixAgeS + 's ago · keep the screen on' : 'keep the screen on'),
+      : (h.fixAgeS != null ? 'GPS ' + h.fixAgeS + 's ago · ' + ok : ok),
   };
 }
 

@@ -61,11 +61,32 @@ describe('fish sightings', () => {
     expect(relTime(400)).toBe('1.1 years ago');
   });
 
-  it('request is research-grade, open-geoprivacy only, in the clamped view', () => {
+  it('request is research-grade, open-geoprivacy only, openly licensed photos, in the clamped view', () => {
     const u = fishSearchUrl({ s: 33.1, n: 34.2, w: -119.3, e: -117.9 });
     expect(u).toBe('https://api.inaturalist.org/v1/observations?taxon_id=' + FISH_TAXA +
       '&nelat=34.2000&nelng=-117.9000&swlat=33.1000&swlng=-119.3000' +
-      '&per_page=100&order_by=observed_on&order=desc&geo=true&photos=true&quality_grade=research&geoprivacy=open');
+      '&per_page=100&order_by=observed_on&order=desc&geo=true&photos=true' +
+      '&photo_license=cc0,cc-by,cc-by-sa,cc-by-nc,cc-by-nc-sa,cc-by-nd,cc-by-nc-nd' +
+      '&quality_grade=research&geoprivacy=open');
+  });
+
+  it('card data never shows an all-rights-reserved photo, and every photo carries its credit', () => {
+    const base = { id: 7, observed_on: '2026-10-20', taxon: { name: 'Paralabrax clathratus', preferred_common_name: 'Kelp Bass' } };
+    // first photo all rights reserved, second CC BY: the licensed one is shown, with its own credit
+    const mixed = fishCardData({ ...base, photos: [
+      { url: 'https://static.inaturalist.org/photos/1/square.jpg', license_code: null, attribution: '(c) Ann, all rights reserved' },
+      { url: 'https://inaturalist-open-data.s3.amazonaws.com/photos/2/square.jpg', license_code: 'cc-by', attribution: '(c) Bo, some rights reserved (CC BY)' },
+    ] }, 3);
+    expect(mixed.photo).toBe('https://inaturalist-open-data.s3.amazonaws.com/photos/2/small.jpg');
+    expect(mixed.photoCredit).toBe('(c) Bo, some rights reserved (CC BY)');
+    // only an unlicensed photo: no photo and no credit
+    const none = fishCardData({ ...base, photos: [{ url: 'https://static.inaturalist.org/photos/1/square.jpg', license_code: null, attribution: '(c) Ann, all rights reserved' }] }, 3);
+    expect(none.photo).toBe('');
+    expect(none.photoCredit).toBe('');
+    // a licensed photo with no attribution line: the credit is built from the observer and licence
+    const built = fishCardData({ ...base, user: { login: 'kelpdiver' }, photos: [{ url: 'https://x.test/photos/3/square.jpg', license_code: 'cc-by-nc' }] }, 3);
+    expect(built.photo).toBe('https://x.test/photos/3/small.jpg');
+    expect(built.photoCredit).toBe('(c) kelpdiver, some rights reserved (CC BY-NC)');
   });
 
   it('card data: names, photo, distance/bearing from the boat, safe link', () => {

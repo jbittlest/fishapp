@@ -4,6 +4,7 @@ import { GPS, formatCoord, gpsStore, nmBetween } from './gps.js';
 import { getMap, readJSON } from './app.js';
 import { setDataOverlay } from './layers.js';
 import { SST } from './sst.js';
+import { OPEN_METEO_ATTRIBUTION } from './datasources.js';
 import { isPanelOpen, openPanel, toast } from '../services/ui';
 
 /* Weather: Windy-style wind arrow overlay + forecast panel (Open-Meteo, free, no key) */
@@ -113,7 +114,8 @@ function setWind(patch) { wxStore.setState((s) => ({ wind: { ...s.wind, ...patch
 export const conditionsStore = createStore(() => /** @type {ConditionsView} */ ({ waterF: null, at: 0, lat: null, lng: null }));
 
 export function wxInit(map) {
-  WX.layer = L.layerGroup();
+  // the linked Open-Meteo credit (CC BY 4.0) rides in the map's Credits while the arrows are shown
+  WX.layer = L.layerGroup([], { attribution: OPEN_METEO_ATTRIBUTION });
   map.on('moveend zoomend', () => {
     if (!WX.overlayOn || WX.playing) return;   // don't clobber an active forecast loop
     /* The refresh below redraws CURRENT wind. A paused scrub position keeps its label until

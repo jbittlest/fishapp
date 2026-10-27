@@ -3,14 +3,14 @@
  * cancel, and every storage safeguard live in engine/download.js. */
 import { useEffect, useState, type ReactNode } from 'react';
 import {
-  Badge, Button, Field, Group, Hint, IconButton, ListRow, LoadingRow, Notice, Num, ProgressBar, RadioRow, Section, Sheet,
+  Badge, Button, Field, Group, Hint, Icon, IconButton, ListRow, LoadingRow, Notice, Num, ProgressBar, RadioRow, Section, Sheet,
   Spinner, StateBox, StatStrip, TextInput, useStoreValue,
 } from '../../ui';
 import {
   DETAIL_LEVELS, cancelDownload, deleteArea, dlPanelOpened, dlStore, flyToArea, refreshAreas, setDlZoom, startDownload,
   updateEstimate, type AreaRow,
 } from '../../engine/download.js';
-import { LAYERS } from '../../engine/tiles.js';
+import { LAYERS, OFFLINE_BASE } from '../../engine/tiles.js';
 import { layersStore } from '../../engine/layers.js';
 import { getMap } from '../../engine/app.js';
 import { useUi } from '../../services/ui';
@@ -32,8 +32,32 @@ function AreaSize({ a }: { a: AreaRow }) {
   return <span className="ui-num ui-num--row"><span className="ui-num__v">&lt;1</span><span className="ui-num__unit">MB</span></span>;
 }
 
+const LAYER_DEFS = LAYERS as Record<string, { name?: string; kind?: string; offlineNote?: string }>;
+
 function layerNames(ids: string[]): string {
-  return ids.map((id) => (LAYERS as Record<string, { name?: string }>)[id]?.name ?? id).join(', ');
+  return ids.map((id) => LAYER_DEFS[id]?.name ?? id).join(', ');
+}
+
+const SWAP_NAME = LAYER_DEFS[OFFLINE_BASE]?.name ?? 'A seafloor chart';
+
+/** Layers whose sources' terms forbid offline copies — one plain line each — and, on the line of
+ *  the base (`swappedBase`), what stands in for it (`swapNote`). The estimate lists what this
+ *  download leaves out; a saved area lists what an older build stored there and is now gone. */
+function NotSaved({ skipped, swappedBase, swapNote, className }: { skipped: string[]; swappedBase: string | null; swapNote: string; className?: string }) {
+  if (!skipped.length) return null;
+  return (
+    <ul className={'dl-est__skipped' + (className ? ' ' + className : '')}>
+      {skipped.map((id) => (
+        <li key={id}>
+          <Icon name="cloud-off" size={14} />
+          <span>
+            {LAYER_DEFS[id]?.offlineNote ?? `${LAYER_DEFS[id]?.name ?? id} isn't saved`}.
+            {id === swappedBase && ' ' + swapNote}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 function Estimate() {
@@ -54,7 +78,9 @@ function Estimate() {
         { key: 'size', label: 'Size', value: <Num value={est.mb < 1 ? 1 : est.mb} approx unit="MB" size="row" /> },
         { key: 'zoom', label: 'Zoom', value: <span className="ui-num ui-num--row"><span className="ui-num__v">{est.minZ}–{est.maxZ}</span></span> },
       ]} />
-      <div className="dl-est__layers">{layerNames(est.layerIds)}</div>
+      <div className="dl-est__layers"><span className="ui-label">Saves</span> {layerNames(est.layerIds)}</div>
+      <NotSaved skipped={est.skipped} swappedBase={est.swappedBase}
+        swapNote={`${SWAP_NAME} is saved in its place and shows when you have no signal.`} />
     </div>
   );
 }
@@ -125,6 +151,10 @@ function AreaItem({ a }: { a: AreaRow }) {
             {a.partial ? <Badge icon="alert">Cancelled — partial</Badge> : a.incomplete ? <Badge icon="alert">Incomplete</Badge> : null}
           </span>
           {a.data === 'partial' && a.dataMissing.length > 0 && <span className="dl-area__missing">Missing: {a.dataMissing.join(', ')}</span>}
+          {/* saved by an older build: what its terms no longer let the area keep */}
+          <NotSaved className="dl-area__notsaved" skipped={a.notSaved}
+            swappedBase={a.baseGone ? a.notSaved.find((id) => LAYER_DEFS[id]?.kind === 'base') ?? null : null}
+            swapNote={`Download this area again to save ${SWAP_NAME} in its place.`} />
         </div>
       )}
     </div>

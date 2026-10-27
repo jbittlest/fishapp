@@ -139,6 +139,11 @@ Each default-exports a component that renders exactly one `<Sheet>`.
 `src/shell/MapCard`.
 
 **Modals** (`src/shell/modals.tsx`): `spot` (spots/SpotModal), `catch` (tides/CatchModal).
+A modal a card opens itself (the catch card's share sheet, tides/CatchShareSheet) wraps its `<Modal>`
+in `<ModalPortal>` (src/ui), which renders it into the shell's `ModalLayer` beside ModalHost. Never
+portal to `document.body`: #root is a stacking context, so anything after it covers dialogs, the
+toast and the anchor alarm. `Modal` and the dialogs move focus onto themselves, keep Tab inside and
+hand focus back on close, without taking it from a layer above them (the alarm's Silence).
 
 **Persistent / overlay slots** (rendered by the shell): `features/nav/GoToCard` (`GoToCard`, `NavPill`),
 `features/nav/WatchBand` (`WatchBand`), `features/nav/AnchorAlarm` (`AnchorAlarm`),

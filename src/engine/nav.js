@@ -5,7 +5,7 @@ import { awakeAcquire, awakeApply, awakeAskNotify, awakeKeepAliveOk, awakeNotify
 import { gotoOnFix, gotoStartRoute } from './goto.js';
 import { getMap } from './app.js';
 import { closePanels, toast } from '../services/ui';
-import { haptic, nativeAnchorSilence, nativeAnchorWatch } from '../services/native';
+import { haptic, isNativeShell, nativeAnchorSilence, nativeAnchorWatch } from '../services/native';
 
 /* Navigation & safety: route planner, measure tool, anchor alarm, trip stats.
    Route/measure use map taps (intercepted before tap-to-inspect when a mode is active).
@@ -324,7 +324,32 @@ export function anchorDrop() {
   anchorPersist();
   anchorSyncNative();     // iPhone app: arm the native monitor that keeps watching with the phone locked
   updateAnchorUi();
-  toast('Anchor watch on (' + Nav.anchor.radiusFt + ' ft) — keep the app open, screen on');
+  toast('Anchor watch on (' + Nav.anchor.radiusFt + ' ft) — ' + anchorScreenCopy(isNativeShell()).armed);
+}
+
+/* ---- What the watch tells you to do with the phone ----
+   In a browser iOS stops GPS the moment the phone locks, so the watch only works with the app in
+   front and the screen on. In the iPhone app the native monitor (anchorSyncNative) keeps watching
+   with the phone locked, so "keep the screen on" is wrong there — the thing that does stop it is
+   closing the app. Every line the watch shows about it comes from here (the drop toast, the watch
+   band in awake.js, the Tools panel's no-GPS notice). */
+export const ANCHOR_SCREEN_COPY = {
+  web: {
+    armed: 'keep the app open, screen on',
+    band: 'keep the screen on',
+    blind: 'Keep the app in front with the screen on until GPS comes back.',
+  },
+  // device-neutral: the same app runs on iPad
+  native: {
+    armed: 'keeps watching with the screen locked. Don\'t close the app.',
+    band: 'OK to lock the screen',
+    blind: 'Give the device a clear view of the sky — the watch picks up again on its own when GPS comes back.',
+  },
+};
+/** The anchor watch's screen wording for the iPhone app (`native`) or a browser.
+ *  @param {boolean} native */
+export function anchorScreenCopy(native) {
+  return native ? ANCHOR_SCREEN_COPY.native : ANCHOR_SCREEN_COPY.web;
 }
 
 /* ---- Native iOS shell: the locked-screen anchor monitor ----

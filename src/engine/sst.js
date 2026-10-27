@@ -3,10 +3,12 @@ import { createStore } from 'zustand/vanilla';
 import { mapBoundsClamped } from './gps.js';
 import { getMap } from './app.js';
 import { reportDataOverlay } from './layers.js';
+import { MUR_SST_ATTRIBUTION } from './datasources.js';
 import { toast } from '../services/ui';
 
 /* Sea surface temperature overlay + multi-day time-lapse loop.
-   Source: NOAA CoastWatch ERDDAP (JPL MUR SST, ~1 km daily). Unlike the fixed global
+   Source: NOAA CoastWatch ERDDAP (JPL MUR SST, ~1 km daily; credited with the dataset's
+   requested NASA/JPL acknowledgement, datasources.js). Unlike the fixed global
    palette, ERDDAP lets us STRETCH the colour scale to the LOCAL temperature range, so small
    breaks (1-2°F) show a big colour change. Scale is auto-centred on the local water temp.
    Rendered as a per-view image overlay (one request per day) — online only. */
@@ -227,7 +229,8 @@ export function buildSstFrames(n) {
   const palette = SST.palette;
   const frames = [];
   for (let d = SST_LAG_DAYS + n - 1; d >= SST_LAG_DAYS; d--) {
-    const ov = L.imageOverlay(sstImgUrl(sstDate(d)), bounds, { opacity: 0, interactive: false }).addTo(map);
+    // every frame carries the same credit, so the map's Credits list it once while any is shown
+    const ov = L.imageOverlay(sstImgUrl(sstDate(d)), bounds, { opacity: 0, interactive: false, attribution: MUR_SST_ATTRIBUTION }).addTo(map);
     frames.push({ date: sstDate(d), ov });   // oldest -> newest
   }
   SST.frames = frames;

@@ -4,6 +4,7 @@ import { nmBetween } from './gps.js';
 import { Reefs } from './reefs.js';
 import { FISH_TAXA } from './fish.js';
 import { nearestTideStation } from './tides.js';
+import { coopsHiLoUrl, inatObservationsUrl } from './datasources.js';
 
 /* Offline "area intelligence pack": when you download an area, we also capture
    the environmental data for it — a multi-day wind/wave/tide/water-temp
@@ -102,8 +103,7 @@ async function buildAreaPackSections(bounds, c, step, stop) {
       const st = nearestTideStation(L.latLng(c.lat, c.lng));
       if (st) {
         const fmt = (d) => d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
-        const r = await fetch('https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=predictions&interval=hilo&datum=MLLW&units=english&time_zone=lst_ldt&format=json&station=' +
-          st.id + '&begin_date=' + fmt(new Date()) + '&end_date=' + fmt(new Date(Date.now() + 7 * 864e5)));
+        const r = await fetch(coopsHiLoUrl(st.id, fmt(new Date()), fmt(new Date(Date.now() + 7 * 864e5))));
         const j = await r.json();
         /* NOAA answers a bad request with HTTP 200 and {error: {message}} — no predictions.
            That used to be stored as a tide section with zero turns and counted as captured. */
@@ -121,9 +121,10 @@ async function buildAreaPackSections(bounds, c, step, stop) {
   try {
     step('recent fish sightings');
     if (typeof FISH_TAXA !== 'undefined') {
-      const r = await fetch('https://api.inaturalist.org/v1/observations?taxon_id=' + encodeURIComponent(FISH_TAXA) +
-        '&nelat=' + bounds.getNorth() + '&nelng=' + bounds.getEast() + '&swlat=' + bounds.getSouth() + '&swlng=' + bounds.getWest() +
-        '&per_page=100&order_by=observed_on&order=desc&geo=true&quality_grade=research&geoprivacy=open');
+      /* The same query as the sightings overlay (openly licensed photos only), so the pack's
+         tally counts exactly the sightings the map would show here. */
+      const r = await fetch(inatObservationsUrl(FISH_TAXA,
+        { n: bounds.getNorth(), e: bounds.getEast(), s: bounds.getSouth(), w: bounds.getWest() }));
       const j = await r.json();
       /* An error body has no results array. It used to become {total: 0} — "no fish seen
          here", stated as fact — instead of "the sightings could not be fetched". */

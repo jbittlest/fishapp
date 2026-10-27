@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="UTF-8"?><WMS_Capabilities version="1.3.0" updateSequence="299" xmlns="http://www.opengis.net/wms" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/wms https://nowcoast.noaa.gov/geoserver/observations/schemas/wms/1.3.0/capabilities_1_3_0.xsd">
+  <Service>
+    <Name>WMS</Name>
+    <Title>Weather Radar Base Reflectivity Mosaics</Title>
+    <Abstract>This nowCOAST map service provides maps depicting Multi-Radar/Multi-Sensor (MRMS) System Weather Radar</Abstract>
+    <KeywordList>
+      <Keyword>WMS</Keyword>
+      <Keyword>GeoServer</Keyword>
+      <Keyword>nowCOAST</Keyword>
+      <Keyword>weather radar</Keyword>
+    </KeywordList>
+    <OnlineResource xlink:type="simple" xlink:href="https://nowcoast.noaa.gov"/>
+    <ContactInformation>
+      <ContactPersonPrimary>
+        <ContactPerson/>
+        <ContactOrganization/>
+      </ContactPersonPrimary>
+      <ContactPosition/>
+      <ContactAddress>
+        <AddressType/>
+        <Address/>
+        <City/>
+        <StateOrProvince/>
+        <PostCode/>
+        <Country/>
+      </ContactAddress>
+      <ContactVoiceTelephone/>
+      <ContactFacsimileTelephone/>
+      <ContactElectronicMailAddress/>
+    </ContactInformation>
+    <Fees>NONE</Fees>
+    <AccessConstraints>NONE</AccessConstraints>
+  </Service>
+  <Capability>
+    <Request>
+      <GetCapabilities>
+        <Format>text/xml</Format>
+        <DCPType>
+          <HTTP>
+            <Get>
+              <OnlineResource xlink:type="simple" xlink:href="https://nowcoast.noaa.gov/geoserver/observations/weather_radar/conus_base_reflectivity_mosaic/ows?SERVICE=WMS&amp;"/>
+            </Get>
+            <Post>
+              <OnlineResource xlink:type="simple" xlink:href="https://nowcoast.noaa.gov/geoserver/observations/weather_radar/conus_base_reflectivity_mosaic/ows?SERVICE=WMS&amp;"/>
+            </Post>
+          </HTTP>
+        </DCPType>
+      </GetCapabilities>
+      <GetMap>
+        <Format>image/png</Format>
+        <Format>application/atom+xml</Format>
+        <Format>application/json;type=utfgrid</Format>
+        <Format>application/pdf</Format>
+        <Format>application/rss+xml</Format>
+        <Format>application/vnd.google-earth.kml+xml</Format>
+        <Format>application/vnd.google-earth.kml+xml;mode=networklink</Format>
+        <Format>application/vnd.google-earth.kmz</Format>
+        <Format>image/geotiff</Format>
+        <Format>image/geotiff8</Format>
+        <Format>image/gif</Format>
+        <Format>image/jpeg</Format>
+        <Format>image/png; mode=8bit</Format>
+        <Format>image/svg+xml</Format>
+        <Format>image/tiff</Format>
+        <Format>image/tiff8</Format>
+        <Format>image/vnd.jpeg-png</Format>
+        <Format>image/vnd.jpeg-png8</Format>
+        <Format>text/html; subtype=openlayers</Format>
+        <Format>text/html; subtype=openlayers2</Format>
+        <Format>text/html; subtype=openlayers3</Format>
+        <DCPType>
+          <HTTP>
+            <Get>
+              <OnlineResource xlink:type="simple" xlink:href="https://nowcoast.noaa.gov/geoserver/observations/weather_radar/conus_base_reflectivity_mosaic/ows?SERVICE=WMS&amp;"/>
+            </Get>
+          </HTTP>
+        </DCPType>
+      </GetMap>
+      <GetFeatureInfo>
+        <Format>text/plain</Format>
+        <Format>application/vnd.ogc.gml</Format>
+        <Format>text/xml</Format>
+        <Format>application/vnd.ogc.gml/3.1.1</Format>
+        <Format>text/xml; subtype=gml/3.1.1</Format>
+        <Format>text/html</Format>
+        <Format>application/json</Format>
+        <DCPType>
+          <HTTP>
+            <Get>
+              <OnlineResource xlink:type="simple" xlink:href="https://nowcoast.noaa.gov/geoserver/observations/weather_radar/conus_base_reflectivity_mosaic/ows?SERVICE=WMS&amp;"/>
+            </Get>
+          </HTTP>
+        </DCPType>
+      </GetFeatureInfo>
+    </Request>
+    <Exception>
+      <Format>XML</Format>
+      <Format>INIMAGE</Format>
+      <Format>BLANK</Format>
+      <Format>JSON</Format>
+    </Exception>
+    <Layer>
+      <Title>Weather Radar Base Reflectivity Mosaics</Title>
+      <Abstract>This nowCOAST map service provides maps depicting Multi-Radar/Multi-Sensor (MRMS) System Weather Radar</Abstract>
+      <!--Limited list of EPSG projections:-->
+      <CRS>EPSG:3857</CRS>
+      <CRS>EPSG:4326</CRS>
+      <CRS>CRS:84</CRS>
+      <EX_GeographicBoundingBox>
+        <westBoundLongitude>-129.99999999985712</westBoundLongitude>
+        <eastBoundLongitude>-59.996793505634635</eastBoundLongitude>
+        <southBoundLatitude>20.002682634774324</southBoundLatitude>
+        <northBoundLatitude>54.99999999985709</northBoundLatitude>
+      </EX_GeographicBoundingBox>
+      <BoundingBox CRS="CRS:84" minx="-129.99999999985712" miny="20.002682634774324" maxx="-59.996793505634635" maxy="54.99999999985709"/>
+      <Layer queryable="1" opaque="0">
+        <Name>conus_base_reflectivity_mosaic</Name>
+        <Title>CONUS Weather Radar Base Reflectivity</Title>
+        <Abstract>Weather radar base reflectivity mosaics of CONUS radar data from Weather Surveillance Radar 1988 Doppler (WSR-88D) sites operated by NWS and DOD and also from Terminal Doppler Weather Radars at major airports. The colors on the map represent the strength of the energy reflected back towards the radar measured in dBZ. The horizontal resolution is  1km (0.62 mi). The mosaics are updated approximately every 4 minutes. Data source: NWS &amp; OAR Multi-Radar/Multi-Sensor (MRMS) System.</Abstract>
+        <KeywordList>
+          <Keyword>observations</Keyword>
+          <Keyword>time-enabled</Keyword>
+          <Keyword>current conditions</Keyword>
+          <Keyword>present weather</Keyword>
+          <Keyword>radar</Keyword>
+          <Keyword>weather_radar</Keyword>
+          <Keyword>conus</Keyword>
+          <Keyword>continental united states</Keyword>
+          <Keyword>mosaic</Keyword>
+          <Keyword>doppler weather radar</Keyword>
+          <Keyword>multi-radar</Keyword>
+          <Keyword>multi-sensor</Keyword>
+          <Keyword>NEXRAD</Keyword>
+          <Keyword>MRMS</Keyword>
+          <Keyword>NWS</Keyword>
+          <Keyword>NSSL</Keyword>
+        </KeywordList>
+        <CRS>EPSG:3857</CRS>
+        <CRS>CRS:84</CRS>
+        <EX_GeographicBoundingBox>
+          <westBoundLongitude>-129.99999999985712</westBoundLongitude>
+          <eastBoundLongitude>-59.996793505634635</eastBoundLongitude>
+          <southBoundLatitude>20.002682634774324</southBoundLatitude>
+          <northBoundLatitude>54.99999999985709</northBoundLatitude>
+        </EX_GeographicBoundingBox>
+        <BoundingBox CRS="CRS:84" minx="-129.99999999985712" miny="20.002682634774324" maxx="-59.996793505634635" maxy="54.99999999985709"/>
+        <BoundingBox CRS="EPSG:3857" minx="-1.447153380310966E7" miny="2273348.7246112144" maxx="-6678812.50227643" maxy="7361866.113023452"/>
+        <Dimension name="time" default="2026-10-27T00:32:17Z" units="ISO8601" nearestValue="1">2026-10-26T18:04:03.000Z,2026-10-26T18:08:20.000Z,2026-10-26T18:12:05.000Z,2026-10-26T18:16:12.000Z,2026-10-26T18:20:02.000Z,2026-10-26T18:24:07.000Z,2026-10-26T18:27:47.000Z,2026-10-26T18:36:08.000Z,2026-10-26T18:40:06.000Z,2026-10-26T18:44:08.000Z,2026-10-26T18:47:57.000Z,2026-10-26T18:52:08.000Z,2026-10-26T18:56:10.000Z,2026-10-26T18:59:56.000Z,2026-10-26T19:03:54.000Z,2026-10-26T19:08:15.000Z,2026-10-26T19:12:10.000Z,2026-10-26T19:16:02.000Z,2026-10-26T19:20:02.000Z,2026-10-26T19:24:03.000Z,2026-10-26T19:28:14.000Z,2026-10-26T19:32:12.000Z,2026-10-26T19:36:00.000Z,2026-10-26T19:39:51.000Z,2026-10-26T19:44:18.000Z,2026-10-26T19:48:16.000Z,2026-10-26T19:52:16.000Z,2026-10-26T19:56:02.000Z,2026-10-26T20:00:13.000Z,2026-10-26T20:04:10.000Z,2026-10-26T20:08:03.000Z,2026-10-26T20:12:05.000Z,2026-10-26T20:15:56.000Z,2026-10-26T20:20:02.000Z,2026-10-26T20:23:56.000Z,2026-10-26T20:28:13.000Z,2026-10-26T20:32:07.000Z,2026-10-26T20:36:12.000Z,2026-10-26T20:39:51.000Z,2026-10-26T20:44:14.000Z,2026-10-26T20:47:59.000Z,2026-10-26T20:52:00.000Z,2026-10-26T20:56:11.000Z,2026-10-26T21:00:06.000Z,2026-10-26T21:03:57.000Z,2026-10-26T21:07:48.000Z,2026-10-26T21:12:06.000Z,2026-10-26T21:16:12.000Z,2026-10-26T21:20:13.000Z,2026-10-26T21:24:10.000Z,2026-10-26T21:27:53.000Z,2026-10-26T21:32:19.000Z,2026-10-26T21:35:46.000Z,2026-10-26T21:39:56.000Z,2026-10-26T21:43:56.000Z,2026-10-26T21:47:59.000Z,2026-10-26T21:52:06.000Z,2026-10-26T21:55:58.000Z,2026-10-26T21:59:54.000Z,2026-10-26T22:03:51.000Z,2026-10-26T22:07:58.000Z,2026-10-26T22:12:00.000Z,2026-10-26T22:16:07.000Z,2026-10-26T22:20:03.000Z,2026-10-26T22:24:11.000Z,2026-10-26T22:28:08.000Z,2026-10-26T22:31:52.000Z,2026-10-26T22:35:54.000Z,2026-10-26T22:40:05.000Z,2026-10-26T22:44:16.000Z,2026-10-26T22:48:17.000Z,2026-10-26T22:52:09.000Z,2026-10-26T22:56:20.000Z,2026-10-26T23:00:10.000Z,2026-10-26T23:04:00.000Z,2026-10-26T23:08:09.000Z,2026-10-26T23:12:05.000Z,2026-10-26T23:16:08.000Z,2026-10-26T23:19:57.000Z,2026-10-26T23:24:03.000Z,2026-10-26T23:28:13.000Z,2026-10-26T23:32:07.000Z,2026-10-26T23:36:02.000Z,2026-10-26T23:39:57.000Z,2026-10-26T23:44:00.000Z,2026-10-26T23:48:04.000Z,2026-10-26T23:52:12.000Z,2026-10-26T23:56:12.000Z,2026-10-26T23:59:57.000Z,2026-10-27T00:03:44.000Z,2026-10-27T00:07:54.000Z,2026-10-27T00:11:58.000Z,2026-10-27T00:15:59.000Z,2026-10-27T00:20:17.000Z,2026-10-27T00:24:09.000Z,2026-10-27T00:28:04.000Z,2026-10-27T00:32:17.000Z</Dimension>
+        <Style>
+          <Name>weather_radar_base_reflectivity</Name>
+          <Title>Weather Radar Base Reflectivity</Title>
+          <LegendURL width="272" height="21">
+            <Format>image/png</Format>
+            <OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="https://nowcoast.noaa.gov/geoserver/observations/weather_radar/conus_base_reflectivity_mosaic/ows?service=WMS&amp;version=1.3.0&amp;request=GetLegendGraphic&amp;format=image%2Fpng&amp;width=272&amp;height=21&amp;layer=conus_base_reflectivity_mosaic"/>
+          </LegendURL>
+        </Style>
+      </Layer>
+    </Layer>
+  </Capability>
+</WMS_Capabilities>

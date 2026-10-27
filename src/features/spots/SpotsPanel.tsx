@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { Button, Group, Hint, Icon, IconButton, ListRow, LoadingRow, Num, Section, Sheet, StateBox, useStoreValue } from '../../ui';
 import {
-  confirmDeleteSpot, exportData, flyToSpot, importData, navigateToSpot, openSpotModal, spotsChanged, spotsReload,
+  confirmDeleteSpot, exportData, flyToSpot, importData, navigateToSpot, openSpotModal, shareSpot, spotsChanged, spotsReload,
   spotsStore, spotTypeLabel, type SpotRow,
 } from '../../engine/spots.js';
 import { flyToReef, reefsRefreshNearest, reefsRetry, reefsStore, type ReefRow } from '../../engine/reefs.js';
@@ -62,6 +62,7 @@ function SpotItem({ s, open, stale, onToggle }: { s: SpotRow; open: boolean; sta
           {s.notes && <p className="spot-row__notes">{s.notes}</p>}
           <div className="spot-row__actions">
             <Button icon="crosshair" className="spot-tool" onClick={() => flyToSpot(s)}>Show on chart</Button>
+            <Button icon="share" className="spot-tool" onClick={() => { void shareSpot(s); }}>Share</Button>
             <Button icon="pencil" className="spot-tool" onClick={() => openSpotModal(s)}>Edit</Button>
             <Button variant="ghost" icon="trash" className="spot-tool spot-tool--delete" onClick={() => { void confirmDeleteSpot(s); }}>Delete</Button>
           </div>

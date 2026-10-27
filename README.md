@@ -50,10 +50,43 @@ legacy/        the original vanilla app (deployed as /classic/)
 npm install
 npm run dev            # http://127.0.0.1:5181
 npm test               # unit tests (Vitest)
+npm run lint           # ESLint over the engine (tsc covers the TypeScript)
 npm run build          # typecheck + production build into dist/ (also generates the service worker)
 npx playwright test    # end-to-end checks against the production build (installed Chrome)
+node tools/deploy.mjs --dry   # prove the deploy: builds the web pages into a temp copy, lists every copy
 node tools/deploy.mjs --ios   # copy dist/ into the Pages checkout (+ the iOS app's bundled Web/)
 ```
+
+Brand name, site URL and store links live in `src/site.config.json` (read through `src/services/site.ts`
+and `tools/web/lib.mjs`); nothing else should hard-code them. Every third-party data source, its terms
+and its credit line: `docs/launch/data-sources.md`.
+
+### What a deploy writes
+
+`tools/deploy.mjs` mirrors the build into the Pages checkout (branch `main`) and touches only the paths it
+owns: the app (`index.html`, `sw.js`, `assets/`, `data/`, `icons/`, `manifest.webmanifest`,
+`privacy.html`, `support.html`), the public web pages generated into the build by
+`tools/make-web-pages.mjs` (`get/` — the smart get-the-app link, `places/` — a page per California MPA and
+artificial reef, `site/`, `sitemap.xml`, `robots.txt`, plus the social tags in `index.html`), the
+link-preview image `og.png`, `/classic/` (the old vanilla app, rebuilt from `legacy/`), and a copy of
+`README.md`, `MOTOR.md` and `proxy/`. `--ios` also refreshes `FishApp-iOS/FishApp/Web` with the app only
+(no service worker, web pages or `og.png`). `privacy.html` and `support.html` are rendered from
+`src/legal/privacy.js` by `node tools/make-legal-pages.mjs`; rerun it after editing the policy.
+`og.png` has the brand and URL drawn into it: after a rename or a URL change run
+`node tools/web/render-og.mjs`, or the deploy refuses the stale image.
+
+### App Store screenshots
+
+```bash
+npm run build
+npx playwright test -c playwright.shots.config.ts tests/visual/appstore.spec.ts   # raw screens → tools/out/storeshots/raw
+node tools/storeshots/render.mjs --out ../OneDrive/Desktop/Projects/FishApp-iOS/AppStoreScreenshots [--clean]
+```
+
+Set `STORESHOTS_RAW=<dir>` on the capture (and `--raw <dir>` on the render) to keep the raw screens
+elsewhere. The render frames each raw screen under its caption (`tools/storeshots/captions.json`) at
+1320×2868 (iPhone 6.9") and 2064×2752 (iPad 13"), RGB with no alpha, and refuses raw screens older than
+`src/`, `public/` or `index.html` (recapture after any app change).
 
 The service worker is generated at build time from everything the build emits; its cache name is the
 build id plus a content hash, so there is no version number to bump by hand. Installed copies pick up a
@@ -61,4 +94,5 @@ new build on their next launch (never in the middle of a voyage, track, anchor w
 session).
 
 `MOTOR.md` documents the experimental trolling-motor link (web only). `proxy/first-mate-worker.js` is the
-Cloudflare Worker behind First Mate's free AI.
+Cloudflare Worker behind First Mate's free AI; deploying it, its daily limits and what it keeps are in
+`proxy/README.md` (`cd proxy && npx wrangler@4 deploy`, configured by `proxy/wrangler.toml`).

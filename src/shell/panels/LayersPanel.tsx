@@ -1,15 +1,22 @@
 import { useState } from 'react';
 import { Group, Hint, Notice, RadioRow, Section, Segmented, Sheet, ToggleRow, useStoreValue, type IconName } from '../../ui';
 import { BASES, layersStore, setBase, setDataOverlay, setOverlay } from '../../engine/layers.js';
+import { canSaveOffline } from '../../engine/tiles.js';
 import { WakeLock, wakeStore } from '../../engine/gps.js';
 import { Awake, awakeSetEnabled, awakeStore } from '../../engine/awake.js';
 import { fishStore } from '../../engine/fish.js';
 import { setThemeMode, useTheme, type ThemeMode } from '../../services/theme';
 import { isNativeShell } from '../../services/native';
+import { SITE } from '../../services/site';
 
 const BASE_ICON: Record<string, IconName> = { ocean: 'waves', sat: 'satellite', street: 'pin', bluetint: 'fish', gmrt: 'waves' };
 
 function useLayer(id: string) { return useStoreValue(layersStore, (s) => !!(s as Record<string, unknown>)[id]); }
+
+/* Layers whose terms forbid offline copies say so where you pick them; Offline charts says why. */
+function withOfflineNote(id: string, detail: string | null): string {
+  return canSaveOffline(id) ? (detail ?? '') : (detail ? detail + ' · not saved offline' : 'Not saved offline');
+}
 
 const FISH_STATUS: Record<string, string> = { loading: 'Loading sightings…', zoom: 'Zoom in to load sightings', offline: 'Needs internet', error: 'Couldn’t load sightings' };
 function FishStatus() {
@@ -44,7 +51,7 @@ export default function LayersPanel() {
       <Section label="Base map">
         <Group>
           {BASES.map((b: { id: string; title: string; detail: string | null }) => (
-            <RadioRow key={b.id} icon={BASE_ICON[b.id] ?? 'layers'} title={b.title} detail={b.detail ?? undefined}
+            <RadioRow key={b.id} icon={BASE_ICON[b.id] ?? 'layers'} title={b.title} detail={withOfflineNote(b.id, b.detail) || undefined}
               checked={base === b.id} onSelect={() => setBase(b.id, true)} />
           ))}
         </Group>
@@ -53,7 +60,7 @@ export default function LayersPanel() {
       <Section label="Chart overlays">
         <Group>
           <ToggleRow icon="compass" title="NOAA nautical charts" detail="US waters — depths, buoys, hazards" checked={enc} onChange={(v) => setOverlay('enc', v)} />
-          <ToggleRow icon="flag" title="Seamarks" detail="Buoys and beacons, worldwide" checked={seamark} onChange={(v) => setOverlay('seamark', v)} />
+          <ToggleRow icon="flag" title="Seamarks" detail={withOfflineNote('seamark', 'Buoys and beacons, worldwide')} checked={seamark} onChange={(v) => setOverlay('seamark', v)} />
         </Group>
       </Section>
 
@@ -92,7 +99,7 @@ export default function LayersPanel() {
         {kaKind === 'warn' && !native && <Hint>A watch or recording is running but the background keep-alive isn't playing yet — tap anywhere on the screen to start it.</Hint>}
         {native ? (
           <Notice title="Screen-off GPS">
-            In the FishApp iPhone app, GPS keeps running with the screen locked while an anchor watch, a track
+            In the {SITE.brandName} app, GPS keeps running with the screen locked while an anchor watch, a track
             recording or a Go-To route is active. iOS shows the location indicator while it does.
           </Notice>
         ) : (

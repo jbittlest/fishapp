@@ -14,6 +14,8 @@ import { useTheme } from '../../services/theme';
 import { SST_PALETTES, SST_PALETTE_BAR, SST_PALETTE_LABELS, sstSetPalette, sstStore, sstTogglePlay } from '../../engine/sst.js';
 import { rainScrub, rainStore, rainTogglePlay } from '../../engine/rain.js';
 import { WIND_LOOP_HOURS, windLoopToggle, windScrub, wxStore } from '../../engine/weather.js';
+import { MUR_SST_URL, OPEN_METEO_URL } from '../../engine/datasources.js';
+import { CreditLink } from './DataCredit';
 import './weather.css';
 
 /* Clearances (px) the column keeps: above the bottom stack (the attribution line sits there) and
@@ -31,8 +33,9 @@ function useAvailHeight(): number {
       const top = parseFloat(cs.getPropertyValue('--persist-bottom')) || 0;
       const chrome = parseFloat(cs.getPropertyValue('--chrome-bottom')) || 0;
       const card = parseFloat(cs.getPropertyValue('--card-clear')) || 0;   // desktop: legends sit above an open map card
+      const credits = parseFloat(cs.getPropertyValue('--credits-clear')) || 0;   // phone: the open Credits list (engine/attribution.js)
       const bottom = Math.max(chrome, card);
-      setAvail(Math.round(window.innerHeight - top - bottom - GAP_BOTTOM - GAP_TOP));
+      setAvail(Math.round(window.innerHeight - top - bottom - Math.max(GAP_BOTTOM, credits) - GAP_TOP));
     };
     read();
     const mo = new MutationObserver(read);
@@ -170,6 +173,12 @@ function SstLegend({ chip, onCollapse, onExpand }: { chip: boolean; onCollapse: 
         {night && (shownPalette === 'BlueWhiteRed' || shownPalette === 'Rainbow') && <>Reds or Blues read best at night. </>}
         {online ? 'Tap anywhere for exact °F' : 'Needs internet — tap anywhere for exact °F once online'}
       </p>
+      {/* The dataset's requested NASA/JPL acknowledgement, short form (the map's Credits carry
+          it in full), and the scale's source: the range is sampled from Open-Meteo. */}
+      <p className="wx-sst__credit">
+        MUR SST from JPL (NASA MEaSUREs) via <CreditLink href={MUR_SST_URL}>NOAA CoastWatch</CreditLink>.
+        {' '}Scale: <CreditLink href={OPEN_METEO_URL}>Open-Meteo.com</CreditLink>
+      </p>
     </section>
   );
 }
@@ -213,27 +222,32 @@ function RainBar() {
   const frameCount = useStoreValue(rainStore, (s) => s.frameCount);
   const idx = useStoreValue(rainStore, (s) => s.idx);
   const playing = useStoreValue(rainStore, (s) => s.playing);
+  const loadingLoop = useStoreValue(rainStore, (s) => s.loadingLoop);
   const timeLabel = useStoreValue(rainStore, (s) => s.timeLabel);
-  const isForecast = useStoreValue(rainStore, (s) => s.isForecast);
+  const outside = useStoreValue(rainStore, (s) => s.outside);
   const online = useUi((s) => s.online);
 
-  if (loading || frameCount === 0) {
+  // NOAA's mosaic stops at the lower 48 and their coastal waters: past it the map stays clear,
+  // which would read as "no rain". Say why instead; the loop comes back on panning back.
+  const note = loading ? null
+    : outside ? 'Rain radar covers the continental US only'
+    : frameCount === 0 ? 'No radar frames available right now'
+    : null;
+  if (loading || note) {
     return (
       <div className="wx-legend wx-loop" role="status">
         <span className="wx-loop__icon" aria-hidden><Icon name="cloud-rain" size={18} /></span>
         {loading
           ? <><Spinner size="sm" /><span className="wx-loop__note">Loading rain radar…</span></>
-          : <span className="wx-loop__note">No radar frames available right now</span>}
+          : <span className="wx-loop__note">{note}</span>}
       </div>
     );
   }
-  // Nowcast frames are a forecast, not observed radar — say so ("fcst" in the legacy label).
-  const clock = timeLabel.replace(/^fcst /, '');
+  // The time is the mosaic's own (observed radar; NOAA's loop has no forecast frames).
   return (
     <LoopBar icon="cloud-rain" name="Rain radar" playing={playing} canPlay={online && frameCount >= 2}
       onToggle={rainTogglePlay} max={frameCount - 1} value={idx} onScrub={rainScrub}
-      valueText={(isForecast ? 'forecast ' : 'radar ') + clock}
-      time={<>{isForecast && <span className="wx-loop__fcst">Fcst</span>}{clock}</>} />
+      valueText={'radar ' + timeLabel} time={timeLabel} busy={loadingLoop} />
   );
 }
 

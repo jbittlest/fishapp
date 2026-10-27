@@ -13,7 +13,8 @@ import { getMap } from './app.js';
 import {
   closeCard, closeModal, closePanels, confirmDialog, isPanelOpen, openCard, openModal, toast, uiStore,
 } from '../services/ui';
-import { isNativeShell, saveOrShareFile } from '../services/native';
+import { isNativeShell, saveOrShareFile, shareText } from '../services/native';
+import { SITE } from '../services/site';
 /* Map symbology for spot + reef markers and MPA polygons. Imported here (not by a lazy
    component) because the markers are drawn at boot, long before any spots UI is opened. */
 import '../features/spots/spots-map.css';
@@ -206,6 +207,15 @@ function publishSpots() {
   const here = GPS.lastLatLng;
   const items = sortSpots(Spots.all, here).map((s) => /** @type {SpotRow} */ (Object.assign({}, s, spotDistBrg(here, s))));
   spotsStore.setState({ items, hasFix: !!here });
+  /* A shared spot that is now one of the user's own (saved from its card, or it already was
+     once the boot read finished) is drawn by its spot marker: drop the pending one. Its reload
+     record goes too — unless its card is still up, which a reload should bring back (it then
+     goes when the card closes). */
+  if (Shared.spot && Spots.all.some((x) => sameSpotPosition(x, Shared.spot))) {
+    removeSharedMarker();
+    Shared.spot = null;
+    if (!sharedCardOpen(uiStore.getState())) forgetShared();
+  }
 }
 
 /** Re-sort and re-publish after anything mutates Spots.all (First Mate creates/deletes spots,
@@ -362,6 +372,472 @@ export async function createSpot(o) {
   addSpotMarker(spot);
   spotsChanged();
   return spot;
+}
+
+/* ---- Shared-spot links ----
+   Share on a spot sends SITE.siteUrl + '#s=lat,lng&t=type&n=name'. Whoever taps it sees the
+   spot in the web app with nothing to install. The position travels in the FRAGMENT, which a
+   browser never sends to a server, so no web log anywhere records where somebody fishes.
+   The type rides along so a shared Hazard arrives looking like one (and is saved as one).
+   An inbound link is untrusted input (anyone can write one): the numbers must be plain decimal
+   degrees in range, the type one of SPOT_TYPES or nothing, and the name is cleaned and only
+   ever set as text — React text in the card, textContent on the marker — never parsed as
+   markup. */
+
+/** Longest name a link carries or shows, in characters (code points). */
+export const SHARED_NAME_MAX = 60;
+/* C0/C1 controls, line and paragraph separators, zero-width space, BOM, and the bidi marks,
+   overrides and isolates (they can make a name read backwards or impersonate another). */
+// eslint-disable-next-line no-control-regex
+const NAME_JUNK_RE = /[\u0000-\u001F\u007F-\u009F\u200B\u200E\u200F\u2028\u2029\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g;
+/* Half of an emoji whose other half is gone (a backup's JSON can hold one, as can any code that
+   cut a string by UTF-16 units): encodeURIComponent throws on it. With the u flag a whole
+   surrogate pair is one code point, so this matches only the unpaired halves. (No lookbehind:
+   iOS 16.0-16.3 WebKit cannot parse it, and a regex it cannot parse takes the module down.) */
+const LONE_SURROGATE_RE = /[\uD800-\uDFFF]/gu;
+/* Plain decimal degrees only: optional minus, up to 3 integer digits, up to 10 decimals.
+   Number() alone would also take '1e2', '0x1f', 'Infinity' and ''. */
+const COORD_RE = /^\s*(-?\d{1,3}(?:\.\d{1,10})?)\s*,\s*(-?\d{1,3}(?:\.\d{1,10})?)\s*$/;
+
+/** A name fit to show and to put in a link: junk characters and broken emoji halves out,
+ *  whitespace collapsed, at most SHARED_NAME_MAX characters — counted in code points, so an
+ *  emoji is never cut in half. */
+export function cleanSpotName(raw) {
+  const s = String(raw == null ? '' : raw).replace(LONE_SURROGATE_RE, '').replace(NAME_JUNK_RE, ' ')
+    .replace(/\s+/g, ' ').trim();
+  let out = '', n = 0;
+  for (const ch of s) {
+    if (++n > SHARED_NAME_MAX) break;
+    out += ch;
+  }
+  return out.trim();
+}
+
+/** Longitude folded into [-180, 180). Leaflet reports taps on a neighbouring copy of the world
+ *  outside ±180, and a spot marked there must still make a link that passes the range check. */
+export function wrapLng(lng) {
+  return ((((lng + 180) % 360) + 360) % 360) - 180;
+}
+
+/** A position worth showing: finite, in range, and not 0,0 (a zeroed value, never a spot). */
+function validSpotPos(lat, lng) {
+  return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 &&
+    !(lat === 0 && lng === 0);
+}
+
+const round5 = (x) => Math.round(x * 1e5) / 1e5;
+
+/** Same place as far as a link can tell (it carries 5 decimals, about 1 m). */
+export function sameSpotPosition(a, b) {
+  if (!a || !b) return false;
+  return Math.abs(a.lat - b.lat) <= 1e-5 && Math.abs(wrapLng(a.lng) - wrapLng(b.lng)) <= 1e-5;
+}
+
+/** A spot type id from a link or a stored record, or undefined when it is not one of SPOT_TYPES
+ *  (a link from an older build has none; a hand-written one may have anything). */
+function sharedSpotType(t) {
+  return SPOT_TYPES.some((x) => x.id === t) ? /** @type {SpotType} */ (t) : undefined;
+}
+
+/** The share link for a spot, or null when it has no real position. */
+export function spotShareUrl(spot, base) {
+  if (!spot || spot.lat == null || spot.lng == null) return null;
+  const lat = Number(spot.lat), lng = wrapLng(Number(spot.lng));
+  if (!validSpotPos(lat, lng)) return null;
+  const type = sharedSpotType(spot.type);
+  return (base || SITE.siteUrl) + '#s=' + lat.toFixed(5) + ',' + lng.toFixed(5) + (type ? '&t=' + type : '') +
+    '&n=' + encodeURIComponent(cleanSpotName(spot.name));
+}
+
+/* The fragment's parameters if it is a shared-spot link (it has an `s` key), else null. Any
+   other fragment belongs to someone else and is left alone. URLSearchParams, not
+   decodeURIComponent: a stray '%' in a hand-edited link must not throw. */
+function spotLinkParams(hash) {
+  const frag = String(hash == null ? '' : hash).replace(/^#/, '');
+  if (!/(^|&)s(=|&|$)/.test(frag)) return null;
+  return new URLSearchParams(frag);
+}
+/** Is this fragment a shared-spot link (well-formed or not)? */
+export function isSpotLink(hash) {
+  return spotLinkParams(hash) !== null;
+}
+
+/** @typedef {{ lat: number, lng: number, name: string, type?: SpotType }} SharedSpot */
+
+/** A shared-spot fragment → { lat, lng, name, type? }, or null when it is not one or does not
+ *  check out. Positions are rounded to the 5 decimals a link carries; a type that is not one of
+ *  SPOT_TYPES is dropped, not trusted. @returns {SharedSpot|null} */
+export function parseSpotLink(hash) {
+  const p = spotLinkParams(hash);
+  if (!p) return null;
+  const raw = p.get('s') || '';
+  if (raw.length > 48) return null;
+  const m = COORD_RE.exec(raw);
+  if (!m) return null;
+  const lat = round5(Number(m[1])), lng = round5(Number(m[2]));
+  if (!validSpotPos(lat, lng)) return null;
+  return withType({ lat, lng, name: cleanSpotName(p.get('n')) }, p.get('t'));
+}
+
+/* The type key only when there is a valid one: a link without a type stays { lat, lng, name }. */
+function withType(spot, t) {
+  const type = sharedSpotType(t);
+  return type ? Object.assign(spot, { type }) : spot;
+}
+
+/** The shared spot on the chart that is not (yet) one of the user's spots, and its marker. */
+export const Shared = {
+  spot: /** @type {SharedSpot|null} */ (null),
+  marker: null,      // L.Marker
+};
+
+/** Share a spot as a link: the share sheet in the iOS app, Web Share on a phone, else the
+ *  clipboard (services/native decides). Nothing is awaited before shareText — Web Share only
+ *  opens inside the tap that asked for it. Never rejects: both buttons call it with `void`, so
+ *  a throw would be an unhandled rejection and a dead button — a failure says so in a toast. */
+export async function shareSpot(spot) {
+  try {
+    const url = spotShareUrl(spot);
+    if (!url) { toast('This spot has no position to share'); return 'cancelled'; }
+    const name = cleanSpotName(spot.name);
+    const res = await shareText({ text: 'Spot: ' + (name || 'unnamed'), url, title: name ? name + ' · ' + SITE.brandName : SITE.brandName });
+    if (res === 'copied') toast('Link copied');
+    return res;
+  } catch (e) {
+    console.error('[share spot]', e);
+    toast('Could not share this spot — ' + ((e && e.message) || e));
+    return 'cancelled';
+  }
+}
+
+/* The pending marker is built as DOM so the name can be set with textContent: it came from a
+   link, and is never parsed as markup. The disc and its glyph are static, and the type in the
+   class is one of SPOT_TYPES (parseSpotLink drops anything else), so a shared Hazard keeps its
+   alert keyline. A dashed keyline (spots-map.css) tells it apart from the user's own spots —
+   shape, not colour. */
+function drawSharedMarker(map, spot) {
+  const type = sharedSpotType(spot.type) || 'other';
+  const el = document.createElement('div');
+  el.className = 'spot-mk spot-mk--shared spot-mk--' + type;
+  el.innerHTML = '<span class="spot-mk__disc">' + spotGlyphSvg(type, 16) + '</span>';
+  if (spot.name) {
+    const chip = document.createElement('span');
+    chip.className = 'map-chip spot-mk__chip';
+    chip.textContent = spot.name;
+    el.appendChild(chip);
+  }
+  const icon = L.divIcon({ className: 'spot-mk-wrap', html: el, iconSize: [28, 28], iconAnchor: [14, 14] });
+  const label = 'Shared spot' + (spot.name ? ': ' + spot.name : '');
+  const m = L.marker([spot.lat, spot.lng], { icon, title: label, alt: label, riseOnHover: true, zIndexOffset: 500 });
+  // The card can be replaced by any other tap on the chart; the marker brings it back.
+  m.on('click', () => {
+    const ll = L.latLng(spot.lat, spot.lng);
+    if (typeof navHandleClick === 'function' && navHandleClick(ll)) return;
+    openSharedSpotCard(spot);
+  });
+  m.addTo(map);
+  Shared.marker = m;
+}
+
+function removeSharedMarker() {
+  if (!Shared.marker) return;
+  Shared.marker.remove();
+  Shared.marker = null;
+}
+
+export function openSharedSpotCard(spot) {
+  if (!spot) return;
+  openCard('shared-spot', withType({ lat: spot.lat, lng: spot.lng, name: spot.name || '' }, spot.type), { lat: spot.lat, lng: spot.lng });
+}
+
+/** Put a shared spot on the chart and open its card. Follow goes off, as for any "take me
+ *  there" move, so the first GPS fix does not pull the view straight back to the boat. On a
+ *  first run the card opens under the first-run notice and is there once it is dismissed
+ *  (the notice's privacy link hands it back too — shell/Onboarding). The spot is centred here;
+ *  once the card is laid out, placeSharedSpotClear moves it out from under the card. */
+export function showSharedSpot(s) {
+  if (!s || !validSpotPos(Number(s.lat), Number(s.lng))) return false;
+  const spot = withType({ lat: round5(Number(s.lat)), lng: round5(Number(s.lng)), name: cleanSpotName(s.name) }, s.type);
+  removeSharedMarker();
+  // Already one of the user's spots: its own marker is there, so no second one on top.
+  Shared.spot = Spots.all.some((x) => sameSpotPosition(x, spot)) ? null : spot;
+  writeSharedRec(spot, true);
+  const map = theMap();
+  if (map) {
+    closePanels();
+    setFollow(false);
+    /* Not animated: the card measures the spot's screen position as soon as it is laid out,
+       and a zoom animation would still be on its way there. */
+    mapProgrammatic(() => map.setView([spot.lat, spot.lng], Math.max(map.getZoom(), 14), { animate: false }));
+    if (Shared.spot) drawSharedMarker(map, spot);
+  }
+  openSharedSpotCard(spot);
+  const c = uiStore.getState().card;
+  _placeCardId = map && c ? c.id : 0;
+  return true;
+}
+
+/* ---- Keeping the spot clear of its card ----
+   Seeing WHERE the spot is is the point of a link, and on a phone the card docks across the
+   lower chart and grows upward with its content: on a short screen (an iPhone SE, any phone
+   Safari with its toolbars) it covers the middle, where the spot was centred. No fixed guess
+   fits every screen and name length, so the card, once laid out, hands over its rect and the
+   room around it (SharedSpotCard) and the chart moves the spot into the clear band between
+   the HUD and the card's top — or, when that band is too thin, into the strip under the card,
+   above the tab bar. Moving it, the name chip is kept clear of the control column on the right
+   (layers above, zoom keys below). Only the opening a link (or a restore after a reload) made
+   moves the chart: a card brought back by a tap on the marker leaves the view where the user
+   put it. */
+
+/** Room (px) kept between the spot's centre and the HUD, the card or the tab bar: the disc's
+ *  radius and its dashed keyline, and a little air. */
+export const SHARED_CLEAR_PX = 26;
+/** A band thinner than this (px) is no place to put the spot. */
+const SHARED_BAND_MIN = 60;
+/** From the spot's centre to its name chip's left edge (spots-map.css: chip at left 33px of the
+ *  28px marker), and the air kept between the chip's end and the control column. */
+const CHIP_OFFSET_PX = 19;
+const CHIP_AIR_PX = 8;
+/** The card showSharedSpot opened, until it has been laid out and the spot placed. */
+let _placeCardId = 0;
+
+/**
+ * Where (viewport px) the shared spot should go so its card does not cover it, or null when it
+ * is already in the clear. `pt` is the spot's viewport position. `room`: `top` is the HUD's
+ * bottom edge, `bottom` the tab bar's top (the screen's bottom without one), `card` the card's
+ * rect; optional `right` is the control column's left edge and `chip` the marker's name chip
+ * width, so a moved spot's name is not tucked under the zoom keys. Pure, so it is unit-tested.
+ * @param {{x: number, y: number}} pt
+ * @param {{top: number, bottom: number, right?: number, chip?: number, card: {top: number, bottom: number, left: number, right: number}}} room
+ * @returns {{x: number, y: number}|null}
+ */
+export function sharedSpotClearPoint(pt, room) {
+  const { top, bottom, card } = room;
+  const m = SHARED_CLEAR_PX;
+  const underCard = pt.x > card.left - m && pt.x < card.right + m && pt.y > card.top - m && pt.y < card.bottom + m;
+  if (!underCard && pt.y >= top + m && pt.y <= bottom - m) return null;
+  const above = card.top - top, below = bottom - card.bottom;
+  const useAbove = above >= SHARED_BAND_MIN || (below < SHARED_BAND_MIN && above >= below);
+  const y = Math.round(useAbove ? (top + card.top) / 2 : (card.bottom + bottom) / 2);
+  /* Only ever further left, to make room for the name — never past the card's left edge, which
+     is where the usable chart starts (the phone's gutter, the desktop rail). */
+  const maxX = room.right == null ? Infinity : room.right - CHIP_AIR_PX - CHIP_OFFSET_PX - (room.chip || 0);
+  const x = pt.x > maxX ? Math.min(pt.x, Math.max(card.left + m, maxX)) : pt.x;
+  return { x: Math.round(x), y };
+}
+
+/** SharedSpotCard, once laid out: move the chart so the spot the link opened is not under the
+ *  card. Acts once, and only for the card showSharedSpot opened. True when the chart moved. */
+export function placeSharedSpotClear(cardId, room) {
+  if (!cardId || cardId !== _placeCardId) return false;
+  _placeCardId = 0;
+  const map = theMap();
+  const c = uiStore.getState().card;
+  if (!map || !c || c.id !== cardId || !room || !room.card) return false;
+  if (typeof map.latLngToContainerPoint !== 'function' || typeof map.panBy !== 'function') return false;
+  const p = map.latLngToContainerPoint(L.latLng(c.data.lat, c.data.lng));
+  const box = map.getContainer().getBoundingClientRect();
+  const pt = { x: box.left + p.x, y: box.top + p.y };
+  const mk = Shared.marker && typeof Shared.marker.getElement === 'function' ? Shared.marker.getElement() : null;
+  const chip = mk ? mk.querySelector('.spot-mk__chip') : null;
+  const to = sharedSpotClearPoint(pt, Object.assign({ chip: chip ? chip.getBoundingClientRect().width : 0 }, room));
+  if (!to || (Math.abs(pt.x - to.x) < 1 && Math.abs(pt.y - to.y) < 1)) return false;
+  mapProgrammatic(() => map.panBy([pt.x - to.x, pt.y - to.y], { animate: false }));
+  return true;
+}
+
+/* ---- A pending shared spot survives a reload of its tab ----
+   The fragment is cleared as soon as a link is read (Back or a bookmark must not reopen it), so
+   the spot lived only in memory — and a reload often comes right after: the service worker
+   reloads into a new build a second or two after boot, and iOS Safari reloads a tab it evicted
+   while the user was off in Messages. sessionStorage is per tab and gone with it, so the spot
+   comes back in the tab that opened it and nowhere else. `card` says whether its card was on
+   screen: only then does a reload fly back and reopen it — once the card was closed and the
+   user moved on, a reload just redraws the marker and leaves the view and follow alone. */
+const SHARED_KEY = 'fishapp.sharedSpot';
+
+/** The stored pending spot, re-checked like a link (it is only ever this tab's own write, but a
+ *  bad value must not break the boot): { spot, card } or null. */
+function readSharedRec() {
+  let raw;
+  try { raw = sessionStorage.getItem(SHARED_KEY); } catch (e) { return null; }
+  if (!raw) return null;
+  let r;
+  try { r = JSON.parse(raw); } catch (e) { r = null; }
+  const lat = r ? Number(r.lat) : NaN, lng = r ? Number(r.lng) : NaN;
+  if (!validSpotPos(lat, lng)) { forgetShared(); return null; }
+  return { spot: withType({ lat: round5(lat), lng: round5(lng), name: cleanSpotName(r.name) }, r.type), card: !!r.card };
+}
+
+function writeSharedRec(spot, card) {
+  watchSharedCard();
+  try {
+    sessionStorage.setItem(SHARED_KEY, JSON.stringify({ lat: spot.lat, lng: spot.lng, name: spot.name, type: spot.type, card }));
+  } catch (e) { /* storage blocked or full: a reload loses the spot, as it did before */ }
+}
+
+function forgetShared() {
+  try { sessionStorage.removeItem(SHARED_KEY); } catch (e) { /* nothing stored */ }
+}
+
+const sharedCardOpen = (st) => !!(st.card && st.card.kind === 'shared-spot');
+let _sharedWatch = null;
+/* Keep the record's `card` in step with the screen, whatever closes the card (its x, Escape,
+   another card, a sheet opening) — and forget the spot when its card closes once it is no
+   longer pending (it was already, or has since become, one of the user's spots). */
+function watchSharedCard() {
+  if (_sharedWatch) return;
+  let open = sharedCardOpen(uiStore.getState());
+  _sharedWatch = uiStore.subscribe((st) => {
+    const now = sharedCardOpen(st);
+    if (now === open) return;
+    open = now;
+    const rec = readSharedRec();
+    if (!rec) return;
+    if (!now && !Shared.spot) forgetShared();
+    else writeSharedRec(rec.spot, now);
+  });
+}
+
+/** Boot with no spot link: bring back the spot a reload of this tab interrupted. Its card and
+ *  the view come back only if the card was on screen and `mayMove` (a chart-view link that has
+ *  just framed the chart keeps it); otherwise only the marker. True when something came back. */
+function restoreSharedSpot(mayMove) {
+  const rec = readSharedRec();
+  if (!rec) return false;
+  if (rec.card && mayMove) return showSharedSpot(rec.spot);
+  const map = theMap();
+  if (!map) return false;
+  if (Spots.all.some((x) => sameSpotPosition(x, rec.spot))) { forgetShared(); return false; }
+  removeSharedMarker();
+  Shared.spot = rec.spot;
+  drawSharedMarker(map, rec.spot);
+  writeSharedRec(rec.spot, false);
+  return true;
+}
+
+/** Drop the fragment, so a reload, a bookmark or Back does not open the spot again. */
+export function clearSpotLinkFragment() {
+  try { history.replaceState(history.state, '', location.pathname + location.search); } catch (e) { /* leaving it is harmless */ }
+}
+
+/** Handle a shared-spot link in the address bar (at boot, and on hashchange while open).
+ *  Returns true when a spot was shown. Other fragments are ignored and left in place. */
+export function handleSpotLink() {
+  let hash;
+  try { hash = window.location.hash; } catch (e) { return false; }
+  if (!isSpotLink(hash)) return false;
+  clearSpotLinkFragment();
+  const s = parseSpotLink(hash);
+  if (!s) {
+    toast('That spot link is damaged or incomplete — there is no position to show.', { ms: 5000 });
+    return false;
+  }
+  return showSharedSpot(s);
+}
+
+/* ---- Chart-view links ----
+   The public place pages (tools/web/places.mjs) open a marine protected area with
+   '#v=south,west,north,east': the chart frames that box and that is all — no pin, no card,
+   nothing to save as a fishing spot or start a Go-To to. A no-take reserve or a no-entry
+   Special Closure must never arrive looking like a spot. Untrusted input, like a spot link:
+   plain decimal degrees in range and a real box, or the chart does not move. */
+
+/** Closest a chart-view link zooms in: a small closure would otherwise fill the screen. */
+export const VIEW_LINK_MAX_ZOOM = 15;
+const DEG_RE = /^\s*-?\d{1,3}(?:\.\d{1,10})?\s*$/;
+
+function viewLinkParams(hash) {
+  const frag = String(hash == null ? '' : hash).replace(/^#/, '');
+  if (!/(^|&)v(=|&|$)/.test(frag)) return null;
+  return new URLSearchParams(frag);
+}
+/** Is this fragment a chart-view link (well-formed or not)? One that is also a spot link is a
+ *  spot link. */
+export function isViewLink(hash) {
+  return !isSpotLink(hash) && viewLinkParams(hash) !== null;
+}
+
+/** A chart-view fragment → { south, west, north, east }, or null when it is not one or does not
+ *  check out (out of range, inside out, or across the antimeridian). Rounded to 5 decimals. */
+export function parseViewLink(hash) {
+  if (!isViewLink(hash)) return null;
+  const raw = viewLinkParams(hash).get('v') || '';
+  if (raw.length > 96) return null;
+  const parts = raw.split(',');
+  if (parts.length !== 4 || !parts.every((x) => DEG_RE.test(x))) return null;
+  const [south, west, north, east] = parts.map((x) => round5(Number(x)));
+  const okLat = (x) => Math.abs(x) <= 90, okLng = (x) => Math.abs(x) <= 180;
+  if (!okLat(south) || !okLat(north) || !okLng(west) || !okLng(east) || south > north || west > east) return null;
+  return { south, west, north, east };
+}
+
+/** Frame a box on the chart. Panels close and follow goes off, as for a shared spot, so the
+ *  first GPS fix does not pull the view back to the boat. No marker, no card. */
+export function showLinkedView(b) {
+  const map = theMap();
+  if (!b || !map) return false;
+  closePanels();
+  setFollow(false);
+  mapProgrammatic(() => map.fitBounds([[b.south, b.west], [b.north, b.east]], { maxZoom: VIEW_LINK_MAX_ZOOM, padding: [24, 24] }));
+  return true;
+}
+
+/** Handle a chart-view link in the address bar; true when the chart moved. Other fragments are
+ *  ignored and left in place. */
+export function handleViewLink() {
+  let hash;
+  try { hash = window.location.hash; } catch (e) { return false; }
+  if (!isViewLink(hash)) return false;
+  clearSpotLinkFragment();
+  const b = parseViewLink(hash);
+  if (!b) {
+    toast('That chart link is damaged or incomplete — there is no area to show.', { ms: 5000 });
+    return false;
+  }
+  return showLinkedView(b);
+}
+
+let _spotLinksListening = false;
+/** Boot: the link the app was opened with, then any link opened while it runs. A spot link
+ *  (#s=) or a chart-view link (#v=); a malformed spot link clears the fragment, so it never
+ *  falls through to a view. With no spot link, a pending spot from before a reload of this
+ *  tab comes back (restoreSharedSpot). */
+export function spotLinksInit() {
+  const handle = () => handleSpotLink() || handleViewLink();
+  if (!_spotLinksListening) {
+    _spotLinksListening = true;
+    window.addEventListener('hashchange', () => { handle(); });
+  }
+  let hash = '';
+  try { hash = window.location.hash; } catch (e) { /* no address bar to read */ }
+  const linked = isSpotLink(hash);
+  const shown = handle();
+  return linked ? shown : restoreSharedSpot(!shown) || shown;
+}
+
+/** The shared card's Save: the spot editor, prefilled — with the type the link carried (a
+ *  Hazard stays a Hazard), else Fishing spot — so it can be renamed and retyped first. */
+export function saveSharedSpot(s) {
+  if (!s) return;
+  openSpotModal({ lat: s.lat, lng: s.lng, name: s.name || '', type: sharedSpotType(s.type) || 'fish' });
+}
+
+/** The shared card's Navigate: a Go-To to it. The pending marker stays until it is saved or
+ *  dismissed, so it can still be saved after the run is cancelled or done. */
+export async function navigateToSharedSpot(s) {
+  if (!s) return false;
+  closeCard('shared-spot');
+  return !!(await gotoStart({ lat: s.lat, lng: s.lng }, s.name || 'Shared spot'));
+}
+
+/** The shared card's Dismiss: off the chart, nothing kept (not even for a reload). */
+export function dismissSharedSpot() {
+  removeSharedMarker();
+  Shared.spot = null;
+  _placeCardId = 0;
+  forgetShared();
+  closeCard('shared-spot');
 }
 
 /* ---- List panel ---- */

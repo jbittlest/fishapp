@@ -10,6 +10,8 @@ import { Tides, nearestTideStation, ymd, noaaTimeMs } from './tides.js';
 import { getMap } from './app.js';
 import { closeCard, closeModal, closePanels, confirmDialog, openCard, openModal, toast, uiStore } from '../services/ui';
 import { saveOrShareFile } from '../services/native';
+import { reviewMoment } from '../services/review';
+import { SITE } from '../services/site';
 
 /* Catch log — record catches with species/size/photo, auto-capture conditions
    (water temp, tide phase, moon, wind), map markers, list, and simple stats.
@@ -454,6 +456,7 @@ export async function saveCatch(fields) {
     if (Catch._editing === e) closeCatchModal();
     toast('Catch logged');
     renderCatchList();
+    reviewMoment('catch');
     return true;
   } catch (err) {
     toast('Couldn\'t save that catch: ' + ((err && err.message) || err));
@@ -633,8 +636,8 @@ export async function deleteCatch(id, opts) {
   return true;
 }
 
-/* One line of captured conditions for the share card / list, no emoji:
-   "64°F water · incoming tide · Full Moon". */
+/* One line of captured conditions, no emoji (the share card draws the same three as chips —
+   catchCardConds): "64°F water · incoming tide · Full Moon". */
 export function catchCondLine(cond, sep) {
   const c = cond || {};
   return [
@@ -644,67 +647,684 @@ export function catchCondLine(cond, sep) {
   ].filter(Boolean).join(sep || ' · ');
 }
 
-/* Build a shareable catch card (photo + details) and share/download it.
-   1080×1080 PNG → saveOrShareFile: the share sheet in the iOS app (and iPhone Safari),
-   a download elsewhere. Resolves to what happened. */
-export async function makeCatchCard(c) {
-  try {
-    const S = 1080, F = ' Barlow, -apple-system,"Segoe UI",Roboto,sans-serif';
-    const cv = makeCanvas(S, S);
-    const ctx = cv.getContext('2d');
-    const photo = isSafePhotoUrl(c.photo) ? c.photo : null;
-    // background: the photo (cover) or the ink gradient with a fish glyph
-    let drewPhoto = false;
-    if (photo) {
-      const img = new Image();
-      await new Promise((res) => { img.onload = res; img.onerror = res; img.src = photo; });
-      if (img.naturalWidth) {
-        const r = Math.max(S / img.width, S / img.height);
-        ctx.drawImage(img, (S - img.width * r) / 2, (S - img.height * r) / 2, img.width * r, img.height * r);
-        drewPhoto = true;
+/* ------------------------------------------------------------------ share card
+   A catch card is made to be posted, so it is drawn for strangers' eyes. The position is left
+   off unless the angler turns it on for that one card (CatchCardOptions.showPosition): a spot
+   is the one thing anglers never give away, and the legacy card printed it on every share.
+   Notes stay off too (they tend to say where). Two formats: a square post and a 9:16 story.
+
+   It is an image other people look at, so it is always drawn in the Day palette (tokens.css;
+   canvas can't read CSS variables), whatever theme the app is in. */
+const CARD_COLOR = {
+  ink: '#0B131C',         // --chrome-solid
+  inkRgb: '11,19,28',
+  deepRgb: '6,11,17',     // --ink-950: the photo scrim
+  raised: '#152230',      // --raised
+  shoal: '#1B2C3E',       // the no-photo chart art's shallowest tint
+  text1: '#F3F6F9', text2: '#B4C0CC', text3: '#8493A3',
+  line: 'rgba(196,214,232,0.18)',   // --line-2
+  signal: '#FFB547',      // the one accent: the date and the brand mark
+};
+const CARD_FALLBACK = ', -apple-system, "Segoe UI", Roboto, sans-serif';
+const uiFont = (weight, px) => weight + ' ' + px + 'px Barlow' + CARD_FALLBACK;
+const instFont = (weight, px) => weight + ' ' + px + 'px "Barlow Semi Condensed", Barlow' + CARD_FALLBACK;
+/* Every face the card draws with. main.tsx bundles them all, but the browser only fetches a
+   face once something on screen uses it — a card drawn before that came out in the fallback. */
+export const CARD_FONT_FACES = ['500 40px Barlow', '600 40px Barlow', '700 40px Barlow', '600 40px "Barlow Semi Condensed"'];
+export const CARD_FONT_WAIT_MS = 3000;
+export const CARD_PHOTO_WAIT_MS = 8000;
+/* Catch photos put the fish a little above the middle (held at chest height), so a tall photo
+   cropped to the card keeps it. */
+const CARD_PHOTO_FOCUS = 0.42;
+/* Stories lay the reply bar over the bottom of a 9:16 image on 16:9 phones (~200 px of 1920);
+   the brand line sits above it. */
+const STORY_SAFE_BOTTOM = 200;
+
+/** @typedef {'post'|'story'} CatchCardFormat */
+/** @type {Record<CatchCardFormat, { w: number, h: number }>} */
+export const CATCH_CARD_SIZES = { post: { w: 1080, h: 1080 }, story: { w: 1080, h: 1920 } };
+
+/**
+ * @typedef {Object} CatchCardOptions
+ * @property {CatchCardFormat} [format]   'post' (1080×1080, the default) or 'story' (1080×1920)
+ * @property {boolean} [showPosition]     print the catch's coordinates. Only an explicit true
+ *   does; the share sheet starts every card with it off and never remembers it.
+ * @property {Blob|null} [rendered]       the card renderCatchCard already drew with these same
+ *   options (the share sheet's preview), shared as is
+ */
+/**
+ * @typedef {Object} CatchCardModel   everything the card prints, as text
+ * @property {CatchCardFormat} format
+ * @property {string} species
+ * @property {string} when            "Oct 24, 2026 · 6:42 AM" ('' for a broken timestamp)
+ * @property {Array<{ key: string, label: string, value: string, unit: string }>} stats
+ * @property {Array<{ key: string, icon: string, label: string, value: string, chip: string }>} conds
+ * @property {string|null} position   null unless this card asked for it
+ * @property {{ lead: string, name: string, url: string }} brand
+ */
+
+const capFirst = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+const NUMERIC = /^\d+(?:[.,]\d+)?$/;
+
+/* Length and weight as the card prints them. The form only takes numbers, but backup imports
+   can carry anything: a value that isn't a plain number is printed as typed, with no unit. */
+export function catchCardStats(c) {
+  const out = [];
+  [['length', 'in', 'Length'], ['weight', 'lb', 'Weight']].forEach(([key, unit, label]) => {
+    const v = str(c && c[key]).replace(/\s+/g, ' ').trim();
+    if (v) out.push({ key, label, value: v, unit: NUMERIC.test(v) ? unit : '' });
+  });
+  return out;
+}
+
+/* The captured conditions worth a stranger's glance — water temp, tide, moon — for whatever this
+   record has (catchCondLine's three, in the same order). */
+export function catchCardConds(cond) {
+  const c = condToView(cond);
+  const out = [];
+  if (c.sst != null) out.push({ key: 'water', icon: 'thermo', label: 'Water', value: Math.round(c.sst) + '°F', chip: Math.round(c.sst) + '°F water' });
+  if (c.tide) {
+    const tide = capFirst(c.tide.trim());
+    out.push({ key: 'tide', icon: c.tide === 'outgoing' ? 'tideOut' : 'tideIn', label: 'Tide', value: tide, chip: tide + ' tide' });
+  }
+  const moon = c.moon ? cleanMoonName(c.moon) : '';
+  if (moon) out.push({ key: 'moon', icon: 'moon', label: 'Moon', value: moon, chip: moon });
+  return out;
+}
+
+export function cardWhen(ts) {
+  const d = new Date(typeof ts === 'number' ? ts : NaN);
+  if (!Number.isFinite(d.getTime())) return '';
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) + ' · ' +
+    d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+/**
+ * What the card prints. Pure.
+ * @param {any} c   a CatchView (or a raw record)
+ * @param {CatchCardOptions} [opts]
+ * @returns {CatchCardModel}
+ */
+export function catchCardModel(c, opts) {
+  const o = opts || {};
+  // No usable position (a bad import) stays off even when asked for, rather than print 0°00.000'N.
+  const pos = o.showPosition === true ? catchPos(c) : null;
+  return {
+    format: o.format === 'story' ? 'story' : 'post',
+    species: str(c && c.species).replace(/\s+/g, ' ').trim() || 'Catch',
+    when: cardWhen(c && c.ts),
+    stats: catchCardStats(c),
+    conds: catchCardConds(c && c.cond),
+    position: pos ? formatCoord(pos.lat, 'lat') + '   ' + formatCoord(pos.lng, 'lon') : null,
+    brand: { lead: 'Logged with', name: SITE.brandName, url: SITE.shortUrl },
+  };
+}
+
+/* "Calico_Bass.png", "Calico_Bass_story.png": no path or reserved characters from the species. */
+export function cardFileName(species, format) {
+  const clean = Array.from(str(species)).filter((ch) => ch.charCodeAt(0) >= 32 && !'\\/:*?"<>|#%'.includes(ch)).join('');
+  const base = clean.trim().replace(/\s+/g, '_').slice(0, 60) || 'catch';
+  return base + (format === 'story' ? '_story' : '') + '.png';
+}
+
+/* ---- text fitting (pure; `measure(text, font)` is ctx.measureText's width, or a stand-in) */
+/** @typedef {(text: string, font: string) => number} MeasureFn */
+
+/* Greedy word wrap into lines no wider than maxWidth. A word wider than a whole line is broken
+   between characters (only fitText's last resort ever gets that far). */
+export function wrapWords(measure, text, font, maxWidth) {
+  const lines = [];
+  let cur = '';
+  for (const w of String(text).split(/\s+/).filter(Boolean)) {
+    const next = cur ? cur + ' ' + w : w;
+    if (measure(next, font) <= maxWidth) { cur = next; continue; }
+    if (cur) lines.push(cur);
+    cur = '';
+    for (const ch of Array.from(w)) {
+      if (cur && measure(cur + ch, font) > maxWidth) { lines.push(cur); cur = ch; } else cur += ch;
+    }
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+
+/* The two-line split whose longer line is shortest, so a headline breaks evenly
+   ("Pacific / Bluefin Tuna", not "Pacific Bluefin / Tuna") and can stay bigger. */
+export function balancedSplit(measure, text, font) {
+  const words = String(text).split(/\s+/).filter(Boolean);
+  if (words.length < 2) { const t = words.join(' '); return { lines: [t], width: measure(t, font) }; }
+  let best = null;
+  for (let i = 1; i < words.length; i++) {
+    const a = words.slice(0, i).join(' '), b = words.slice(i).join(' ');
+    const width = Math.max(measure(a, font), measure(b, font));
+    if (!best || width < best.width) best = { lines: [a, b], width };
+  }
+  return best;
+}
+
+/* `text` cut to fit maxWidth, ending in an ellipsis (unchanged when it already fits). Cuts after
+   a whole word when that still fills most of the line ("trophy…", not "t…"). */
+export function ellipsize(measure, text, font, maxWidth) {
+  const s = String(text);
+  if (measure(s, font) <= maxWidth) return s;
+  const chars = Array.from(s);
+  const cut = (n) => chars.slice(0, n).join('').trimEnd() + '…';
+  let lo = 0, hi = chars.length;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (measure(cut(mid), font) <= maxWidth) lo = mid; else hi = mid - 1;
+  }
+  if (lo < chars.length && chars[lo] !== ' ' && chars[lo - 1] !== ' ') {
+    const space = chars.lastIndexOf(' ', lo - 1);
+    if (space > 0 && measure(cut(space), font) >= maxWidth * 0.6) return cut(space);
+  }
+  return cut(lo);
+}
+
+/**
+ * Fit a headline into maxWidth at the largest size it can take: one line while that keeps it at
+ * least `oneLineFloor` of maxSize; else the fewest lines (balanced when two, up to maxLines) that
+ * fit at a bigger size than one line could; else one line shrunk to fit. Last resort (one
+ * enormous word, a pasted paragraph): minSize, wrapped, broken and ellipsized. The lines never
+ * exceed maxWidth and never number more than maxLines.
+ * @param {MeasureFn} measure
+ * @param {string} text
+ * @param {{ maxWidth: number, maxSize: number, minSize: number, maxLines?: number, oneLineFloor?: number, step?: number, font: (px: number) => string }} o
+ * @returns {{ size: number, font: string, lines: string[] }}
+ */
+export function fitText(measure, text, o) {
+  const t = String(text).replace(/\s+/g, ' ').trim();
+  const maxLines = Math.max(1, o.maxLines || 1), step = o.step || 2;
+  const floor = o.oneLineFloor == null ? 0.8 : o.oneLineFloor;
+  let one = 0;
+  for (let s = o.maxSize; s >= o.minSize; s -= step) {
+    if (measure(t, o.font(s)) <= o.maxWidth) { one = s; break; }
+  }
+  if (one && (maxLines === 1 || one >= o.maxSize * floor)) return { size: one, font: o.font(one), lines: [t] };
+  for (let k = 2; k <= maxLines; k++) {
+    for (let s = o.maxSize; s > one && s >= o.minSize; s -= step) {
+      const f = o.font(s);
+      if (k === 2) {
+        const b = balancedSplit(measure, t, f);
+        if (b.lines.length === 2 && b.width <= o.maxWidth) return { size: s, font: f, lines: b.lines };
+      } else {
+        const wl = wrapWords(measure, t, f, o.maxWidth);
+        // joined back unchanged = no word had to be broken
+        if (wl.length <= k && wl.join(' ') === t) return { size: s, font: f, lines: wl };
       }
     }
-    if (!drewPhoto) {
-      const bg = ctx.createLinearGradient(0, 0, S, S); bg.addColorStop(0, '#0B131C'); bg.addColorStop(1, '#152230');
-      ctx.fillStyle = bg; ctx.fillRect(0, 0, S, S);
-      drawFish(ctx, S / 2 - 200, S / 2 - 320, 400, 'rgba(243,246,249,0.9)', 1.6);
-    }
-    // bottom scrim + text
-    const g = ctx.createLinearGradient(0, S * 0.4, 0, S);
-    g.addColorStop(0, 'rgba(6,11,17,0)'); g.addColorStop(1, 'rgba(6,11,17,0.92)');
-    ctx.fillStyle = g; ctx.fillRect(0, 0, S, S);
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#F3F6F9';
-    ctx.font = '700 82px' + F; ctx.fillText(c.species || 'Catch', 56, S - 268);
-    const size = [c.length ? c.length + '"' : '', c.weight ? c.weight + ' lb' : ''].filter(Boolean).join('   ·   ');
-    ctx.font = '500 46px' + F; if (size) ctx.fillText(size, 56, S - 206);
-    const l2 = catchCondLine(condToView(c.cond), '    ·    ');
-    ctx.fillStyle = 'rgba(243,246,249,0.9)'; ctx.font = '500 38px' + F; if (l2) ctx.fillText(l2, 56, S - 150);
-    ctx.fillStyle = 'rgba(243,246,249,0.72)'; ctx.font = '500 34px' + F;
-    // No usable position (a bad import): leave it off rather than print 0°00.000'N.
-    const pos = catchPos(c);
-    ctx.fillText(new Date(c.ts).toLocaleDateString() + (pos ? '    ' + formatCoord(pos.lat, 'lat') + '  ' + formatCoord(pos.lng, 'lon') : ''), 56, S - 100);
-    drawFish(ctx, 56, S - 80, 44, '#FFB547', 2.4);
-    ctx.fillStyle = '#FFB547'; ctx.font = '700 42px' + F; ctx.fillText('FishApp', 112, S - 44);
+  }
+  if (one) return { size: one, font: o.font(one), lines: [t] };
+  const f = o.font(o.minSize);
+  const lines = wrapWords(measure, t, f, o.maxWidth);
+  if (lines.length > maxLines) {
+    const rest = lines.slice(maxLines - 1).join(' ');
+    lines.length = maxLines - 1;
+    lines.push(ellipsize(measure, rest, f, o.maxWidth));
+  }
+  return { size: o.minSize, font: f, lines };
+}
 
-    const blob = await new Promise((res) => cv.toBlob(res, 'image/png'));
+/* Chips flow left to right and wrap: rows of chip indexes, each row no wider than maxWidth. */
+export function flowRows(widths, maxWidth, gap) {
+  const rows = [];
+  let row = [], used = 0;
+  widths.forEach((w, i) => {
+    if (row.length && used + gap + w > maxWidth) { rows.push(row); row = []; used = 0; }
+    used += (row.length ? gap : 0) + w;
+    row.push(i);
+  });
+  if (row.length) rows.push(row);
+  return rows;
+}
+
+/* Source rectangle that cover-fits an iw×ih photo into a dw×dh box: centred across, and at
+   `focusY` (0 top … 1 bottom) of whatever height is cropped away. */
+export function photoCoverRect(iw, ih, dw, dh, focusY = 0.5) {
+  const scale = Math.max(dw / iw, dh / ih);
+  const sw = dw / scale, sh = dh / scale;
+  return { sx: (iw - sw) / 2, sy: Math.min(Math.max(0, (ih - sh) * focusY), ih - sh), sw, sh };
+}
+
+/* How bright a photo is under the text, 0…1, from RGBA pixels: the mean pulled toward the
+   brightest tenth (a white hull or sun glare under the species is what hurts legibility). */
+export function photoLuma(data) {
+  const n = Math.floor((data ? data.length : 0) / 4);
+  if (!n) return 0.5;
+  const ls = new Float32Array(n);
+  let sum = 0;
+  for (let i = 0; i < n; i++) {
+    const l = (0.2126 * data[i * 4] + 0.7152 * data[i * 4 + 1] + 0.0722 * data[i * 4 + 2]) / 255;
+    ls[i] = l; sum += l;
+  }
+  ls.sort();
+  return 0.5 * (sum / n) + 0.5 * ls[Math.min(n - 1, Math.floor(n * 0.9))];
+}
+
+/* Opacity of the ink scrim behind the text: white type stays readable on a bright deck or a
+   sunlit sea, and a dark photo isn't buried deeper than it needs. */
+export function scrimAlpha(luma) {
+  const l = Number.isFinite(luma) ? luma : 0.5;
+  const t = Math.min(1, Math.max(0, (l - 0.2) / 0.55));
+  return +(0.62 + 0.28 * t).toFixed(3);
+}
+
+/* ---- drawing */
+const TIDE_WAVES = [
+  'M2 16c1.6 0 2.4-1.5 4-1.5S8.4 16 10 16s2.4-1.5 4-1.5 2.4 1.5 4 1.5 2.4-1.5 4-1.5',
+  'M2 20.5c1.6 0 2.4-1.5 4-1.5s2.4 1.5 4 1.5 2.4-1.5 4-1.5 2.4 1.5 4 1.5 2.4-1.5 4-1.5',
+];
+/* 24-unit line glyphs, the app's Icon set (Lucide, ISC; tide from ui/Icon.tsx with its arrow
+   pointing the way the water is going). */
+const CARD_GLYPHS = {
+  fish: FISH_PATHS,
+  thermo: ['M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z'],
+  moon: ['M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401'],
+  tideIn: ['M12 3v8', 'M9 6l3-3 3 3', ...TIDE_WAVES],
+  tideOut: ['M12 3v8', 'M9 8l3 3 3-3', ...TIDE_WAVES],
+  pin: ['M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0', 'M15 10a3 3 0 1 1-6 0 3 3 0 1 1 6 0'],
+};
+
+function drawGlyph(ctx, name, x, y, size, color, stroke) {
+  const paths = CARD_GLYPHS[name];
+  if (!paths || typeof Path2D === 'undefined') return;
+  ctx.save();
+  ctx.translate(x, y); ctx.scale(size / 24, size / 24);
+  ctx.strokeStyle = color; ctx.lineWidth = stroke; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  paths.forEach((d) => ctx.stroke(new Path2D(d)));
+  ctx.restore();
+}
+
+const capH = (px) => Math.round(px * 0.7);   // Barlow's cap height: text boxes are laid out on it
+
+function measurer(ctx) {
+  return (text, font) => { ctx.font = font; return ctx.measureText(text).width; };
+}
+
+/* Tracked caps, a character at a time (canvas letterSpacing isn't in iOS 16 Safari). Only for
+   short labels and the date, which always fit. */
+function fillTracked(ctx, text, x, y, tracking) {
+  let cx = x;
+  for (const ch of Array.from(text)) { ctx.fillText(ch, cx, y); cx += ctx.measureText(ch).width + tracking; }
+}
+
+function roundRectPath(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function mixHex(a, b, t) {
+  const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
+  const ch = (s) => Math.round(((pa >> s) & 255) + (((pb >> s) & 255) - ((pa >> s) & 255)) * t);
+  return 'rgb(' + ch(16) + ',' + ch(8) + ',' + ch(0) + ')';
+}
+
+/* mulberry32: the no-photo art varies per catch but redraws identically every time. */
+function seededRandom(seed) {
+  let a = (seed >>> 0) || 1;
+  return () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* An ink scrim easing in from clear at y0 to `alpha` at y1, held to y2. One gradient with eased
+   stops: a straight two-stop ramp shows a hard edge across a smooth sky. */
+function fillScrim(ctx, rgb, w, y0, y1, y2, alpha) {
+  const span = Math.max(1, y2 - y0), knee = Math.min(1, Math.max(0, (y1 - y0) / span));
+  const g = ctx.createLinearGradient(0, y0, 0, y2);
+  for (let i = 0; i <= 10; i++) {
+    const t = i / 10, e = t * t * (3 - 2 * t);
+    g.addColorStop(t * knee, 'rgba(' + rgb + ',' + (alpha * e).toFixed(3) + ')');
+  }
+  g.addColorStop(1, 'rgba(' + rgb + ',' + alpha + ')');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, y0, w, span);
+}
+
+function drawPhotoCover(ctx, img, w, h) {
+  const r = photoCoverRect(img.naturalWidth, img.naturalHeight, w, h, CARD_PHOTO_FOCUS);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, r.sx, r.sy, r.sw, r.sh, 0, 0, w, h);
+  return r;
+}
+
+/* Brightness of the drawn photo between card rows y0 and y1 (a 24×12 thumbnail of that band). */
+function photoLumaUnder(img, r, cardH, y0, y1) {
+  try {
+    const cv = makeCanvas(24, 12);
+    const x = cv.getContext('2d', { willReadFrequently: true });
+    if (!x) return 0.5;
+    const f0 = Math.max(0, y0 / cardH), f1 = Math.min(1, y1 / cardH);
+    x.drawImage(img, r.sx, r.sy + r.sh * f0, r.sw, Math.max(1, r.sh * (f1 - f0)), 0, 0, 24, 12);
+    return photoLuma(x.getImageData(0, 0, 24, 12).data);
+  } catch (e) { return 0.5; }
+}
+
+/* No photo: an ink chart with depth contours shoaling toward the fish mark. Generic texture,
+   not the catch's water — it must not hint at the spot. */
+function drawChartArt(ctx, w, h, cx, cy, glyph, rnd) {
+  ctx.fillStyle = CARD_COLOR.ink;
+  ctx.fillRect(0, 0, w, h);
+  const ph = [rnd() * 6.283, rnd() * 6.283, rnd() * 6.283];
+  const reach = Math.hypot(Math.max(cx, w - cx), Math.max(cy, h - cy)) * 1.1;
+  const N = 15, step = reach / N;
+  for (let i = N; i >= 1; i--) {
+    const r = i * step, t = 1 - i / N;
+    ctx.beginPath();
+    for (let k = 0; k <= 144; k++) {
+      const a = (k / 144) * Math.PI * 2;
+      const wob = 1 + 0.10 * Math.sin(2 * a + ph[0] + i * 0.23) + 0.05 * Math.sin(3 * a + ph[1] - i * 0.17) + 0.025 * Math.sin(5 * a + ph[2] + i * 0.4);
+      const px = cx + Math.cos(a) * r * wob * 1.18, py = cy + Math.sin(a) * r * wob * 0.86;
+      if (k) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fillStyle = mixHex(CARD_COLOR.ink, CARD_COLOR.shoal, t * t);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(196,214,232,' + (0.05 + 0.07 * t).toFixed(3) + ')';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+  drawGlyph(ctx, 'fish', cx - glyph / 2, cy - glyph / 2, glyph, CARD_COLOR.signal, 1.2);
+}
+
+/* [fish] Logged with <brand>          <short url> — the signal glyph, then the url right-aligned
+   in whatever room is left (dropped rather than crammed). */
+function drawFooter(ctx, measure, brand, x, y, width, px) {
+  const glyph = Math.round(px * 1.35), gap = Math.round(px * 0.5);
+  const leadF = uiFont(500, px), nameF = uiFont(700, px);
+  const lead = brand.lead + ' ';
+  const leadW = measure(lead, leadF);
+  const name = ellipsize(measure, brand.name, nameF, Math.max(px * 3, width - glyph - gap - leadW));
+  const leftW = glyph + gap + leadW + measure(name, nameF);
+  const room = width - leftW - px * 1.5;
+  const url = room > px * 5 ? ellipsize(measure, brand.url, leadF, room) : '';
+  ctx.textAlign = 'left';
+  drawGlyph(ctx, 'fish', x, y - capH(px) / 2 - glyph / 2, glyph, CARD_COLOR.signal, 1.9);
+  ctx.font = leadF; ctx.fillStyle = CARD_COLOR.text2; ctx.fillText(lead, x + glyph + gap, y);
+  ctx.font = nameF; ctx.fillStyle = CARD_COLOR.text1; ctx.fillText(name, x + glyph + gap + leadW, y);
+  if (url) {
+    ctx.font = leadF; ctx.fillStyle = CARD_COLOR.text2;
+    ctx.textAlign = 'right'; ctx.fillText(url, x + width, y); ctx.textAlign = 'left';
+  }
+}
+
+/* Lay out a top-to-bottom stack of blocks ({h, gap, draw(top)}) so it ends at `bottom`.
+   Returns the stack's top. */
+function stackTop(blocks, bottom) {
+  const total = blocks.reduce((a, b, i) => a + b.h + (i < blocks.length - 1 ? b.gap : 0), 0);
+  return bottom - total;
+}
+function drawStack(blocks, top) {
+  let y = top;
+  blocks.forEach((b) => { b.draw(y); y += b.h + b.gap; });
+}
+
+const TEXT_SHADOW = 'rgba(6,11,17,0.45)';
+function withShadow(ctx, on, fn) {
+  if (!on) { fn(); return; }
+  ctx.save();
+  ctx.shadowColor = TEXT_SHADOW; ctx.shadowBlur = 18; ctx.shadowOffsetY = 2;
+  fn();
+  ctx.restore();
+}
+
+/* Post, 1080×1080: the photo full bleed, the details stacked bottom-left on a scrim sized to
+   them, the brand line under a hairline. */
+function drawPostCard(ctx, m, img, rnd) {
+  const { w: W, h: H } = CATCH_CARD_SIZES.post;
+  const M = 72, CW = W - 2 * M;
+  const measure = measurer(ctx);
+  const C = CARD_COLOR;
+  const onPhoto = !!img;
+
+  // Sized so a typical catch's details stay in the bottom ~38%: the photo is the point.
+  const sp = fitText(measure, m.species, { maxWidth: CW, maxSize: 104, minSize: 58, maxLines: 2, oneLineFloor: 0.68, font: (s) => uiFont(700, s) });
+  const spPitch = Math.round(sp.size * 1.04);
+
+  const STAT = 60, statF = instFont(600, STAT), unitF = uiFont(500, 32);
+  const statRoom = (CW - 54 * (m.stats.length - 1)) / Math.max(1, m.stats.length);
+  const stats = m.stats.map((s) => {
+    const unitW = s.unit ? 10 + measure(s.unit, unitF) : 0;
+    return { ...s, value: ellipsize(measure, s.value, statF, statRoom - unitW) };
+  });
+
+  const CH = { h: 56, pad: 20, icon: 26, gap: 12, px: 28 };
+  const chipItems = m.conds.map((c) => ({ icon: c.icon, text: c.chip, font: uiFont(500, CH.px) }));
+  if (m.position) chipItems.push({ icon: 'pin', text: m.position, font: instFont(600, CH.px) });
+  const chipInner = CH.pad * 2 + CH.icon + 12;
+  const chips = chipItems.map((ch) => {
+    const text = ellipsize(measure, ch.text, ch.font, CW - chipInner);
+    return { ...ch, text, w: chipInner + measure(text, ch.font) };
+  });
+  const rows = flowRows(chips.map((c) => c.w), CW, CH.gap);
+
+  const blocks = [];
+  if (m.when) {
+    blocks.push({
+      h: capH(26), gap: 22,
+      draw: (t) => { ctx.font = uiFont(600, 26); ctx.fillStyle = C.signal; fillTracked(ctx, m.when.toUpperCase(), M, t + capH(26), 2.6); },
+    });
+  }
+  blocks.push({
+    h: capH(sp.size) + (sp.lines.length - 1) * spPitch, gap: stats.length ? 30 : 34,
+    draw: (t) => withShadow(ctx, onPhoto, () => {
+      ctx.font = sp.font; ctx.fillStyle = C.text1;
+      sp.lines.forEach((line, i) => ctx.fillText(line, M, t + capH(sp.size) + i * spPitch));
+    }),
+  });
+  if (stats.length) {
+    blocks.push({
+      h: capH(STAT), gap: 34,
+      draw: (t) => withShadow(ctx, onPhoto, () => {
+        const base = t + capH(STAT);
+        let x = M;
+        stats.forEach((s, i) => {
+          if (i) { ctx.fillStyle = C.line; ctx.fillRect(x + 26, base - capH(STAT), 2, capH(STAT)); x += 54; }
+          ctx.font = statF; ctx.fillStyle = C.text1; ctx.fillText(s.value, x, base); x += measure(s.value, statF);
+          if (s.unit) { x += 10; ctx.font = unitF; ctx.fillStyle = C.text2; ctx.fillText(s.unit, x, base); x += measure(s.unit, unitF); }
+        });
+      }),
+    });
+  }
+  if (rows.length) {
+    blocks.push({
+      h: rows.length * CH.h + (rows.length - 1) * CH.gap, gap: 0,
+      draw: (t) => rows.forEach((row, ri) => {
+        const y = t + ri * (CH.h + CH.gap);
+        let x = M;
+        row.forEach((i) => {
+          const ch = chips[i];
+          roundRectPath(ctx, x, y, ch.w, CH.h, CH.h / 2);
+          ctx.fillStyle = onPhoto ? 'rgba(' + C.deepRgb + ',0.55)' : C.raised; ctx.fill();
+          ctx.strokeStyle = C.line; ctx.lineWidth = 2; ctx.stroke();
+          drawGlyph(ctx, ch.icon, x + CH.pad, y + (CH.h - CH.icon) / 2, CH.icon, C.text2, 2);
+          ctx.font = ch.font; ctx.fillStyle = C.text1;
+          ctx.fillText(ch.text, x + CH.pad + CH.icon + 12, y + CH.h / 2 + capH(CH.px) / 2);
+          x += ch.w + CH.gap;
+        });
+      }),
+    });
+  }
+
+  const footY = H - 56, rule = footY - capH(26) - 28, top = stackTop(blocks, rule - 36);
+  if (img) {
+    const r = drawPhotoCover(ctx, img, W, H);
+    fillScrim(ctx, C.deepRgb, W, Math.max(0, top - 260), top - 24, H, scrimAlpha(photoLumaUnder(img, r, H, top - 40, H)));
+  } else {
+    const glyph = Math.max(120, Math.min(280, top - 200));
+    drawChartArt(ctx, W, H, W * 0.5, Math.max(glyph / 2 + 60, (top - 40) / 2), glyph, rnd);
+    fillScrim(ctx, C.inkRgb, W, Math.max(0, top - 160), top - 24, H, 0.88);
+  }
+  drawStack(blocks, top);
+  ctx.fillStyle = C.line; ctx.fillRect(M, rule, CW, 2);
+  drawFooter(ctx, measure, m.brand, M, footY, CW, 26);
+}
+
+/* Story, 1080×1920: the photo (or the chart art) takes the top and fades into ink; the details
+   sit below it in labelled columns, and the brand line stays clear of the reply bar. */
+function drawStoryCard(ctx, m, img, rnd) {
+  const { w: W, h: H } = CATCH_CARD_SIZES.story;
+  const M = 80, CW = W - 2 * M;
+  const measure = measurer(ctx);
+  const C = CARD_COLOR;
+  const labelF = uiFont(600, 26), LT = 2.6;
+
+  const sp = fitText(measure, m.species, { maxWidth: CW, maxSize: 132, minSize: 72, maxLines: 3, oneLineFloor: 0.8, font: (s) => uiFont(700, s) });
+  const spPitch = Math.round(sp.size * 1.04);
+
+  /* label (caps) over value, in equal columns */
+  const column = (x, y, colW, label, icon, drawValue) => {
+    let lx = x;
+    if (icon) { drawGlyph(ctx, icon, x, y - 4, 30, C.text3, 2); lx += 42; }
+    ctx.font = labelF; ctx.fillStyle = C.text3;
+    fillTracked(ctx, ellipsize(measure, label.toUpperCase(), labelF, colW - (lx - x)), lx, y + capH(26) + 2, LT);
+    drawValue(x, colW);
+  };
+
+  const statF = instFont(600, 112), unitF = uiFont(500, 40);
+  const statColW = (CW - 48) / 2;
+  const condColW = m.conds.length ? (CW - 40 * (m.conds.length - 1)) / m.conds.length : CW;
+
+  const blocks = [];
+  if (m.when) {
+    blocks.push({
+      h: capH(32), gap: 30,
+      draw: (t) => { ctx.font = uiFont(600, 32); ctx.fillStyle = C.signal; fillTracked(ctx, m.when.toUpperCase(), M, t + capH(32), 3); },
+    });
+  }
+  blocks.push({
+    h: capH(sp.size) + (sp.lines.length - 1) * spPitch, gap: 64,
+    draw: (t) => { ctx.font = sp.font; ctx.fillStyle = C.text1; sp.lines.forEach((l, i) => ctx.fillText(l, M, t + capH(sp.size) + i * spPitch)); },
+  });
+  if (m.stats.length) {
+    const h = capH(26) + 30 + capH(112);
+    blocks.push({
+      h, gap: 64,
+      draw: (t) => m.stats.forEach((s, i) => column(M + i * (statColW + 48), t, statColW, s.label, null, (x, colW) => {
+        const base = t + h;
+        const unitW = s.unit ? 12 + measure(s.unit, unitF) : 0;
+        const v = ellipsize(measure, s.value, statF, colW - unitW);
+        ctx.font = statF; ctx.fillStyle = C.text1; ctx.fillText(v, x, base);
+        if (s.unit) { ctx.font = unitF; ctx.fillStyle = C.text2; ctx.fillText(s.unit, x + measure(v, statF) + 12, base); }
+      })),
+    });
+  }
+  if (m.conds.length) {
+    const h = capH(26) + 32 + capH(46);
+    blocks.push({
+      h, gap: m.position ? 56 : 0,
+      draw: (t) => m.conds.forEach((c, i) => column(M + i * (condColW + 40), t, condColW, c.label, c.icon, (x, colW) => {
+        const v = fitText(measure, c.value, { maxWidth: colW, maxSize: 46, minSize: 32, font: (s) => uiFont(600, s) });
+        ctx.font = v.font; ctx.fillStyle = C.text1; ctx.fillText(v.lines[0], x, t + h);
+      })),
+    });
+  }
+  if (m.position) {
+    const h = capH(26) + 32 + capH(46);
+    blocks.push({
+      h, gap: 0,
+      draw: (t) => column(M, t, CW, 'Position', 'pin', (x, colW) => {
+        const v = fitText(measure, m.position, { maxWidth: colW, maxSize: 46, minSize: 30, font: (s) => instFont(600, s) });
+        ctx.font = v.font; ctx.fillStyle = C.text1; ctx.fillText(v.lines[0], x, t + h);
+      }),
+    });
+  }
+
+  /* The photo gets every pixel the details don't need, and ends in a short fade just above the
+     date: a long fade over a bright photo goes muddy grey, and type on it gets hard to read. */
+  const footY = H - STORY_SAFE_BOTTOM, rule = footY - capH(30) - 40, top = stackTop(blocks, rule - 64);
+  const artBottom = Math.max(640, top - 64);
+  ctx.fillStyle = C.ink;
+  ctx.fillRect(0, 0, W, H);
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, 0, W, artBottom); ctx.clip();
+  if (img) drawPhotoCover(ctx, img, W, artBottom);
+  else {
+    const glyph = Math.max(180, Math.min(340, artBottom * 0.32));
+    drawChartArt(ctx, W, artBottom, W * 0.5, artBottom * 0.52, glyph, rnd);
+  }
+  ctx.restore();
+  fillScrim(ctx, C.inkRgb, W, artBottom - 170, artBottom, artBottom, 1);
+  drawStack(blocks, top);
+  ctx.fillStyle = C.line; ctx.fillRect(M, rule, CW, 2);
+  drawFooter(ctx, measure, m.brand, M, footY, CW, 30);
+}
+
+function loadCardPhoto(src) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    let timer;
+    /* naturalWidth/Height are already turned upright: browsers apply a photo's EXIF orientation
+       to images (and to drawImage) by default, so a portrait shot stays portrait. */
+    const done = (ok) => { clearTimeout(timer); resolve(ok && img.naturalWidth && img.naturalHeight ? img : null); };
+    timer = setTimeout(() => done(false), CARD_PHOTO_WAIT_MS);
+    img.onload = () => done(true);
+    img.onerror = () => done(false);
+    img.src = src;
+  });
+}
+
+/* Wait (briefly) for every Barlow face the card uses; a canvas never waits for a web font. */
+async function cardFontsReady() {
+  const fonts = typeof document !== 'undefined' ? document.fonts : null;
+  if (!fonts || typeof fonts.load !== 'function') return;
+  let timer;
+  try {
+    await Promise.race([
+      Promise.all(CARD_FONT_FACES.map((f) => fonts.load(f))),
+      new Promise((r) => { timer = setTimeout(r, CARD_FONT_WAIT_MS); }),
+    ]);
+  } catch (e) { /* drawn with what loaded */ } finally { clearTimeout(timer); }
+}
+
+/**
+ * Draw the share card as a PNG. Resolves null when this device can't (no canvas, no blob).
+ * @param {any} c   a CatchView
+ * @param {CatchCardOptions} [opts]
+ * @returns {Promise<Blob|null>}
+ */
+export async function renderCatchCard(c, opts) {
+  try {
+    const m = catchCardModel(c, opts);
+    const size = CATCH_CARD_SIZES[m.format];
+    const photo = c && isSafePhotoUrl(c.photo) ? c.photo : null;
+    const [img] = await Promise.all([photo ? loadCardPhoto(photo) : null, cardFontsReady()]);
+    const cv = makeCanvas(size.w, size.h);
+    const ctx = cv.getContext('2d');
+    if (!ctx) return null;
+    const seed = (Math.floor((Number(c && c.ts) || 0) / 1000) ^ Math.imul(Number(c && c.id) || 0, 2654435761)) >>> 0;
+    (m.format === 'story' ? drawStoryCard : drawPostCard)(ctx, m, img, seededRandom(seed));
+    return await new Promise((res) => cv.toBlob((b) => res(b || null), 'image/png'));
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Make the share card and hand it on: the share sheet in the iOS app (and iPhone Safari), a
+ * download elsewhere. Resolves to what happened ('failed' after its own toast).
+ * @param {any} c   a CatchView
+ * @param {CatchCardOptions} [opts]
+ * @returns {Promise<'shared'|'downloaded'|'cancelled'|'failed'>}
+ */
+export async function makeCatchCard(c, opts) {
+  const o = opts || {};
+  try {
+    const blob = o.rendered || await renderCatchCard(c, o);
     if (!blob) { toast('Could not make card'); return 'failed'; }
-    const name = (c.species || 'catch').replace(/\s+/g, '_') + '.png';
-    const how = await saveOrShareFile({ name, mime: 'image/png', data: blob, title: 'My catch' });
+    const how = await saveOrShareFile({ name: cardFileName(c && c.species, o.format), mime: 'image/png', data: blob, title: 'My catch' });
     if (how === 'downloaded') toast('Catch card saved');
     return how;
   } catch (e) {
     toast('Could not make card');
     return 'failed';
   }
-}
-
-/* The Lucide fish glyph (24-unit grid) stroked onto a canvas at (x, y), `size` px square. */
-function drawFish(ctx, x, y, size, color, stroke) {
-  if (typeof Path2D === 'undefined') return;
-  ctx.save();
-  ctx.translate(x, y); ctx.scale(size / 24, size / 24);
-  ctx.strokeStyle = color; ctx.lineWidth = stroke; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  FISH_PATHS.forEach((d) => ctx.stroke(new Path2D(d)));
-  ctx.restore();
 }

@@ -17,29 +17,51 @@ export function tileBBox3857(z, x, y) {
   return xmin + ',' + ymin + ',' + xmax + ',' + ymax;
 }
 
-/* All available layers. urlFor(z,x,y) builds the network URL for one tile. */
+/* Credit links open outside the app: target=_blank goes to the browser on the web and to Safari
+   from the iOS shell (NativeBridge), and never navigates the chart itself away. */
+const link = (href, text) => '<a href="' + href + '" target="_blank" rel="noopener noreferrer">' + text + '</a>';
+
+/* All available layers. urlFor(z,x,y) builds the network URL for one tile.
+
+   `offline` says whether the source's terms let us keep its tiles on the device — in an area
+   download or in the browse cache. An offline:false layer still shows live (the browser's own
+   HTTP cache, which honours the server's headers, is all it gets), is never written to or read
+   from IndexedDB, is left out of downloads, and has any copy an older build stored swept at
+   launch (download.js sweepUnkeepableTiles); `offlineNote` is the download panel's reason line.
+   The policies are quoted in docs/launch/data-sources.md. */
 export const LAYERS = {
   ocean: {
     id: 'ocean', name: 'Ocean base', kind: 'base', maxNativeZoom: 13,
-    attribution: 'Esri, GEBCO, NOAA',
+    // Esri terms: no tile harvesting except Esri Content Packages, and an ArcGIS subscription outside Esri software
+    offline: false,
+    offlineNote: "Ocean base isn't saved — Esri doesn't allow offline copies",
+    attribution: 'Esri, GEBCO, NOAA, Garmin, and other contributors',
     urlFor: (z, x, y) => `https://services.arcgisonline.com/arcgis/rest/services/Ocean/World_Ocean_Base/MapServer/tile/${z}/${y}/${x}`,
   },
   sat: {
     id: 'sat', name: 'Satellite', kind: 'base', maxNativeZoom: 19,
-    attribution: 'Esri, Maxar',
+    // same Esri terms; the World Imagery item also says it is not for exporting tiles for offline use
+    offline: false,
+    offlineNote: "Satellite isn't saved — Esri doesn't allow offline copies",
+    attribution: 'Esri, Vantor, Earthstar Geographics, and the GIS User Community',
     urlFor: (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`,
   },
   street: {
-    id: 'street', name: 'Street', kind: 'base', maxNativeZoom: 19,
-    attribution: '© OpenStreetMap contributors',
+    id: 'street', name: 'Street map', kind: 'base', maxNativeZoom: 19,
+    // OSMF tile usage policy: "Offline use is not permitted" on tile.openstreetmap.org
+    offline: false,
+    offlineNote: "Street map isn't saved — OpenStreetMap doesn't allow offline copies",
+    attribution: '© ' + link('https://www.openstreetmap.org/copyright', 'OpenStreetMap') + ' contributors',
     urlFor: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`,
   },
   gmrt: {
     /* Seafloor relief BASE — GEBCO pre-cached tiles (~0.4s each). Cache tops out at z10;
        beyond that it upscales (soft) but shows INSTANTLY, so the map is never blank. The
        'reliefhi' overlay sharpens it when you zoom in. */
-    id: 'gmrt', name: 'Seafloor relief', kind: 'base', maxNativeZoom: 10,
-    attribution: 'GEBCO',
+    id: 'gmrt', name: 'Seafloor relief (GEBCO)', kind: 'base', maxNativeZoom: 10,
+    // the GEBCO grid is public domain; this item is owned by NOAA NCEI and sets no export restriction
+    offline: true,
+    attribution: 'GEBCO, NOAA NCEI',
     urlFor: (z, x, y) =>
       'https://tiles.arcgis.com/tiles/C8EMgrsFcRFL6LrL/arcgis/rest/services/GEBCO_basemap_NCEI/MapServer/tile/' +
       z + '/' + y + '/' + x,
@@ -57,6 +79,7 @@ export const LAYERS = {
        the edges rather than ending at a hard rectangle. */
     id: 'bluetint', name: 'Seafloor relief (US)', kind: 'base',
     tileSize: 512, maxNativeZoom: 17, minBytes: 3000,
+    offline: true,   // US Government work; the WMTS capabilities list Fees NONE, AccessConstraints NONE
     attribution: 'NOAA BlueTopo / National Bathymetric Source',
     urlFor: (z, x, y) =>
       'https://nowcoast.noaa.gov/geoserver/gwc/service/wmts/rest/bluetopo:bathymetry/' +
@@ -69,7 +92,8 @@ export const LAYERS = {
        carves the slopes and leaves flat bottom alone. */
     id: 'blueshade', name: 'Seafloor relief detail (US)', kind: 'overlay',
     tileSize: 512, minZoom: 11, maxNativeZoom: 14, minBytes: 3000,
-    attribution: 'NOAA BlueTopo',
+    offline: true,   // same NOAA service as bluetint
+    attribution: 'NOAA BlueTopo / National Bathymetric Source',   // identical text, so the credit shows once
     urlFor: (z, x, y) =>
       'https://nowcoast.noaa.gov/geoserver/gwc/service/wmts/rest/bluetopo:hillshade/' +
       'nbs_hillshade/EPSG:3857/EPSG:3857:' + (z - 1) + '/' + y + '/' + x + '?format=image/png8',
@@ -87,7 +111,8 @@ export const LAYERS = {
        covers 4× the ground → ~4× fewer of these slow tiles per view. A 512 tile at
        (z,x,y) spans the same area as a standard 256 tile at (z-1,x,y), so bbox uses z-1. */
     id: 'reliefhi', name: 'Seafloor relief detail', kind: 'overlay', minZoom: 11, maxNativeZoom: 12, tileSize: 512, tilePx: 1024,
-    attribution: 'GMRT',
+    offline: true,   // GMRT is CC BY 4.0: keeping copies is fine with the credit, which asks for a link and the citation
+    attribution: link('https://www.gmrt.org/', 'GMRT') + ' (Ryan et al., 2009)',
     urlFor: (z, x, y, px) =>
       'https://www.gmrt.org/services/mapserver/wms_merc?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=GMRT&STYLES=&SRS=EPSG:3857' +
       '&BBOX=' + tileBBox3857(z - 1, x, y) + '&WIDTH=' + px + '&HEIGHT=' + px + '&FORMAT=image/png',
@@ -97,6 +122,7 @@ export const LAYERS = {
        Transparent where there is no survey, so GMRT shows through underneath.
        On-demand renderer: render fresh to high zoom + 2x px for retina crispness. */
     id: 'ncei', name: 'Hi-res coastal relief', kind: 'overlay', minZoom: 11, maxNativeZoom: 19, tileSize: 512, tilePx: 1024,
+    offline: true,   // US Government work
     attribution: 'NOAA NCEI',
     urlFor: (z, x, y, px) =>
       'https://gis.ngdc.noaa.gov/arcgis/rest/services/DEM_mosaics/DEM_all/ImageServer/exportImage' +
@@ -105,7 +131,13 @@ export const LAYERS = {
       '&renderingRule=%7B%22rasterFunction%22%3A%22ColorHillshade%22%7D&f=image',
   },
   labels: {
-    id: 'labels', name: 'Place labels', kind: 'overlay', maxNativeZoom: 18,
+    /* RETIRED: CARTO now answers keyless requests with an "API KEY REQUIRED" watermark tile, and
+       its basemap terms bar display on a moving vehicle (14.a(2)) and device caching past 30 days
+       (9.c(2)), so a key would not make it usable on a boat either. It is never put on the map;
+       the entry stays so the launch sweep (download.js) still removes its stored tiles and
+       corrects the areas saved before then. */
+    id: 'labels', name: 'Place labels', kind: 'overlay', maxNativeZoom: 18, retired: true,
+    offline: false,
     attribution: '© CARTO, © OpenStreetMap',
     urlFor: (z, x, y) => `https://basemaps.cartocdn.com/light_only_labels/${z}/${x}/${y}.png`,
   },
@@ -113,7 +145,8 @@ export const LAYERS = {
     /* Vector nautical chart — depth contours + soundings stay crisp at any zoom.
        On-demand renderer: render fresh to high zoom + 2x px for retina. */
     id: 'enc', name: 'NOAA charts', kind: 'overlay', maxNativeZoom: 18, minZoom: 6, tileSize: 512, tilePx: 1024,
-    attribution: 'NOAA ENC',
+    offline: true,   // public domain (US Government work); NOAA also publishes these charts for offline use
+    attribution: 'NOAA Office of Coast Survey',
     urlFor: (z, x, y, px) =>
       'https://gis.charttools.noaa.gov/arcgis/rest/services/MCS/ENCOnline/MapServer/exts/MaritimeChartService/MapServer/export' +
       '?bbox=' + tileBBox3857(z - 1, x, y) +
@@ -121,16 +154,35 @@ export const LAYERS = {
   },
   seamark: {
     id: 'seamark', name: 'Seamarks', kind: 'overlay', maxNativeZoom: 18, minZoom: 9,
-    attribution: '© OpenSeaMap',
+    // volunteer-run with no published tile-server policy: live only until OpenSeaMap agrees to bulk copies
+    offline: false,
+    offlineNote: "Seamarks aren't saved — OpenSeaMap hasn't given permission for offline copies",
+    attribution: '© ' + link('https://www.openseamap.org/', 'OpenSeaMap') + ' and ' +
+      link('https://www.openstreetmap.org/copyright', 'OpenStreetMap') + ' contributors, CC BY-SA',
     urlFor: (z, x, y) => `https://tiles.openseamap.org/seamark/${z}/${x}/${y}.png`,
   },
 };
 
+/** The base a download saves in place of one whose terms forbid offline copies, and the layer the
+ *  live map draws under such a base so those saved tiles show when the base cannot load: GEBCO is
+ *  global, free to keep, and looks most like the Esri ocean base it usually stands in for. */
+export const OFFLINE_BASE = 'gmrt';
+
+/** May this layer's tiles be kept on the device (browse cache and area downloads)? */
+export function canSaveOffline(id) {
+  const def = LAYERS[id];
+  return !!(def && def.offline);
+}
+
 /*
  * Offline-first tile layer:
  *  1. look in IndexedDB
- *  2. else fetch from network and cache it (so every area you browse becomes offline-usable)
+ *  2. else fetch from network and cache it (so every area you browse becomes offline-usable) —
+ *     only for layers whose terms allow it (`offline`); under a base that may not be stored,
+ *     the GEBCO layer layers.js draws beneath it is what keeps a browsed area usable
  *  3. else show an empty tile
+ * A layer that may not be stored skips step 1 too: a copy an older build (or the /classic/ app on
+ * this origin) left in IndexedDB is never shown, and the launch sweep removes it.
  * maxNativeZoom lets Leaflet upscale downloaded tiles when zooming past the stored detail.
  */
 export const OfflineTileLayer = L.TileLayer.extend({
@@ -165,7 +217,8 @@ export const OfflineTileLayer = L.TileLayer.extend({
                one through and an area download quietly fills IndexedDB with nothing. Layers
                that have a known blank size declare minBytes. */
             if (b && b.type.indexOf('image') === 0 && b.size > (def.minBytes || 0)) {
-              putTileBlob(key, b);
+              // a full store only costs this tile its offline copy — the chart still draws it
+              if (def.offline) putTileBlob(key, b).catch(() => {});
               img._objUrl = URL.createObjectURL(b);
               img.src = img._objUrl;
             } else if (attempt < 1) {
@@ -183,7 +236,8 @@ export const OfflineTileLayer = L.TileLayer.extend({
 
     // Fast path: once the offline key index is loaded, a key that isn't in it is
     // definitely not stored — skip the IndexedDB read and hit the network straight away.
-    if (tileKeysReady && !TileKeys.has(key)) { fromNetwork(); return img; }
+    // A layer that may not be kept never reads IndexedDB at all (see above).
+    if (!def.offline || (tileKeysReady && !TileKeys.has(key))) { fromNetwork(); return img; }
 
     getTileBlob(key).then((blob) => {
       if (blob instanceof Blob) {

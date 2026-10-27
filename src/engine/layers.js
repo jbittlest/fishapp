@@ -4,7 +4,8 @@
    so the layer state has exactly one owner (layersStore) and one persisted copy (fishapp.layers). */
 'use strict';
 import { createStore } from 'zustand/vanilla';
-import { makeLayer } from './tiles.js';
+import { OFFLINE_BASE, canSaveOffline, makeLayer } from './tiles.js';
+import { _db } from './db.js';
 import { readJSON } from './app.js';
 import { windOverlayEnable } from './weather.js';
 import { sstEnable } from './sst.js';
@@ -47,13 +48,12 @@ function savePrefs() {
   try { localStorage.setItem('fishapp.layers', JSON.stringify(prefs)); } catch (e) {}
 }
 
-/** The chart layers the map shows for a layer state — the base, its companions (labels, relief
- *  detail) and the chart overlays. The offline downloader uses this so a downloaded area always
- *  holds exactly what the chart displays. */
+/** The chart layers the map shows for a layer state — the base, its relief-detail companion and
+ *  the chart overlays. The offline downloader starts from this, so a downloaded area holds what
+ *  the chart displays except the layers whose terms forbid offline copies (download.js). */
 export function chartLayerIds(state) {
   const s = state || layersStore.getState();
   const ids = [s.base];
-  if (s.base === 'gmrt' || s.base === 'bluetint' || s.base === 'sat') ids.push('labels');
   if (RELIEF_DETAIL[s.base]) ids.push(RELIEF_DETAIL[s.base]);
   if (s.enc) ids.push('enc');
   if (s.seamark) ids.push('seamark');
@@ -61,7 +61,7 @@ export function chartLayerIds(state) {
 }
 
 let map = null;
-const live = { base: null, enc: null, seamark: null, labels: null, reliefhi: null, blueshade: null };
+const live = { base: null, enc: null, seamark: null, reliefhi: null, blueshade: null, fallback: null };
 /* The two relief bases and the detail overlay each pairs with. Both want the NOAA vector
    chart on top, because the multiply blend in updateEncBlend() is the other half of the
    look: it drops the chart's white deep water to transparent while keeping contours and
@@ -96,10 +96,23 @@ function fadeOutRemove(layer) {
 /** Called once by boot after the map exists. Builds the saved base + chart overlays. */
 export function initLayers(m) {
   map = m;
+  sweepUnkeepableTiles();
   const s = layersStore.getState();
   setBase(s.base);
   setOverlay('enc', !!s.enc);
   setOverlay('seamark', !!s.seamark);
+}
+
+/* Every launch: remove the stored tiles of the layers whose terms forbid keeping them — the
+   retired CARTO labels (watermark images now, and CARTO allows no device copy past 30 days), and
+   the Esri, OpenStreetMap and OpenSeaMap tiles older builds cached and the /classic/ app on this
+   origin still caches — and correct the saved areas that named them (download.js). Not a one-time
+   flag: an interrupted sweep commits nothing and is simply run again, and a cheap no-op once the
+   store is clean. Never awaited, so it cannot hold up boot; download.js is loaded on demand, as
+   its panel is. Skipped while offline storage is not open. */
+function sweepUnkeepableTiles() {
+  if (!_db) return;
+  import('./download.js').then((m) => m.sweepUnkeepableTiles()).catch(() => {});
 }
 
 export function setBase(id, isUserAction) {
@@ -108,10 +121,15 @@ export function setBase(id, isUserAction) {
   live.base = trackLayer(makeLayer(id)).addTo(map);
   live.base.setZIndex(0);
   if (prevBase) fadeOutRemove(prevBase);   // cross-fade rather than a hard swap
-  /* relief & satellite have no place names — add a labels overlay so you can find things */
-  const needsLabels = id === 'gmrt' || id === 'bluetint' || id === 'sat';
-  if (needsLabels && !live.labels) { live.labels = trackLayer(makeLayer('labels')).addTo(map); live.labels.setZIndex(3); }
-  if (!needsLabels && live.labels) { fadeOutRemove(live.labels); live.labels = null; }
+  /* A base whose terms forbid keeping its tiles (Esri, OpenStreetMap) has nothing stored to show
+     with no signal, so the free-to-keep GEBCO chart sits underneath it. The base's own tiles
+     cover it once they load; it is what shows offline or wherever a base tile fails. It keeps the
+     tiles you browse (few: it stops at z10) and an area download saves it in the base's place,
+     so a browsed or downloaded area is never a blank chart. Not tracked for the busy spinner —
+     it is never the layer you are waiting on. */
+  const wantFallback = !canSaveOffline(id);
+  if (wantFallback && !live.fallback) { live.fallback = makeLayer(OFFLINE_BASE).addTo(map); live.fallback.setZIndex(-1); }
+  if (!wantFallback && live.fallback) { fadeOutRemove(live.fallback); live.fallback = null; }
   /* Bring up the detail overlay that belongs to this base, and drop the other one. */
   const want = RELIEF_DETAIL[id] || null;
   ['reliefhi', 'blueshade'].forEach((slot) => {
@@ -165,10 +183,10 @@ export function updateChartFilter() {
     live.blueshade._container.style.filter = 'brightness(0.70) contrast(6)';
   }
   /* Night over the US bathymetry base: the base is already dark through #lut-night, so the
-     whole-pane dim in base.css is skipped for it — but the chart overlays drawn on top (labels,
-     NOAA chart, seamarks) would stay glaring white. Dim those layer containers individually. */
+     whole-pane dim in base.css is skipped for it — but the chart overlays drawn on top (NOAA
+     chart, seamarks) would stay glaring white. Dim those layer containers individually. */
   const nightOverBluetint = document.documentElement.dataset.theme === 'night' && layersStore.getState().base === 'bluetint';
-  ['labels', 'enc', 'seamark'].forEach((id) => {
+  ['enc', 'seamark'].forEach((id) => {
     const c = live[id] && live[id]._container;
     if (c) c.style.filter = nightOverBluetint ? 'brightness(0.45) saturate(0.6)' : '';
   });

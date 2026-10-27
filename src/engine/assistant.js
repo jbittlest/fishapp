@@ -8,6 +8,7 @@ import { Reefs } from './reefs.js';
 import { SST } from './sst.js';
 import { Astro } from './astro.js';
 import { nearestTideStation } from './tides.js';
+import { coopsHiLoUrl } from './datasources.js';
 import { Catch } from './catch.js';
 import { Nav, getRouteGph, getRouteSpeedKn, tripReset, tripToggle } from './nav.js';
 import { KNOTS } from './knots.js';
@@ -1373,28 +1374,163 @@ export async function asstProxyLiveContext(userText, botId) {
   return blocks.length ? blocks.join('\n\n') : '';
 }
 
+/* What the Worker forwards to the model (proxy/first-mate-worker.js — keep the numbers in step;
+   a unit test runs this body through the Worker and checks it keeps every character): the system
+   prompt within 8000 characters and 3000 estimated tokens, then the newest messages — at most 12,
+   4000 characters each — while the whole input stays within 4000 estimated tokens. Sending more
+   only costs upload on one bar of signal. The Worker also refuses bodies over 64 KB, and that is
+   counted in bytes: CJK text is 3 bytes a character and every quote and newline is escaped, so a
+   few long pasted passages used to push the history over it — a 413 on every later question,
+   however short, until the chat was cleared. So the body is measured too, and the oldest history
+   dropped until it fits. With history gone the rest always fits: our own system prompt escapes to
+   ~16 KB at most, and a 4000-character question to 24 KB even if every character is escaped. */
+export const ASST_PROXY_MAX_MESSAGES = 12;
+export const ASST_PROXY_MSG_CAP = 4000;
+export const ASST_PROXY_SYSTEM_TOKENS = 3000;
+export const ASST_PROXY_INPUT_TOKENS = 4000;
+export const ASST_PROXY_MAX_BODY = 60 * 1024;     // bytes; the Worker's cap is 64 KB
+/** Estimated tokens, on the high side (the Worker's own estimate): ~4 ASCII characters a token,
+ *  every other UTF-16 unit (accents, CJK, emoji halves) a token of its own. */
+export function asstEstTokens(s) {
+  let ascii = 0;
+  for (let i = 0; i < s.length; i++) if (s.charCodeAt(i) < 128) ascii++;
+  return Math.ceil(ascii / 4) + (s.length - ascii);
+}
+// The longest start of `s` within `max` estimated tokens, never splitting a surrogate pair.
+function asstCutToTokens(s, max) {
+  if (asstEstTokens(s) <= max) return s;
+  let ascii = 0, other = 0, i = 0;
+  for (; i < s.length; i++) {
+    if (s.charCodeAt(i) < 128) ascii++; else other++;
+    if (Math.ceil(ascii / 4) + other > max) break;
+  }
+  if (i > 0 && (s.charCodeAt(i - 1) & 0xfc00) === 0xd800) i--;
+  return s.slice(0, i);
+}
+/** The relay request body: the system prompt and the newest `messages` (oldest first, the
+ *  question last) that the Worker keeps, within its byte cap. The question always goes. */
+export function asstProxyBody(system, messages) {
+  const sys = asstCutToTokens(String(system || '').slice(0, ASST_PROXY_SYSTEM_CAP), ASST_PROXY_SYSTEM_TOKENS);
+  let room = ASST_PROXY_INPUT_TOKENS - asstEstTokens(sys);
+  const sent = [];
+  for (let i = messages.length - 1; i >= 0 && sent.length < ASST_PROXY_MAX_MESSAGES; i--) {
+    let content = String(messages[i].content).slice(0, ASST_PROXY_MSG_CAP);
+    if (asstEstTokens(content) > room) {
+      if (sent.length) break;                            // older history that doesn't fit stays home
+      content = asstCutToTokens(content, room);
+    }
+    room -= asstEstTokens(content);
+    sent.unshift({ role: messages[i].role, content });
+  }
+  const encode = (msgs) => JSON.stringify({ system: sys, messages: msgs });
+  let body = encode(sent);
+  while (sent.length > 1 && new TextEncoder().encode(body).length > ASST_PROXY_MAX_BODY) {
+    sent.shift();
+    body = encode(sent);
+  }
+  return body;
+}
+
+/* ---- Relay back-off ----
+   The relay answers 429 when this connection asks faster than its per-client limit, and 503
+   when Workers AI can't answer (out of capacity, or the account's free daily allowance is
+   spent), both carrying { retryAfter } in seconds. Asking again at once fails the same way and,
+   across every boat on the water, keeps a struggling relay pinned — so that route is skipped
+   until then and First Mate answers on the phone straight away. A reply that never came
+   (timeout) holds briefly too, so the next question doesn't hang another 90 s. A plain
+   connection failure doesn't hold: it never reached the relay, and it fails fast. Chat and
+   /tts are limited separately by the Worker, so each route holds on its own. */
+export const ASST_RELAY_WAIT_MIN_S = 5;
+export const ASST_RELAY_WAIT_MAX_S = 30 * 60;   // a spent allowance says "until 00:00 UTC"; look again sooner
+export const ASST_RELAY_SLOW_WAIT_S = 60;
+/** Seconds to wait after a 429/503: the JSON retryAfter, else the Retry-After header, else `dflt` — clamped. */
+export function asstRetryAfterS(resp, j, dflt) {
+  let s = Number(j && j.retryAfter);
+  if (!(s > 0)) s = Number(resp && resp.headers && typeof resp.headers.get === 'function' ? resp.headers.get('Retry-After') : NaN);
+  if (!(s > 0)) s = dflt;
+  return Math.min(ASST_RELAY_WAIT_MAX_S, Math.max(ASST_RELAY_WAIT_MIN_S, Math.ceil(s)));
+}
+/** Hold a relay route ('chat' | 'tts') for `seconds`; why = 'busy' (429) | 'down' (503) | 'slow' (timeout). */
+export function asstRelayHold(route, seconds, why) {
+  ASST._relayHold = ASST._relayHold || {};
+  ASST._relayHold[route] = { until: Date.now() + seconds * 1000, why };
+  return { why, waitS: seconds };
+}
+/** The hold still in force on a route, as { why, waitS }, or null. */
+export function asstRelayHeld(route) {
+  const h = ASST._relayHold && ASST._relayHold[route];
+  if (!h) return null;
+  const waitS = Math.ceil((h.until - Date.now()) / 1000);
+  return waitS > 0 ? { why: h.why, waitS } : null;
+}
+// The fetch deadline in app.js reports 'timed out after Ns'; a raw abort means the same.
+function asstTimedOut(e) {
+  return !!e && (e.name === 'AbortError' || e.name === 'TimeoutError' || /timed out/i.test(String(e.message)));
+}
+/* A non-OK relay reply as an error to throw. The relay's own `error` text is deliberately not
+   carried: the bubble says what happened in our words (asstRelayFailHead). */
+async function asstRelayFailure(resp, route) {
+  let j = null;
+  try { j = await resp.json(); } catch (e) { /* not JSON */ }
+  const err = new Error('relay ' + resp.status);
+  err.status = resp.status;
+  /* 403 = the relay refused this origin (e.g. an older Worker that only knows the website). The
+     Worker echoes even a refused origin for CORS so this is readable, not a failed preflight that
+     looks like no signal. Retrying every question would show the same error each time, so stop
+     offering the relay for this session — chat and the cloud voice alike: the status drops to
+     Data mode and answers come from the phone. Saving the endpoint setting re-enables it. */
+  if (resp.status === 403) ASST._proxyBlocked = true;
+  else if (resp.status === 429) err.relay = asstRelayHold(route, asstRetryAfterS(resp, j, 60), 'busy');
+  else if (resp.status === 503) err.relay = asstRelayHold(route, asstRetryAfterS(resp, j, 60), 'down');
+  return err;
+}
+export function asstWaitText(s) {
+  if (s < 60) return 'in under a minute';
+  if (s < 90) return 'in about a minute';
+  return 'in about ' + Math.round(s / 60) + ' min';
+}
+/* First line of the red bubble when the relay didn't answer. Never the relay's or the
+   browser's own text ("Failed to fetch", a model trace) — what happened, and when to retry. */
+export function asstRelayFailHead(e) {
+  const r = e && e.relay;
+  if (r) {
+    const when = 'try again ' + asstWaitText(r.waitS);
+    if (r.why === 'busy') return 'The free AI is busy (' + when + '). Offline answer:';
+    if (r.why === 'slow') return "The free AI didn't answer in time (" + when + '). Offline answer:';
+    return 'The free AI is unavailable right now (' + when + '). Offline answer:';
+  }
+  const s = e && e.status;
+  // 413 can't come from the FishApp relay any more (asstProxyBody fits its cap); a relay with a smaller one can.
+  const why = s === 403 ? 'the free AI relay refused this app'
+    : s === 413 ? 'the conversation is too long — Clear chat and ask again'
+      : s ? 'relay error ' + s
+        : 'no connection';
+  return "Couldn't reach the AI (" + why + '). Offline answer:';
+}
+
 export async function asstAskProxy(userText, botId) {
+  // Inside a back-off the relay asked for: don't ask it, or fetch live data for it.
+  const held = asstRelayHeld('chat');
+  if (held) { const err = new Error('relay held'); err.relay = held; throw err; }
   const live = await asstProxyLiveContext(userText, botId);
   asstProgress(botId, '');
   const messages = ASST.history.map((m) => ({ role: m.role, content: m.content }));
   messages.push({ role: 'user', content: userText });
   const system = asstProxySystem(userText, live);
-  const resp = await fetch(asstProxyUrl(), {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ system, messages }),
-    timeoutMs: 90000,        // a model reply is slower than a data API, but not unbounded
-  });
-  if (!resp.ok) {
-    let msg = 'HTTP ' + resp.status;
-    try { const j = await resp.json(); if (j && j.error) msg = j.error; } catch (e) { /* ignore */ }
-    /* 403 = the relay refused this origin (e.g. an older Worker that only knows the website).
-       Retrying every question would show the same error each time, so stop offering the relay
-       for this session: the status drops to Data mode and answers come from the phone.
-       Saving the endpoint setting re-enables it. */
-    if (resp.status === 403) { ASST._proxyBlocked = true; msg = 'the free AI relay refused this app'; }
-    const err = new Error(msg); err.status = resp.status; throw err;
+  let resp;
+  try {
+    resp = await fetch(asstProxyUrl(), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: asstProxyBody(system, messages),
+      timeoutMs: 90000,        // a model reply is slower than a data API, but not unbounded
+    });
+  } catch (e) {
+    const err = new Error('relay unreachable');
+    if (asstTimedOut(e)) err.relay = asstRelayHold('chat', ASST_RELAY_SLOW_WAIT_S, 'slow');
+    throw err;
   }
+  if (!resp.ok) throw await asstRelayFailure(resp, 'chat');   // 403 also stops offering the relay
   const j = await resp.json();
   return (j.reply || '').trim() || '(no reply)';
 }
@@ -1632,8 +1768,7 @@ export async function asstToolTides(input) {
   const d = new Date();
   const ymd = d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
   try {
-    const r = await fetch('https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=predictions&interval=hilo&datum=MLLW&units=english&time_zone=lst_ldt&format=json&station=' +
-      st.id + '&begin_date=' + ymd + '&end_date=' + ymd);
+    const r = await fetch(coopsHiLoUrl(st.id, ymd, ymd));
     const preds = ((await r.json()).predictions || []).map((p) => ({
       time: p.t.split(' ')[1], type: p.type === 'H' ? 'High' : 'Low', height_ft: +parseFloat(p.v).toFixed(1),
     }));
@@ -1848,13 +1983,22 @@ export function asstSpeakDevice(clean, voice) {
    the user in silence, which underway is worse than a robotic voice. */
 export async function asstSpeakCloud(clean, deviceVoice) {
   const gen = ASST._speakGen = (ASST._speakGen || 0) + 1;
+  // The relay asked for a pause (asstRelayHold): speak on the device now instead of asking again.
+  if (asstRelayHeld('tts')) { asstSpeakDevice(clean, deviceVoice); return; }
   try {
-    const r = await fetch(asstProxyUrl().replace(/\/+$/, '') + '/tts', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ text: clean, voice: localStorage.getItem('fishapp.asst.ttsvoice') || undefined }),
-    });
-    if (!r.ok) throw new Error('tts ' + r.status);
+    let r;
+    try {
+      r = await fetch(asstProxyUrl().replace(/\/+$/, '') + '/tts', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text: clean, voice: localStorage.getItem('fishapp.asst.ttsvoice') || undefined }),
+      });
+    } catch (e) {
+      // Only the request's own deadline holds — play() below can also reject with an AbortError.
+      if (asstTimedOut(e)) asstRelayHold('tts', ASST_RELAY_SLOW_WAIT_S, 'slow');
+      throw e;
+    }
+    if (!r.ok) throw await asstRelayFailure(r, 'tts');
     const blob = await r.blob();
     if (gen !== ASST._speakGen) return;              // a newer utterance superseded this one
     if (!ASST._speakWanted) return;                  // muted while this was in flight
@@ -2178,9 +2322,11 @@ export async function asstSend(text) {
         if (e && e.refusal) {
           const done = (e.didTools || []).filter((v, i, a) => a.indexOf(v) === i);
           head = "The AI wouldn't answer that one" + (done.length ? ' (before stopping it did: ' + done.join(', ') + ')' : '') + '. Offline answer:';
-        } else {
-          const why = useClaude ? (e.status === 401 ? 'bad API key' : (e.message || 'network')) : (e.message || 'network');
+        } else if (useClaude) {
+          const why = e.status === 401 ? 'bad API key' : (e.message || 'network');
           head = "Couldn't reach the AI (" + why + "). Offline answer:";
+        } else {
+          head = asstRelayFailHead(e);
         }
         asstUpdateMsg(botId, { thinking: false, progress: '', error: true, text: head + '\n\n' + off });
         asstSpeak(off);
@@ -2262,6 +2408,7 @@ export function asstSaveSettings(s) {
     if (p.value) localStorage.setItem('fishapp.asst.proxy', p.value);
     else localStorage.removeItem('fishapp.asst.proxy');
     ASST._proxyBlocked = false;     // a (re)saved endpoint gets a fresh chance
+    ASST._relayHold = {};
   }
   if (s.key != null) localStorage.setItem('fishapp.asst.key', String(s.key).trim());
   if (s.model) localStorage.setItem('fishapp.asst.model', asstMigrateModel(s.model));

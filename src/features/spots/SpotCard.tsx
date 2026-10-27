@@ -1,12 +1,13 @@
 /* Map card for a saved spot (replaces the Leaflet popup): name, type, notes, distance and
- * bearing from the boat, and Navigate / Edit / Delete. Reads the live record by id, so an edit
- * shows up while the card is open and a delete (here, in the list, or by First Mate) closes it. */
+ * bearing from the boat, and Navigate / Share / Edit / Delete. Reads the live record by id, so an
+ * edit shows up while the card is open and a delete (here, in the list, or by First Mate) closes
+ * it. Share sends a link that opens the spot in the web app (engine shareSpot). */
 import { useEffect } from 'react';
 import { Button, Num, useStoreValue } from '../../ui';
 import { MapCard } from '../../shell/MapCard';
 import type { CardProps } from '../../shell/registry';
 import { closeCard } from '../../services/ui';
-import { confirmDeleteSpot, navigateToSpot, openSpotModal, spotDistBrg, spotsStore, spotTypeLabel } from '../../engine/spots.js';
+import { confirmDeleteSpot, navigateToSpot, openSpotModal, shareSpot, spotDistBrg, spotsStore, spotTypeLabel } from '../../engine/spots.js';
 import { formatCoord } from '../../engine/gps.js';
 import { SpotDisc } from './SpotGlyph';
 import { fromText, useFix } from './useFix';
@@ -36,9 +37,10 @@ export default function SpotCard({ data }: CardProps) {
       media={<SpotDisc type={spot.type} large />}
       actions={(
         <>
-          <Button variant="primary" icon="navigation" onClick={() => { void navigateToSpot(spot); }}>Navigate</Button>
-          <Button icon="pencil" onClick={() => openSpotModal(spot)}>Edit</Button>
-          <Button variant="ghost" icon="trash" onClick={() => { void confirmDeleteSpot(spot); }}>Delete</Button>
+          <Button variant="primary" icon="navigation" className="spot-card__act" onClick={() => { void navigateToSpot(spot); }}>Navigate</Button>
+          <Button icon="share" className="spot-card__act" onClick={() => { void shareSpot(spot); }}>Share</Button>
+          <Button icon="pencil" className="spot-card__act" onClick={() => openSpotModal(spot)}>Edit</Button>
+          <Button variant="ghost" icon="trash" className="spot-card__act" onClick={() => { void confirmDeleteSpot(spot); }}>Delete</Button>
         </>
       )}>
       {spot.notes && <p className="spot-card__notes">{spot.notes}</p>}

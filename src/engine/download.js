@@ -1,7 +1,7 @@
 import L from 'leaflet';
 import { createStore } from 'zustand/vanilla';
-import { deleteTiles, getTileBlob, idb, putTileBlob, tileKey } from './db.js';
-import { LAYERS } from './tiles.js';
+import { _req, _store, deleteTiles, getTileBlob, idb, putTileBlob, tileKey } from './db.js';
+import { LAYERS, OFFLINE_BASE, canSaveOffline } from './tiles.js';
 import { mapProgrammatic, setFollow } from './gps.js';
 import { areaDataRefresh, areaPackHealth, buildAreaPack } from './areadata.js';
 import { chartLayerIds, layersStore } from './layers.js';
@@ -43,7 +43,9 @@ export const DETAIL_LEVELS = [
  * @property {number} mb         rough size
  * @property {number} minZ
  * @property {number} maxZ
- * @property {string[]} layerIds
+ * @property {string[]} layerIds     what the download keeps
+ * @property {string[]} skipped      layers on the chart whose terms forbid offline copies (live only)
+ * @property {string|null} swappedBase  the skipped base OFFLINE_BASE is saved in place of, if any
  */
 /**
  * @typedef {Object} AreaRow
@@ -57,6 +59,8 @@ export const DETAIL_LEVELS = [
  * @property {boolean} partial      the download was cancelled
  * @property {'none'|'partial'|'full'} data   how much of the 7-day data pack was captured
  * @property {string[]} dataMissing
+ * @property {string[]} notSaved   layers an older build saved here whose terms forbid keeping them
+ * @property {boolean} baseGone     one of those was the area's base, so it has none offline
  * @property {{w:number,s:number,e:number,n:number}} bounds
  */
 /**
@@ -81,7 +85,7 @@ export const DETAIL_LEVELS = [
 /** @type {import('zustand/vanilla').StoreApi<DlView>} */
 export const dlStore = createStore(() => /** @type {DlView} */ ({
   zoom: 14,
-  estimate: { status: 'idle', count: 0, mb: 0, minZ: 0, maxZ: 14, layerIds: [] },
+  estimate: { status: 'idle', count: 0, mb: 0, minZ: 0, maxZ: 14, layerIds: [], skipped: [], swappedBase: null },
   running: false,
   cancelling: false,
   phase: 'idle',
@@ -104,26 +108,50 @@ export function lat2ty(lat, z) {
   return Math.floor(((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * Math.pow(2, z));
 }
 
-/* Download exactly what the chart is showing. The legacy list diverged from app.js: the
-   BlueTopo base downloaded without its place labels and without its hillshade, so the offline
-   chart looked nothing like the one you planned on. This mirrors layers.js setBase():
-   gmrt / bluetint / sat carry the labels overlay, and each relief base brings its detail
-   companion (gmrt → reliefhi, bluetint → blueshade). The NOAA chart and seamarks follow their
-   toggles (a relief base switches the chart on, which layersStore already reflects). */
+/* What the chart is showing. The legacy list diverged from app.js: the BlueTopo base downloaded
+   without its hillshade, so the offline chart looked nothing like the one you planned on. This
+   mirrors layers.js setBase(): each relief base brings its detail companion (gmrt → reliefhi,
+   bluetint → blueshade). The NOAA chart and seamarks follow their toggles (a relief base switches
+   the chart on, which layersStore already reflects). offlineLayerPlan() then drops what the
+   sources' terms do not let us keep. */
 export function activeLayerIds(state) {
   return chartLayerIds(state || layersStore.getState());   // single source: layers.js
 }
 
+/** Split the layers the chart shows into what a download keeps and what it must leave (pure).
+ *  A layer whose terms forbid offline copies is skipped — the live map still shows it. When that
+ *  layer is the BASE, OFFLINE_BASE (GEBCO) is kept in its place: it is the layer layers.js draws
+ *  under such a base, so the saved area still has a chart with no signal. */
+export function offlineLayerPlan(shownIds) {
+  const ids = (shownIds || []).filter((id) => LAYERS[id]);   // unknown ids: skipped like tileRanges does
+  const layerIds = ids.filter((id) => canSaveOffline(id));
+  const skipped = ids.filter((id) => !canSaveOffline(id));
+  const base = ids.find((id) => LAYERS[id].kind === 'base');
+  const swappedBase = base && !canSaveOffline(base) ? base : null;
+  if (swappedBase && layerIds.indexOf(OFFLINE_BASE) < 0) layerIds.unshift(OFFLINE_BASE);
+  return { layerIds, skipped, swappedBase };
+}
+
+/* The native zoom levels to store for one layer so the chart draws at every zoom in minZ..maxZ.
+   Past its maxNativeZoom Leaflet upscales the deepest native level, so with `nativeFloor` a span
+   that starts above that level still takes it: GEBCO stops at z10, and a z12-16 download used to
+   keep none of it — a blank base offline. Areas saved before the floor are deleted by recomputing
+   their keys, so their records keep the old rule (areaTileKeys reads `nativeFloor` per record). */
+function nativeZooms(def, minZ, maxZ, nativeFloor) {
+  const zTop = Math.min(maxZ, def.maxNativeZoom);
+  const zBot = Math.max(nativeFloor ? Math.min(minZ, zTop) : minZ, def.minZoom || 0);
+  return { zBot, zTop };
+}
+
 /* Per-layer tile grid ranges for a bounds + zoom span. Shared by the counter and
    the job builder so they can never disagree. */
-export function tileRanges(bounds, minZ, maxZ, layerIds) {
+export function tileRanges(bounds, minZ, maxZ, layerIds, nativeFloor = true) {
   const out = [];
   for (const id of layerIds) {
     const def = LAYERS[id];
     if (!def) continue;              // a layer removed in a later build — skip, don't throw
     const shift = Math.log2((def.tileSize || 256) / 256);
-    const zTop = Math.min(maxZ, def.maxNativeZoom);
-    const zBot = Math.max(minZ, def.minZoom || 0);
+    const { zBot, zTop } = nativeZooms(def, minZ, maxZ, nativeFloor);
     for (let z = zBot; z <= zTop; z++) {
       const gz = z - shift;
       const n = Math.pow(2, gz);
@@ -143,9 +171,9 @@ export function tileRanges(bounds, minZ, maxZ, layerIds) {
    size check used to happen only after the array was built. Zoomed out on a phone at
    the default detail level that array is ~13 million objects — the tab freezes and
    the OS kills it, before any download is even started. */
-export function tileJobCount(bounds, minZ, maxZ, layerIds) {
+export function tileJobCount(bounds, minZ, maxZ, layerIds, nativeFloor = true) {
   let total = 0;
-  for (const r of tileRanges(bounds, minZ, maxZ, layerIds)) {
+  for (const r of tileRanges(bounds, minZ, maxZ, layerIds, nativeFloor)) {
     total += (r.x1 - r.x0 + 1) * (r.y1 - r.y0 + 1);
     if (total > 1e9) return total;   // absurd already; stop accumulating
   }
@@ -165,7 +193,7 @@ export function estimateBytes(ranges) {
 
 /* Build the full tile job list for bounds + zoom range across the active layers.
    Only call this once the count is known to be sane. */
-export function tileJobs(bounds, minZ, maxZ, layerIds) {
+export function tileJobs(bounds, minZ, maxZ, layerIds, nativeFloor = true) {
   const jobs = [];
   for (const id of layerIds) {
     const def = LAYERS[id];
@@ -173,8 +201,7 @@ export function tileJobs(bounds, minZ, maxZ, layerIds) {
     // 512px-tile layers index on a grid one zoom coarser than their CSS zoom, so the keys
     // match exactly what the live tile layer requests (coords.x = lon2tx(lon, z - shift)).
     const shift = Math.log2((def.tileSize || 256) / 256);   // 0 for 256-tiles, 1 for 512-tiles
-    const zTop = Math.min(maxZ, def.maxNativeZoom);
-    const zBot = Math.max(minZ, def.minZoom || 0);
+    const { zBot, zTop } = nativeZooms(def, minZ, maxZ, nativeFloor);
     for (let z = zBot; z <= zTop; z++) {
       const gz = z - shift;
       const n = Math.pow(2, gz);
@@ -201,28 +228,32 @@ export function zoomSpan(mapZoom, maxZ) {
 }
 
 /** Plan a download of the visible chart at the chosen detail level. Everything the run needs
- *  (bounds, layers, zoom span, jobs) is captured here, once. */
+ *  (bounds, layers, zoom span, jobs) is captured here, once. The count, the size estimate, the
+ *  jobs and the area record all use the same kept layer list, so they always agree. */
 export function planDownload(withJobs) {
   const map = theMap();
   if (!map) return null;
   const { minZ, maxZ } = zoomSpan(map.getZoom(), dlStore.getState().zoom);
   const bounds = map.getBounds();
-  const ids = activeLayerIds();
+  const { layerIds: ids, skipped, swappedBase } = offlineLayerPlan(activeLayerIds());
   // Count first — building the array for an oversized area is what killed the tab.
   const count = tileJobCount(bounds, minZ, maxZ, ids);
-  if (count > MAX_TILES) return { jobs: [], count, minZ, maxZ, tooBig: true, bytesEst: 0, bounds, layerIds: ids };
+  if (count > MAX_TILES) return { jobs: [], count, minZ, maxZ, tooBig: true, bytesEst: 0, bounds, layerIds: ids, skipped, swappedBase };
   const bytesEst = estimateBytes(tileRanges(bounds, minZ, maxZ, ids));
   const jobs = withJobs ? tileJobs(bounds, minZ, maxZ, ids) : [];
-  return { jobs, count, minZ, maxZ, tooBig: false, bytesEst, bounds, layerIds: ids };
+  return { jobs, count, minZ, maxZ, tooBig: false, bytesEst, bounds, layerIds: ids, skipped, swappedBase };
 }
 
 function publishEstimate(plan) {
   if (!plan) {
-    dlStore.setState({ estimate: { status: 'nomap', count: 0, mb: 0, minZ: 0, maxZ: dlStore.getState().zoom, layerIds: [] } });
+    dlStore.setState({ estimate: { status: 'nomap', count: 0, mb: 0, minZ: 0, maxZ: dlStore.getState().zoom, layerIds: [], skipped: [], swappedBase: null } });
     return;
   }
   const status = plan.tooBig ? 'tooBig' : (plan.count ? 'ok' : 'empty');
-  dlStore.setState({ estimate: { status, count: plan.count, mb: plan.bytesEst / 1048576, minZ: plan.minZ, maxZ: plan.maxZ, layerIds: plan.layerIds } });
+  dlStore.setState({ estimate: {
+    status, count: plan.count, mb: plan.bytesEst / 1048576, minZ: plan.minZ, maxZ: plan.maxZ,
+    layerIds: plan.layerIds, skipped: plan.skipped, swappedBase: plan.swappedBase,
+  } });
 }
 
 /** Recompute the live estimate (panel open, every map move while it is open, detail change). */
@@ -443,7 +474,7 @@ export async function startDownload(name, zoom) {
       await idb.put('areas', {
         name: nameOut,
         bounds: boundsRecord(bounds),
-        minZ, maxZ, layerIds,
+        minZ, maxZ, layerIds, nativeFloor: true,   // planned with the native-zoom floor (areaTileKeys)
         // record what we ACTUALLY stored, not what we planned to
         tiles: stored, planned: jobs.length, blank, bytes, incomplete,
         ts: Date.now(),
@@ -462,7 +493,7 @@ export async function startDownload(name, zoom) {
         await idb.put('areas', {
           name: (areaName || 'Area') + ' (partial)',
           bounds: boundsRecord(bounds),
-          minZ, maxZ, layerIds, tiles: done - failed - blank, planned: jobs.length, blank, bytes,
+          minZ, maxZ, layerIds, nativeFloor: true, tiles: done - failed - blank, planned: jobs.length, blank, bytes,
           incomplete: true, partial: true, ts: Date.now(), data: null,
         });
       } catch (e) { /* nothing more we can do */ }
@@ -507,9 +538,16 @@ export function cancelDownload() {
 }
 
 /* ---- Saved areas ---- */
-/** Store record → list row (pure). */
+const isBase = (id) => !!(LAYERS[id] && LAYERS[id].kind === 'base');
+const unkeepable = (id) => !!LAYERS[id] && !canSaveOffline(id);
+
+/** Store record → list row (pure). `notSaved` names the live-only layers an older build stored
+ *  here — swept already (`dropped`, see sweepUnkeepableTiles) or about to be (still in layerIds:
+ *  the tile layer no longer serves them either way). The retired labels are left unsaid. */
 export function areaRow(a) {
   const h = areaPackHealth(a.data);
+  const ids = a.layerIds || [];
+  const notSaved = [...new Set([...(a.dropped || []), ...ids.filter(unkeepable)])].filter((id) => LAYERS[id] && !LAYERS[id].retired);
   return {
     id: a.id,
     name: String(a.name || 'Area'),
@@ -521,6 +559,8 @@ export function areaRow(a) {
     partial: !!a.partial || / \(partial\)$/.test(String(a.name || '')),
     data: h.level,
     dataMissing: h.level === 'partial' ? h.failed : [],
+    notSaved,
+    baseGone: notSaved.some(isBase) && !ids.some((id) => isBase(id) && canSaveOffline(id)),
     bounds: a.bounds,
   };
 }
@@ -536,27 +576,50 @@ export async function refreshAreas() {
 /** Legacy name. */
 export function renderAreasList() { return refreshAreas(); }
 
-/** Every tile key an area record covers (the same jobs its download planned). */
+/** Every tile key an area record covers (the same jobs its download planned). A record from
+ *  before the native-zoom floor has no `nativeFloor` and is recomputed the old way, and until the
+ *  launch sweep corrects it (sweepUnkeepableTiles) its layerIds may name layers no longer kept
+ *  (Esri, OSM, seamarks, retired labels) — those tiles were stored by it, so they are its to delete. */
 export function areaTileKeys(a) {
-  if (!a || !a.bounds) return [];
-  const b = L.latLngBounds([a.bounds.s, a.bounds.w], [a.bounds.n, a.bounds.e]);
-  return tileJobs(b, a.minZ, a.maxZ, a.layerIds || []).map((j) => tileKey(j.id, j.z, j.x, j.y));
+  return areaJobs(a, a && a.layerIds).map((j) => tileKey(j.id, j.z, j.x, j.y));
 }
 
-function boxesOverlap(a, b) {
-  return !(a.e < b.w || a.w > b.e || a.n < b.s || a.s > b.n);
+function recordBounds(a) {
+  return L.latLngBounds([a.bounds.s, a.bounds.w], [a.bounds.n, a.bounds.e]);
+}
+/* An area record's jobs and grid ranges for `layerIds`, by the rule it was planned with. */
+function areaJobs(a, layerIds) {
+  if (!a || !a.bounds) return [];
+  return tileJobs(recordBounds(a), a.minZ, a.maxZ, layerIds || [], a.nativeFloor === true);
+}
+function areaRanges(a, layerIds) {
+  if (!a || !a.bounds) return [];
+  return tileRanges(recordBounds(a), a.minZ, a.maxZ, layerIds || [], a.nativeFloor === true);
 }
 
 /** Keys of `area` that no OTHER saved area still needs (pure). Deleting an area used to
- *  remove every key it covered, silently hollowing out any overlapping area. */
+ *  remove every key it covered, silently hollowing out any overlapping area. The test is the
+ *  tile grids, not the area boxes: two boxes kilometres apart still share the coarse tile they
+ *  both fall in, and with the native-zoom floor that shared GEBCO z10 (or GMRT z12, BlueTopo
+ *  hillshade z14) tile can be the other area's ONLY base level — a box test deleted it. */
 export function keysToDelete(area, others) {
-  const keys = areaTileKeys(area);
-  const keep = new Set();
+  const jobs = areaJobs(area, area && area.layerIds);
+  const keys = jobs.map((j) => tileKey(j.id, j.z, j.x, j.y));
+  const byLevel = new Map();   // "layer/z" → the other areas' grid ranges at that level
   for (const o of others) {
-    if (!o || o.id === area.id || !o.bounds || !area.bounds || !boxesOverlap(o.bounds, area.bounds)) continue;
-    for (const k of areaTileKeys(o)) keep.add(k);
+    if (!o || !area || o.id === area.id) continue;
+    for (const r of areaRanges(o, o.layerIds)) {
+      const k = r.id + '/' + r.z;
+      if (!byLevel.has(k)) byLevel.set(k, []);
+      byLevel.get(k).push(r);
+    }
   }
-  const del = keep.size ? keys.filter((k) => !keep.has(k)) : keys;
+  if (!byLevel.size) return { del: keys, kept: 0 };
+  const del = keys.filter((_, i) => {
+    const j = jobs[i];
+    const rs = byLevel.get(j.id + '/' + j.z);
+    return !rs || !rs.some((r) => j.x >= r.x0 && j.x <= r.x1 && j.y >= r.y0 && j.y <= r.y1);
+  });
   return { del, kept: keys.length - del.length };
 }
 
@@ -597,7 +660,7 @@ export async function deleteArea(id) {
     await deleteTiles(del, (d, t) => dlStore.setState({ deleting: { id, done: d, total: t } }));
     await idb.del('areas', area.id);
     if (typeof areaDataRefresh === 'function') await areaDataRefresh();
-    toast('Offline area deleted' + (kept ? ' — ' + kept.toLocaleString() + ' tiles kept for an overlapping area' : ''));
+    toast('Offline area deleted' + (kept ? ' — ' + kept.toLocaleString() + ' tiles kept for another saved area that uses them' : ''));
     okDone = true;
   } catch (e) {
     /* Tiles go first and the record last, so a failure leaves the area listed and the
@@ -609,6 +672,109 @@ export async function deleteArea(id) {
     refreshStorageInfo();
   }
   return okDone;
+}
+
+/* ---- Tiles the sources' terms forbid keeping ---- */
+/** Every layer whose tiles may not be kept on the device (Esri, OpenStreetMap, OpenSeaMap and
+ *  the retired CARTO labels). */
+export function unkeepableLayerIds() {
+  return Object.keys(LAYERS).filter(unkeepable);
+}
+
+/** An area record once its tiles of those layers are swept (pure). They leave `layerIds`, so its
+ *  delete list holds only what is stored, and join `dropped`, so its row can say what went;
+ *  `tiles` loses the swept keys it covered, `planned` their jobs, and `bytes` those layers' share
+ *  of the size estimate (a record keeps no per-tile sizes). `swept` holds the keys the sweep
+ *  removes. Null for a record that names none of those layers, so none is ever corrected twice. */
+export function areaAfterSweep(a, swept) {
+  const ids = (a && a.layerIds) || [];
+  const gone = ids.filter(unkeepable);
+  if (!gone.length) return null;
+  const kept = ids.filter((id) => !unkeepable(id));
+  let removed = 0, goneJobs = 0;
+  for (const j of areaJobs(a, gone)) {
+    goneJobs++;
+    if (swept.has(tileKey(j.id, j.z, j.x, j.y))) removed++;
+  }
+  const estAll = estimateBytes(areaRanges(a, ids));
+  const estKept = estimateBytes(areaRanges(a, kept));
+  const tiles = Math.max(0, (a.tiles || 0) - removed);
+  return {
+    ...a,
+    layerIds: kept,
+    dropped: [...new Set([...(a.dropped || []), ...gone])],
+    tiles,
+    planned: Math.max(tiles, (a.planned || 0) - goneJobs),
+    bytes: estAll > 0 ? Math.round((a.bytes || 0) * (estKept / estAll)) : (a.bytes || 0),
+  };
+}
+
+/** The notice when a sweep took the base map out of saved areas (pure). */
+export function lostBaseText(areas) {
+  const swap = LAYERS[OFFLINE_BASE].name;
+  if (areas.length === 1) {
+    return 'The base map saved with "' + String(areas[0].name || 'Area') + '" was removed: its source doesn\'t allow offline copies. ' +
+      'Download the area again in More › Offline charts to save ' + swap + ' in its place.';
+  }
+  return 'The base maps saved with ' + areas.length + ' offline areas were removed: their sources don\'t allow offline copies. ' +
+    'Download those areas again in More › Offline charts to save ' + swap + ' in their place.';
+}
+
+/* Rewrite area records in ONE transaction — read them all, put back what `update` returns — so a
+   record deleted meanwhile can never be written back. Resolves the changed records on commit. */
+function updateAreaRecords(update) {
+  return new Promise((resolve, reject) => {
+    const store = _store('areas', 'readwrite');   // throws with no storage: the caller catches
+    const tx = store.transaction;
+    const changed = [];
+    tx.oncomplete = () => resolve(changed);
+    tx.onabort = tx.onerror = () => reject(tx.error || new Error('area update aborted'));
+    const req = store.getAll();
+    req.onsuccess = () => {
+      for (const a of req.result || []) {
+        const next = update(a);
+        if (next) { store.put(next); changed.push(next); }
+      }
+    };
+  });
+}
+
+/** Remove every stored tile of a layer whose terms forbid keeping it. Older builds kept them in
+ *  the browse cache and in area downloads, and the /classic/ app on the same origin still does, so
+ *  this runs at every launch (layers.js initLayers, never awaited); with nothing stored it is one
+ *  empty key lookup per layer. The area records that named those layers are corrected FIRST, in
+ *  one transaction, so their counts, sizes and delete lists match what remains; only once that has
+ *  committed are the tiles deleted, in commit-awaited chunks. Interrupted anywhere, the next launch
+ *  finishes the job — a corrected record no longer names those layers, so nothing is subtracted
+ *  twice, and there is no done-flag to claim a sweep that never committed. Never rejects. */
+export async function sweepUnkeepableTiles() {
+  let found = 0, swept = 0, changed = 0;
+  try {
+    const keys = [];
+    for (const id of unkeepableLayerIds()) {
+      const p = id + '/';
+      const got = await _req(_store('tiles').getAllKeys(IDBKeyRange.bound(p, p + '￿')));
+      for (const k of got || []) keys.push(k);   // no push(...got): tens of thousands of keys
+    }
+    found = keys.length;
+    const sweptKeys = new Set(keys);
+    const lostBase = [];
+    const recs = await updateAreaRecords((a) => {
+      const next = areaAfterSweep(a, sweptKeys);
+      if (next && (a.layerIds || []).some((id) => isBase(id) && unkeepable(id))) lostBase.push(next);
+      return next;
+    });
+    changed = recs.length;
+    if (lostBase.length) toast(lostBaseText(lostBase), { ms: 10000 });
+    if (keys.length) await deleteTiles(keys);
+    swept = keys.length;
+    return { ok: true, swept, changed };
+  } catch (e) {
+    return { ok: false, swept, changed };
+  } finally {
+    if (changed) refreshAreas();
+    if (changed || found) refreshStorageInfo();
+  }
 }
 
 /** Show a saved area on the chart (closes the panel, follow off so it stays put). */

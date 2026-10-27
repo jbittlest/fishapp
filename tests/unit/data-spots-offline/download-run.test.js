@@ -38,7 +38,7 @@ beforeEach(() => {
   mocks.state.map = mocks.mapStub(box, 13);
   mocks.layersStoreMock.setState({ base: 'bluetint', enc: false, seamark: false });
   dl.dlStore.setState({ zoom: 14 });
-  /* BlueTopo base → the known 2266-byte blank; its hillshade and the labels are real tiles. */
+  /* BlueTopo base → the known 2266-byte blank; its hillshade is real tiles. */
   fetchImpl = vi.fn(async (url) => {
     const size = /bathymetry/.test(url) ? 2266 : /hillshade/.test(url) ? 5000 : 800;
     return { ok: true, blob: async () => blobOf(size) };
@@ -69,7 +69,8 @@ describe('startDownload', () => {
     expect(a.blank).toBe(expectBlank);
     expect(a.tiles).toBe(plan.jobs.length - expectBlank);
     expect(a.incomplete).toBe(false);
-    expect(a.layerIds).toEqual(['bluetint', 'labels', 'blueshade']);
+    expect(a.layerIds).toEqual(['bluetint', 'blueshade']);
+    expect(a.nativeFloor).toBe(true);
     const storedKeys = vi.mocked(db.putTileBlob).mock.calls.map((c) => c[0]);
     expect(storedKeys.some((k) => k.startsWith('bluetint/'))).toBe(false);
     expect(storedKeys.some((k) => k.startsWith('blueshade/'))).toBe(true);
@@ -297,7 +298,7 @@ describe('deleteArea', () => {
     const deleted = vi.mocked(db.deleteTiles).mock.calls.at(-1)[0];
     const bKeys = new Set(dl.areaTileKeys(db.idb.stores.areas.get(2)));
     expect(deleted.some((k) => bKeys.has(k))).toBe(false);
-    expect(lastToast()).toMatch(/^Offline area deleted — [\d,]+ tiles kept for an overlapping area$/);
+    expect(lastToast()).toMatch(/^Offline area deleted — [\d,]+ tiles kept for another saved area that uses them$/);
   });
 
   it('does nothing when the user backs out', async () => {

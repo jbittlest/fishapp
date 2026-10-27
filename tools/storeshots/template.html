@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Store screenshot</title>
+<!-- One App Store screenshot: benefit headline over the real app screen in a CSS-drawn device.
+     render.mjs serves this page (fonts from node_modules/@fontsource, raw screens from --raw), sets the
+     viewport to the target size and calls renderShot() once per caption. Glass Helm palette: ink
+     background with the app icon's depth contours, one amber signal (the headline accent). -->
+<style>
+  @font-face { font-family: 'Barlow'; font-weight: 500; font-display: block; src: url('fonts/barlow-latin-500-normal.woff2') format('woff2'); }
+  @font-face { font-family: 'Barlow Semi Condensed'; font-weight: 700; font-display: block; src: url('fonts/barlow-semi-condensed-latin-700-normal.woff2') format('woff2'); }
+
+  :root {
+    /* tokens.css (day) */
+    --ink-950: #060B11;
+    --chrome-solid: #0B131C;
+    --chart-bg: #0E2A40;
+    --text-1: #F3F6F9;
+    --text-2: #B4C0CC;
+    --signal: #FFB547;
+    --signal-night: #FF6A3D;            /* night mode's signal, for a night-mode screen */
+    /* set per size by renderShot() */
+    --h-size: 44px;
+    --s-size: 17px;
+    --s-gap: 12px;
+  }
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: var(--ink-950); }
+
+  .canvas {
+    position: relative; width: 100vw; height: 100vh; overflow: hidden;
+    /* deep water rising behind the device, ink under the headline */
+    background:
+      radial-gradient(130% 62% at 50% 106%, rgba(30, 78, 112, .62) 0%, rgba(14, 42, 64, 0) 72%),
+      linear-gradient(180deg, #0B1722 0%, var(--ink-950) 34%, #071420 100%);
+  }
+  .contours { position: absolute; inset: 0; width: 100%; height: 100%;
+    -webkit-mask-image: linear-gradient(180deg, transparent 0%, transparent 16%, #000 42%);
+            mask-image: linear-gradient(180deg, transparent 0%, transparent 16%, #000 42%); }
+  .contours ellipse { fill: none; }
+
+  .head { position: absolute; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
+  .headline { margin: 0; color: var(--text-1); font: 700 var(--h-size)/1.02 'Barlow Semi Condensed', sans-serif;
+    letter-spacing: -0.006em; text-wrap: balance; }
+  /* the accent phrase never breaks: "10-day / wind & waves", not "10-day wind / & waves" */
+  .headline em { font-style: normal; color: var(--signal); white-space: nowrap; }
+  .is-night .headline em { color: var(--signal-night); }
+  .subline { margin: var(--s-gap) 0 0; color: var(--text-2); font: 500 var(--s-size)/1.25 'Barlow', sans-serif;
+    white-space: nowrap; letter-spacing: .005em; }
+
+  /* Generic device: a satin metal band, a black bezel, the screen. No notch or island — the raw
+     screens are full-bleed captures, and this must not read as Apple's own artwork. */
+  .device { position: absolute; box-sizing: border-box;
+    background: linear-gradient(150deg, #44525F 0%, #1B242E 20%, #0D131A 48%, #1B242E 78%, #3D4A57 100%);
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 255, 255, .16),
+      0 var(--sh-y) var(--sh-blur) var(--sh-spread) rgba(0, 0, 0, .62),
+      0 calc(var(--sh-y) / 4) calc(var(--sh-blur) / 4) rgba(0, 0, 0, .40); }
+  .device__bezel { position: absolute; background: #020304; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .05); }
+  .device__screen { position: absolute; display: block; object-fit: cover; background: var(--chart-bg); }
+  .device__cam { position: absolute; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #26313C, #07090C 70%); }
+  .device__btn { position: absolute; border-radius: 2px;
+    background: linear-gradient(90deg, #252F3A, #4A5867 50%, #252F3A); }
+  .device__btn.is-h { background: linear-gradient(180deg, #252F3A, #4A5867 50%, #252F3A); }
+</style>
+</head>
+<body>
+<div class="canvas" id="canvas">
+  <svg class="contours" id="contours" aria-hidden="true"></svg>
+  <div class="head" id="head">
+    <h1 class="headline" id="headline"></h1>
+    <p class="subline" id="subline"></p>
+  </div>
+  <div class="device" id="device">
+    <div class="device__bezel" id="bezel"><img class="device__screen" id="screen" alt=""></div>
+  </div>
+</div>
+<script>
+  /* Layout per device kind, in canvas CSS px or fractions of the canvas. Phone: two-line headline
+     room above a full device; tablet: one wide line, a larger device. Screen corner radii are kept
+     small enough that the app's own corner chrome (HUD, SOS, tab capsule) is never clipped. */
+  const KIND = {
+    phone: {
+      hSize: 54, sSize: 17, sGap: 12, side: 24,
+      headTop: 0.036, deviceTop: 0.238, bottom: 0.028,
+      frame: 3.2, bezel: 8.5, screenR: 0.095, maxDeviceW: 0.84,
+      shadow: { y: 26, blur: 54, spread: -8 },
+      cam: false,
+      buttons: [ // [side, top fraction, length fraction]
+        ['l', 0.165, 0.045], ['l', 0.235, 0.075], ['l', 0.325, 0.075], ['r', 0.255, 0.115],
+      ],
+    },
+    tablet: {
+      hSize: 74, sSize: 26, sGap: 14, side: 60,
+      headTop: 0.03, deviceTop: 0.168, bottom: 0.034,
+      frame: 4, bezel: 17, screenR: 0.027, maxDeviceW: 0.86,
+      shadow: { y: 40, blur: 80, spread: -12 },
+      cam: true,
+      buttons: [['t', 0.8, 0.07], ['r', 0.07, 0.05], ['r', 0.13, 0.05]],
+    },
+  };
+
+  // The app icon's contour inks, outermost last.
+  const CONTOUR = ['#2A4E6C', '#24455F', '#1F3D55', '#1B354B', '#182F43', '#15293A', '#13253A'];
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  const px = (n) => n + 'px';
+
+  function drawContours(W, H, index, kind) {
+    const svg = document.getElementById('contours');
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.textContent = '';
+    // alternate the rings left/right so the set flows when the screens sit side by side
+    const left = index % 2 === 0;
+    const cx = left ? W * 0.06 : W * 0.94, cy = H * (kind === 'phone' ? 0.86 : 0.84);
+    const g = document.createElementNS(SVGNS, 'g');
+    g.setAttribute('transform', `rotate(${left ? -16 : 16} ${cx} ${cy})`);
+    const base = Math.min(W, H);
+    CONTOUR.forEach((stroke, k) => {
+      const e = document.createElementNS(SVGNS, 'ellipse');
+      const rx = base * (0.2 + 0.24 * k);
+      e.setAttribute('cx', cx); e.setAttribute('cy', cy);
+      e.setAttribute('rx', rx); e.setAttribute('ry', rx * 0.64);
+      e.setAttribute('stroke', stroke);
+      e.setAttribute('stroke-width', kind === 'phone' ? 1.6 : 2.2);
+      e.setAttribute('opacity', (0.95 - k * 0.09).toFixed(2));
+      g.appendChild(e);
+    });
+    svg.appendChild(g);
+  }
+
+  function setHeadline(parts) {
+    const h = document.getElementById('headline');
+    h.textContent = '';
+    for (const p of parts) {
+      if (p.accent) { const em = document.createElement('em'); em.textContent = p.text; h.appendChild(em); }
+      else h.appendChild(document.createTextNode(p.text));
+    }
+  }
+
+  function lineCount(el) {
+    const lh = parseFloat(getComputedStyle(el).lineHeight);
+    return Math.round(el.getBoundingClientRect().height / lh);
+  }
+
+  /** d = { kind, theme, parts: [{text, accent}], subline, src, rawW, rawH, index }. Resolves to a report
+   *  the renderer checks (fonts really loaded, headline lines, subline fits). */
+  window.renderShot = async function renderShot(d) {
+    const K = KIND[d.kind];
+    const W = window.innerWidth, H = window.innerHeight;
+    const root = document.documentElement.style;
+
+    document.getElementById('canvas').classList.toggle('is-night', d.theme === 'night');
+    drawContours(W, H, d.index, d.kind);
+
+    // --- device geometry: fixed per kind so every screenshot in the set matches
+    const top = H * K.deviceTop, bottom = H * (1 - K.bottom);
+    const chrome = 2 * (K.frame + K.bezel);
+    let sh = bottom - top - chrome, sw = sh * d.rawW / d.rawH;
+    const maxSw = W * K.maxDeviceW - chrome;
+    if (sw > maxSw) { sw = maxSw; sh = sw * d.rawH / d.rawW; }
+    const dw = sw + chrome, dh = sh + chrome;
+    const rScreen = sw * K.screenR;
+    const dev = document.getElementById('device');
+    Object.assign(dev.style, { left: px((W - dw) / 2), top: px(top), width: px(dw), height: px(dh),
+      borderRadius: px(rScreen + K.bezel + K.frame) });
+    dev.style.setProperty('--sh-y', px(K.shadow.y));
+    dev.style.setProperty('--sh-blur', px(K.shadow.blur));
+    dev.style.setProperty('--sh-spread', px(K.shadow.spread));
+    const bezel = document.getElementById('bezel');
+    Object.assign(bezel.style, { left: px(K.frame), top: px(K.frame), right: px(K.frame), bottom: px(K.frame),
+      borderRadius: px(rScreen + K.bezel) });
+    const img = document.getElementById('screen');
+    Object.assign(img.style, { left: px(K.bezel), top: px(K.bezel), width: px(sw), height: px(sh), borderRadius: px(rScreen) });
+
+    dev.querySelectorAll('.device__btn, .device__cam').forEach((n) => n.remove());
+    const bw = K.frame * 0.9;
+    for (const [side, at, len] of K.buttons) {
+      const b = document.createElement('div');
+      b.className = 'device__btn' + (side === 't' ? ' is-h' : '');
+      if (side === 't') Object.assign(b.style, { top: px(-bw), height: px(bw + 1), left: px(dw * at), width: px(dw * len) });
+      else Object.assign(b.style, { [side === 'l' ? 'left' : 'right']: px(-bw), width: px(bw + 1), top: px(dh * at), height: px(dh * len) });
+      dev.insertBefore(b, bezel);
+    }
+    if (K.cam) {
+      const c = document.createElement('div');
+      c.className = 'device__cam';
+      const s = K.bezel * 0.36;
+      Object.assign(c.style, { width: px(s), height: px(s), left: px((dw - s) / 2), top: px(K.frame + (K.bezel - s) / 2) });
+      bezel.after(c);
+    }
+
+    // --- header: centred in the band above the device, headline shrinks if it would take 3 lines
+    const head = document.getElementById('head');
+    Object.assign(head.style, { left: px(K.side), right: px(K.side), top: px(H * K.headTop), height: px(top - H * K.headTop - K.sGap * 1.6) });
+    root.setProperty('--s-size', px(K.sSize));
+    root.setProperty('--s-gap', px(K.sGap));
+    setHeadline(d.parts);
+    const sub = document.getElementById('subline');
+    sub.textContent = d.subline || '';
+    sub.hidden = !d.subline;
+
+    img.src = d.src;
+    await img.decode();
+    await document.fonts.ready;
+
+    const h1 = document.getElementById('headline');
+    const maxLines = d.kind === 'phone' ? 2 : 1;
+    let size = K.hSize;
+    root.setProperty('--h-size', px(size));
+    while (lineCount(h1) > maxLines && size > K.hSize * 0.8) { size -= 1; root.setProperty('--h-size', px(size)); }
+    const headRect = head.getBoundingClientRect();
+    return {
+      // check() alone passes for a family with no @font-face at all; every face must also have loaded
+      fonts: document.fonts.check(`700 ${size}px "Barlow Semi Condensed"`) && document.fonts.check(`500 ${K.sSize}px "Barlow"`)
+        && [...document.fonts].every((f) => f.status === 'loaded'),
+      headlineSize: size,
+      headlineLines: lineCount(h1),
+      maxLines,
+      // the nowrap accent can overflow sideways without adding a line
+      headlineFits: h1.scrollWidth <= headRect.width + 0.5,
+      sublineFits: !d.subline || sub.scrollWidth <= headRect.width + 0.5,
+      headFits: h1.getBoundingClientRect().top >= headRect.top - 0.5,
+      device: { left: (W - dw) / 2, top, width: dw, height: dh, screenW: sw, screenH: sh },
+    };
+  };
+</script>
+</body>
+</html>

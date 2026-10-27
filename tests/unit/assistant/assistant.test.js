@@ -70,6 +70,8 @@ vi.mock('../../../src/services/ui', () => ({
 }));
 
 import * as A from '../../../src/engine/assistant.js';
+import worker from '../../../proxy/first-mate-worker.js';
+import { SITE } from '../../../src/services/site';
 import { idb } from '../../../src/engine/db.js';
 import { gpsIsStale } from '../../../src/engine/gps.js';
 import { addSpotMarker, spotsChanged } from '../../../src/engine/spots.js';
@@ -116,6 +118,7 @@ beforeEach(() => {
   A.ASST.streaming = false;
   A.ASST.speak = false;
   A.ASST._proxyBlocked = false;
+  A.ASST._relayHold = {};
   A.asstStore.setState({ messages: [], busy: false, showChips: false });
   vi.mocked(idb.put).mockReset().mockResolvedValue(42);
   vi.mocked(confirmDialog).mockReset().mockResolvedValue(true);
@@ -622,9 +625,10 @@ describe('asstSend', () => {
     await A.asstSend('hello');
     expect(vi.mocked(confirmDialog).mock.calls[0][0].message).toMatch(/Anthropic \(Claude\), using your own API key/);
   });
-  it('proxy: sends system + history with a 90 s deadline, keeps the last 24 history entries', async () => {
+  it('proxy: sends system + the 12 messages the Worker keeps with a 90 s deadline, keeps the last 24 history entries', async () => {
     localStorage.setItem('fishapp.asst.cloudConsent', 'yes');
     A.ASST.history = Array.from({ length: 24 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', content: 'm' + i }));
+    A.ASST.history[22].content = 'z'.repeat(5000);
     globalThis.fetch = vi.fn(async () => jsonResponse({ reply: ' Fish the **kelp** edge. ' }));
     await A.asstSend('what lure for calico');
     const [url, init] = vi.mocked(globalThis.fetch).mock.calls[0];
@@ -632,20 +636,25 @@ describe('asstSend', () => {
     expect(init.timeoutMs).toBe(90000);
     const body = JSON.parse(init.body);
     expect(body.messages.at(-1)).toEqual({ role: 'user', content: 'what lure for calico' });
-    expect(body.messages).toHaveLength(25);
+    expect(body.messages).toHaveLength(12);
+    expect(body.messages[0]).toEqual({ role: 'assistant', content: 'm13' });
+    expect(body.messages.at(-3).content).toBe('z'.repeat(4000));
     expect(body.system.length).toBeLessThanOrEqual(8000);
     expect(lastBot()).toMatchObject({ text: 'Fish the **kelp** edge.', thinking: false });
     expect(A.ASST.history).toHaveLength(24);
     expect(A.ASST.history.at(-1)).toEqual({ role: 'assistant', content: 'Fish the **kelp** edge.' });
   });
-  it('proxy failure: red bubble with the reason and the offline answer; history untouched', async () => {
+  it('proxy failure: red bubble with a plain reason (never the relay\'s own text) and the offline answer; history untouched', async () => {
     localStorage.setItem('fishapp.asst.cloudConsent', 'yes');
-    globalThis.fetch = vi.fn(async () => jsonResponse({ error: 'model overloaded' }, 502));
+    globalThis.fetch = vi.fn(async () => jsonResponse({ error: 'model overloaded at /srv/x.py:12' }, 502));
     await A.asstSend('where am i');
     expect(lastBot()).toMatchObject({ error: true, thinking: false });
-    expect(lastBot().text).toMatch(/^Couldn't reach the AI \(model overloaded\)\. Offline answer:\n\nYour position:/);
+    expect(lastBot().text).toMatch(/^Couldn't reach the AI \(relay error 502\)\. Offline answer:\n\nYour position:/);
+    expect(lastBot().text).not.toMatch(/overloaded|srv/);
     expect(A.ASST.history).toEqual([]);
     expect(A.asstStore.getState().busy).toBe(false);
+    await A.asstSend('where am i');
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);                    // a plain error doesn't hold the relay
   });
   it('a relay that refuses this origin (403) is not retried every question', async () => {
     localStorage.setItem('fishapp.asst.cloudConsent', 'yes');
@@ -736,6 +745,186 @@ describe('asstSend', () => {
     A.asstStore.setState({ messages: [{ id: 999, role: 'user', text: 'tides' }], showChips: false });
     A.asstOnOpen();
     expect(A.asstStore.getState().showChips).toBe(true);
+  });
+});
+
+/* ------------------------------------------- relay back-off (Worker 429 / 503) */
+describe('relay back-off: a busy or failing relay is not hammered', () => {
+  const T0 = Date.UTC(2026, 9, 26, 12, 0, 0);
+  const at = (s) => vi.setSystemTime(T0 + s * 1000);
+  beforeEach(() => {
+    localStorage.setItem('fishapp.asst.cloudConsent', 'yes');
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(T0);
+  });
+
+  it('429: offline answer at once, then no request (not even live data) until retryAfter has passed', async () => {
+    globalThis.fetch = vi.fn(async () => jsonResponse({ error: 'rate_limited', retryAfter: 45 }, 429));
+    await A.asstSend('where am i');
+    expect(lastBot()).toMatchObject({ error: true, thinking: false });
+    expect(lastBot().text).toMatch(/^The free AI is busy \(try again in under a minute\)\. Offline answer:\n\nYour position:/);
+    expect(A.ASST.history).toEqual([]);
+    at(30);
+    await A.asstSend("what's the wind and swell like");
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(lastBot().text).toMatch(/^The free AI is busy \(try again in under a minute\)\. Offline answer:/);
+    expect(A.asstStore.getState().busy).toBe(false);
+    at(45);
+    globalThis.fetch = vi.fn(async () => jsonResponse({ reply: 'back' }));
+    await A.asstSend('where am i');
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(lastBot()).toMatchObject({ text: 'back' });
+  });
+  it('503: no internal detail; a long wait (spent allowance) is checked again within 30 min', async () => {
+    globalThis.fetch = vi.fn(async () => jsonResponse({ error: 'ai_unavailable', retryAfter: 40000 }, 503));
+    await A.asstSend('where am i');
+    expect(lastBot().text).toMatch(/^The free AI is unavailable right now \(try again in about 30 min\)\. Offline answer:\n\nYour position:/);
+    expect(lastBot().text).not.toMatch(/ai_unavailable/);
+    at(29 * 60);
+    await A.asstSend('where am i');
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(lastBot().text).toMatch(/^The free AI is unavailable right now \(try again in about a minute\)\./);
+    at(30 * 60);
+    await A.asstSend('where am i');
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+  });
+  it('asstRetryAfterS: body first, then the Retry-After header, then the default — clamped to 5 s … 30 min', () => {
+    const hdr = (v) => ({ headers: { get: (k) => (k === 'Retry-After' ? v : null) } });
+    expect(A.asstRetryAfterS(hdr('99'), { retryAfter: 12 }, 60)).toBe(12);
+    expect(A.asstRetryAfterS(hdr('99'), {}, 60)).toBe(99);
+    expect(A.asstRetryAfterS(hdr('Wed, 21 Oct 2026 07:28:00 GMT'), null, 60)).toBe(60);
+    expect(A.asstRetryAfterS({}, { retryAfter: 0.2 }, 60)).toBe(5);
+    expect(A.asstRetryAfterS(hdr(null), { retryAfter: 86000 }, 60)).toBe(1800);
+    expect(A.asstRetryAfterS(hdr(null), { retryAfter: -3 }, 60)).toBe(60);
+  });
+  it('a timeout holds the relay for a minute; a plain connection failure does not, and its text never shows', async () => {
+    globalThis.fetch = vi.fn(async () => { throw new Error('timed out after 90s'); });
+    await A.asstSend('where am i');
+    expect(lastBot().text).toMatch(/^The free AI didn't answer in time \(try again in about a minute\)\. Offline answer:/);
+    at(59);
+    await A.asstSend('where am i');
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    at(60);
+    globalThis.fetch = vi.fn(async () => { throw new TypeError('Failed to fetch'); });
+    await A.asstSend('where am i');
+    expect(lastBot().text).toMatch(/^Couldn't reach the AI \(no connection\)\. Offline answer:/);
+    expect(lastBot().text).not.toMatch(/Failed to fetch/);
+    await A.asstSend('where am i');
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+  });
+  it('a 200 that is not JSON (a captive portal) reads as no connection; a 413 (a relay with a smaller cap) says how to recover', async () => {
+    globalThis.fetch = vi.fn(async () => ({ ok: true, status: 200, json: async () => { throw new SyntaxError("Unexpected token '<'"); } }));
+    await A.asstSend('where am i');
+    expect(lastBot().text).toMatch(/^Couldn't reach the AI \(no connection\)\. Offline answer:/);
+    globalThis.fetch = vi.fn(async () => jsonResponse({ error: 'too_large' }, 413));
+    await A.asstSend('where am i');
+    expect(lastBot().text).toMatch(/^Couldn't reach the AI \(the conversation is too long — Clear chat and ask again\)\. Offline answer:/);
+  });
+  it('the consent question still comes first while the relay is held', async () => {
+    localStorage.removeItem('fishapp.asst.cloudConsent');
+    A.asstRelayHold('chat', 30, 'busy');
+    await A.asstSend('where am i');
+    expect(confirmDialog).toHaveBeenCalledTimes(1);
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(lastBot().text).toMatch(/^The free AI is busy \(try again in under a minute\)\. Offline answer:/);
+  });
+  it('saving the endpoint gives the relay a fresh chance', async () => {
+    globalThis.fetch = vi.fn(async () => jsonResponse({ error: 'rate_limited', retryAfter: 60 }, 429));
+    await A.asstSend('where am i');
+    expect(A.asstRelayHeld('chat')).toEqual({ why: 'busy', waitS: 60 });
+    A.asstSaveSettings({ proxy: 'https://mine.workers.dev' });
+    expect(A.asstRelayHeld('chat')).toBeNull();
+  });
+});
+
+/* ------------------------------- the relay body, against the real Worker (proxy/first-mate-worker.js) */
+describe('relay request vs the real Worker', () => {
+  const SITE_ORIGIN = new URL(SITE.siteUrl).origin;
+  const bytes = (s) => new TextEncoder().encode(s).length;
+  const workerEnv = () => ({ AI: { run: vi.fn(async () => ({ response: 'Fish the kelp edge.' })) } });
+  /* A browser page at `origin` calling the Worker: the preflight, then the POST, each readable only
+     when CORS allows it — otherwise fetch rejects exactly as a dropped connection does. */
+  function browserTo(origin, wenv) {
+    return vi.fn(async (url, init) => {
+      if (url !== A.asstProxyUrl()) throw new TypeError('Failed to fetch');
+      const headers = { Origin: origin, 'CF-Connecting-IP': '192.0.2.44' };
+      const pre = await worker.fetch(new Request(url, { method: 'OPTIONS', headers }), wenv);
+      if (pre.headers.get('Access-Control-Allow-Origin') !== origin) throw new TypeError('Failed to fetch');
+      const r = await worker.fetch(new Request(url, { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: init.body }), wenv);
+      if (r.headers.get('Access-Control-Allow-Origin') !== origin) throw new TypeError('Failed to fetch');
+      return r;
+    });
+  }
+  beforeEach(() => { localStorage.setItem('fishapp.asst.cloudConsent', 'yes'); });
+
+  it('the web app\'s own origin gets its answer', async () => {
+    const wenv = workerEnv();
+    globalThis.fetch = browserTo(SITE_ORIGIN, wenv);
+    await A.asstSend('what lure for calico');
+    expect(lastBot()).toMatchObject({ text: 'Fish the kelp edge.', thinking: false });
+  });
+  it('a refused origin reads as refused (Data mode, not asked again), never as "no connection" on every question', async () => {
+    const wenv = workerEnv();
+    globalThis.fetch = browserTo('https://fishapp.example', wenv);
+    await A.asstSend('where am i');
+    expect(lastBot().text).toMatch(/^Couldn't reach the AI \(the free AI relay refused this app\)\. Offline answer:/);
+    expect(A.asstStore.getState().brain).toBe('data');
+    expect(A.asstStore.getState().statusText).toMatch(/AI relay unavailable/);
+    await A.asstSend('where am i');
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(wenv.AI.run).not.toHaveBeenCalled();
+  });
+  it('long non-Latin pastes no longer push the body past 64 KB and 413 every later question', async () => {
+    // Five 3,500-character CJK pastes with replies used to make a 73 KB body for "any bait tips?".
+    for (const c of ['鱼', '浪', '潮', '风', '船']) A.ASST.history.push({ role: 'user', content: c.repeat(3500) }, { role: 'assistant', content: 'r'.repeat(700) });
+    const wenv = workerEnv();
+    globalThis.fetch = browserTo(SITE_ORIGIN, wenv);
+    await A.asstSend('any bait tips?');
+    expect(lastBot()).toMatchObject({ text: 'Fish the kelp edge.', thinking: false });
+    const body = vi.mocked(globalThis.fetch).mock.calls[0][1].body;
+    expect(bytes(body)).toBeLessThanOrEqual(A.ASST_PROXY_MAX_BODY);
+    const sent = JSON.parse(body).messages;
+    expect(sent.at(-1)).toEqual({ role: 'user', content: 'any bait tips?' });
+    expect(sent.at(-2)).toEqual({ role: 'assistant', content: 'r'.repeat(700) });   // newest history kept, oldest dropped
+    await A.asstSend('and tomorrow?');
+    expect(lastBot()).toMatchObject({ text: 'Fish the kelp edge.' });
+  });
+  it('asstProxyBody: history that fits the token budget but not the byte cap is dropped oldest first', () => {
+    const ctl = '\u0001'.repeat(4000);                 // 1000 tokens, but 24 KB once escaped
+    const msgs = [ctl, ctl, ctl, ctl].map((content, i) => ({ role: i % 2 ? 'assistant' : 'user', content }));
+    msgs.push({ role: 'user', content: 'q' });
+    const body = A.asstProxyBody('S', msgs);
+    expect(bytes(body)).toBeLessThanOrEqual(A.ASST_PROXY_MAX_BODY);
+    expect(JSON.parse(body).messages.map((m) => m.content.length)).toEqual([4000, 4000, 1]);
+  });
+  it('asstEstTokens: ~4 ASCII characters a token, any other unit one each', () => {
+    expect(A.asstEstTokens('')).toBe(0);
+    expect(A.asstEstTokens('abcde')).toBe(2);
+    expect(A.asstEstTokens('鱼鱼')).toBe(2);
+    expect(A.asstEstTokens('🐟')).toBe(2);
+  });
+  it('our own 8000-character system prompt is never cut by the token cap, and leaves room for the conversation', () => {
+    const t = A.asstEstTokens(A.asstProxySystem('what lure for calico', ''));
+    expect(t).toBeLessThan(A.ASST_PROXY_SYSTEM_TOKENS);
+    expect(A.ASST_PROXY_INPUT_TOKENS - t).toBeGreaterThan(1500);
+  });
+  /* The two sides must agree on what the model gets: the app should never upload what the Worker
+     will throw away, and the Worker should never cut what the app thought it sent. */
+  it.each([
+    ['a long ASCII history', () => [A.asstProxySystem('what lure for calico', ''), [...Array.from({ length: 24 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', content: 'x'.repeat(4000) })), { role: 'user', content: 'q'.repeat(4000) }]]],
+    ['CJK pastes', () => [A.asstProxySystem('tides', ''), ['鱼', '浪', '潮'].flatMap((c) => [{ role: 'user', content: c.repeat(3500) }, { role: 'assistant', content: '好'.repeat(900) }]).concat({ role: 'user', content: '潮'.repeat(4000) })]],
+    ['a non-Latin system prompt and an emoji question', () => ['海'.repeat(8000), [{ role: 'user', content: 'a' + '🐟'.repeat(3000) }]]],
+    ['escape-heavy history', () => ['S', ['"\n'.repeat(2000), '\u0001'.repeat(4000), '"\n'.repeat(2000)].map((content, i) => ({ role: i % 2 ? 'assistant' : 'user', content })).concat({ role: 'user', content: 'ok?' })]],
+  ])('%s: the Worker accepts the body and forwards every character of it', async (_, make) => {
+    const [system, messages] = make();
+    const body = A.asstProxyBody(system, messages);
+    expect(bytes(body)).toBeLessThanOrEqual(A.ASST_PROXY_MAX_BODY);
+    const wenv = workerEnv();
+    const r = await worker.fetch(new Request(A.ASST_PROXY, { method: 'POST', headers: { Origin: SITE_ORIGIN, 'content-type': 'application/json', 'CF-Connecting-IP': '192.0.2.45' }, body }), wenv);
+    expect(r.status).toBe(200);
+    const sent = JSON.parse(body);
+    expect(sent.messages.at(-1).role).toBe('user');
+    expect(wenv.AI.run.mock.calls[0][1].messages).toEqual([{ role: 'system', content: sent.system }, ...sent.messages]);
   });
 });
 
@@ -845,6 +1034,44 @@ describe('speech', () => {
     A.asstSpeak('hello');
     expect(vi.mocked(globalThis.fetch).mock.calls[0][0]).toBe(A.ASST_PROXY + '/tts');
     expect(spoken).toHaveLength(0);
+  });
+  it('a 429 from /tts speaks on the device and holds /tts (not the chat) instead of asking again', async () => {
+    localStorage.setItem('fishapp.asst.cloudvoice', '1');
+    localStorage.setItem('fishapp.asst.cloudConsent', 'yes');
+    globalThis.fetch = vi.fn(async () => jsonResponse({ error: 'rate_limited', retryAfter: 20 }, 429));
+    A.ASST.speak = true;
+    A.asstSpeak('hello');
+    await vi.waitFor(() => expect(spoken).toHaveLength(1));
+    expect(A.asstRelayHeld('tts')).toMatchObject({ why: 'busy' });
+    expect(A.asstRelayHeld('chat')).toBeNull();
+    A.asstSpeak('again');
+    expect(spoken.map((u) => u.text)).toEqual(['hello', 'again']);     // straight to the device voice
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+  it('a 403 from /tts (this origin refused) stops offering the relay, voice and chat alike', async () => {
+    localStorage.setItem('fishapp.asst.cloudvoice', '1');
+    localStorage.setItem('fishapp.asst.cloudConsent', 'yes');
+    globalThis.fetch = vi.fn(async () => jsonResponse({ error: 'forbidden' }, 403));
+    A.ASST.speak = true;
+    A.asstSpeak('hello');
+    await vi.waitFor(() => expect(spoken).toHaveLength(1));
+    expect(A.ASST._proxyBlocked).toBe(true);
+    expect(A.asstBrainInputs().proxy).toBe(false);
+    A.asstSpeak('again');
+    expect(spoken).toHaveLength(2);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+  it('a /tts timeout holds the cloud voice for a minute', async () => {
+    localStorage.setItem('fishapp.asst.cloudvoice', '1');
+    localStorage.setItem('fishapp.asst.cloudConsent', 'yes');
+    globalThis.fetch = vi.fn(async () => { throw new Error('timed out after 30s'); });
+    A.ASST.speak = true;
+    A.asstSpeak('hello');
+    await vi.waitFor(() => expect(spoken).toHaveLength(1));
+    expect(A.asstRelayHeld('tts')).toMatchObject({ why: 'slow', waitS: 60 });
+    A.asstSpeak('again');
+    expect(spoken).toHaveLength(2);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
   });
   it('ranks natural voices first and picks the honest hint', () => {
     const vs = [

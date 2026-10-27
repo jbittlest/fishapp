@@ -52,11 +52,12 @@
   display: flex; flex-direction: column; gap: 10px; padding: 0 12px 12px 14px;
 }
 .spot-row__notes { margin: 0 0 0 46px; font: 400 14px/20px var(--font-ui); color: var(--text-2); overflow-wrap: anywhere; white-space: pre-wrap; }
-/* three equal tool buttons, icon over label, so "Show on chart" / "Edit" / "Delete" sit on one
-   row at phone width instead of wrapping Delete onto a line of its own */
-.spot-row__actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+/* four equal tool buttons, icon over label, so "Show on chart" / "Share" / "Edit" / "Delete" sit
+   on one row at phone width instead of wrapping Delete onto a line of its own */
+.spot-row__actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .ui-btn.spot-tool { flex-direction: column; gap: 4px; min-height: 60px; padding: 8px 6px; font-size: 13px; line-height: 16px; }
-.spot-tool .ui-btn__label { max-width: 100%; }
+/* four to a row: "Show on chart" wraps onto two lines rather than being cut to "Show on…" */
+.spot-tool .ui-btn__label { max-width: 100%; white-space: normal; text-align: center; }
 .ui-btn.spot-tool--delete .ui-icon { color: var(--alert-text); }
 .spot-more { display: flex; width: 100%; justify-content: center; margin-top: 8px; }
 /* compact (40 px) buttons that stay compact for layout — section-header actions, "Show all" —
@@ -99,6 +100,9 @@
 .spot-card__notes { margin: 0 0 10px; font: 400 15px/21px var(--font-ui); color: var(--text-1); overflow-wrap: anywhere; white-space: pre-wrap; }
 .spot-card__foot { margin: 0; font-variant-numeric: tabular-nums; }
 .spot-card__pos { font-family: var(--font-inst); font-size: 13px; letter-spacing: .01em; }
+/* four actions do not fit one row on a phone: two even rows, not three and a stray Delete */
+.shell-card__actions > .ui-btn.spot-card__act { flex: 1 1 calc(50% - 4px); }
+.ui-hint.spot-shared__hint { margin: 8px 0 0; }
 
 .spot-reef__facts { margin: 0; font: 500 14px/20px var(--font-ui); color: var(--text-2); overflow-wrap: anywhere; }
 .spot-reef__depth { white-space: nowrap; }
@@ -144,6 +148,11 @@
 .dl-est__strip .ui-num--row { font-size: 18px; line-height: 22px; }
 .dl-est__strip .ui-num__approx { color: var(--text-2); }
 .dl-est__layers { margin: 0 2px; font: 500 12.5px/17px var(--font-ui); color: var(--text-3); }
+.dl-est__layers > .ui-label { margin-right: 4px; }
+/* live-only layers the sources' terms keep off the device: words plus a glyph, never colour */
+.dl-est__skipped { display: flex; flex-direction: column; gap: 6px; margin: 0 2px; padding: 0; list-style: none; font: 500 13px/18px var(--font-ui); color: var(--text-2); }
+.dl-est__skipped > li { display: flex; align-items: flex-start; gap: 6px; }
+.dl-est__skipped .ui-icon { flex-shrink: 0; margin-top: 2px; color: var(--text-3); }
 
 /* A run in progress: what is downloading and how far (percent, bar, tile count), then Cancel. */
 .dl-progress {
@@ -169,6 +178,8 @@
 .dl-area__extra { display: flex; flex-direction: column; gap: 6px; padding: 0 14px 12px 54px; }
 .dl-area__badges { display: flex; flex-wrap: wrap; gap: 6px; }
 .dl-area__missing { font: 500 13px/18px var(--font-ui); color: var(--text-2); }
+/* the same not-saved lines as the estimate, aligned with the badges above them */
+.dl-est__skipped.dl-area__notsaved { margin: 0; }
 .dl-area__deleting { display: inline-flex; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; }
 .dl-storage { margin: 0 2px; font-variant-numeric: tabular-nums; }
 .dl-storage > .ui-label { margin-right: 6px; }

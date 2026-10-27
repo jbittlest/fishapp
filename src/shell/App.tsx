@@ -5,7 +5,7 @@
  * #root itself ignores pointer events so the chart stays draggable between pieces of chrome;
  * every interactive block opts back in (shell.css). */
 import { useLayoutEffect, useRef, useState } from 'react';
-import { useIsDesktop, useStoreValue, DialogHost, ToastHost } from '../ui';
+import { useIsDesktop, useStoreValue, DialogHost, ModalLayer, ToastHost } from '../ui';
 import { useUi } from '../services/ui';
 import { isNativeShell } from '../services/native';
 import { gotoStore } from '../engine/goto.js';
@@ -111,6 +111,7 @@ export function App() {
       </div>
 
       <ModalHost />
+      <ModalLayer />{/* modals portaled out of a map card (ModalPortal) */}
       <DialogHost />
       <ToastHost />
       <AnchorAlarm />

@@ -27,12 +27,13 @@ import {
   anchorRestore, navAnchorEvaluate, navOnGpsStale, navOnFix, tripToggle, tripReset, tripDurationMs,
   routeSummarize, routeAddPoint, routeStart, routeUndo, getRouteSpeedKn, setRouteSpeedKn, getRouteGph, setRouteGph,
   navSetMode, navHandleClick, measureClick, FT_PER_M, ANCHOR_SNOOZE_MS, anchorPrimePending, anchorAudioReady,
+  ANCHOR_SCREEN_COPY, anchorScreenCopy,
 } from '../../../src/engine/nav.js';
 import { GPS } from '../../../src/engine/gps.js';
 import { Goto } from '../../../src/engine/goto.js';
 import { Awake } from '../../../src/engine/awake.js';
 import { toast, closePanels, confirmDialog } from '../../../src/services/ui';
-import { backgroundLocation, haptic, nativeAnchorSilence, nativeAnchorWatch } from '../../../src/services/native';
+import { backgroundLocation, haptic, isNativeShell, nativeAnchorSilence, nativeAnchorWatch } from '../../../src/services/native';
 import { BASE, llAt, mediaPlayRejects, resetAll, setFix } from './helpers.js';
 
 const distFt = (a, b) => Math.round(a.distanceTo(b) * FT_PER_M);
@@ -614,6 +615,48 @@ describe('cruise speed / fuel burn', () => {
     m = await import('../../../src/engine/nav.js');
     expect(m.getRouteSpeedKn()).toBe(17);
     expect(m.getRouteGph()).toBe(0);
+  });
+});
+
+describe('anchor watch screen copy: iPhone app vs browser', () => {
+  afterEach(() => { isNativeShell.mockReturnValue(false); });
+
+  function drop() {
+    setFix(BASE);
+    Nav.anchor.field = '150';
+    anchorDrop();
+  }
+
+  it('a browser keeps the legacy "screen on" wording', () => {
+    expect(anchorScreenCopy(false)).toBe(ANCHOR_SCREEN_COPY.web);
+    expect(ANCHOR_SCREEN_COPY.web).toEqual({
+      armed: 'keep the app open, screen on',
+      band: 'keep the screen on',
+      blind: 'Keep the app in front with the screen on until GPS comes back.',
+    });
+  });
+
+  it('the iPhone app never says to keep the screen on — its native monitor watches with the screen locked', () => {
+    const c = anchorScreenCopy(true);
+    expect(c).toBe(ANCHOR_SCREEN_COPY.native);
+    expect(Object.keys(c).sort()).toEqual(Object.keys(ANCHOR_SCREEN_COPY.web).sort());
+    for (const line of Object.values(c)) {
+      expect(line).not.toMatch(/screen on|keep the screen|in front/i);
+      expect(line).not.toMatch(/\bphone\b/i);     // the same app runs on iPad
+    }
+    expect(c.armed).toMatch(/screen locked/);
+    expect(c.armed).toMatch(/close the app/);      // what really stops it there
+    expect(c.band).toBe('OK to lock the screen');
+  });
+
+  it('dropping the anchor toasts the wording for where it runs', () => {
+    drop();
+    expect(toast).toHaveBeenLastCalledWith('Anchor watch on (150 ft) — keep the app open, screen on');
+    anchorRaise();
+    isNativeShell.mockReturnValue(true);
+    drop();
+    expect(toast).toHaveBeenLastCalledWith('Anchor watch on (150 ft) — keeps watching with the screen locked. Don\'t close the app.');
+    expect(nativeAnchorWatch).toHaveBeenLastCalledWith(expect.objectContaining({ on: true }));
   });
 });
 

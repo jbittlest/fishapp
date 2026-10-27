@@ -2,6 +2,7 @@ import { createStore } from 'zustand/vanilla';
 import { GPS } from './gps.js';
 import { Astro } from './astro.js';
 import { getMap, readJSON } from './app.js';
+import { coopsHiLoUrl } from './datasources.js';
 
 /* Tides (NOAA CO-OPS) + Solunar bite times + sun/moon — the "Tides & Times" panel.
    Tides need internet; solunar/sun/moon are computed offline.
@@ -164,9 +165,7 @@ export async function loadTidesTimes() {
   try {
     const now = new Date(), end = new Date(now.getTime() + 2 * 86400000);
     // hi/lo works for every station (incl. subordinate ones with no time-series)
-    const url = 'https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?application=fishapp&datum=MLLW' +
-      '&time_zone=lst_ldt&units=english&format=json&product=predictions&interval=hilo&station=' + st.id +
-      '&begin_date=' + ymd(now) + '&end_date=' + ymd(end);
+    const url = coopsHiLoUrl(st.id, ymd(now), ymd(end));
     const hilo = await fetch(url).then((r) => r.json());
     const hl = hilo.predictions || [];
     if (!hl.length) throw new Error('no predictions');

@@ -5,7 +5,7 @@ import L from 'leaflet';
 import { deleteTilesByPrefix, loadTileKeys, openDB } from './db.js';
 import { GPS, WakeLock, gpsStart, setFollow } from './gps.js';
 import { initLayers, initDataOverlays, updateChartFilter } from './layers.js';
-import { openSpotModal, spotsInit } from './spots.js';
+import { openSpotModal, spotLinksInit, spotsInit } from './spots.js';
 import { Tracks, tracksInit } from './tracks.js';
 import { WX, loadForecast10, loadNow24, wxInit } from './weather.js';
 import { inspectAt } from './inspect.js';
@@ -23,6 +23,8 @@ import { Voice, voiceInit } from './voice.js';
 import { motorInit } from './motor.js';
 import { isPanelOpen, markBooted, setBootStatus, toast as uiToast, uiStore } from '../services/ui';
 import { startTheme } from '../services/theme';
+import { creditsInit } from './attribution.js';
+import { noteAppOpen } from '../services/review';
 
 /* Shown in More → About next to the build the service worker is actually serving, so a device
    running stale cached code is visible at a glance. Compiled in by vite.config.ts. */
@@ -162,6 +164,7 @@ export async function boot() {
       worldCopyJump: true,
     });
     map.attributionControl.setPrefix(false);
+    safe('credits', () => creditsInit(map));   // never-truncated credits: a "Credits" button on phones (attribution.js)
     _map = map;
     window._map = map;
     /* In follow mode every GPS fix pans the map → fires moveend. Debounce the view save so
@@ -220,7 +223,12 @@ export async function boot() {
     safe('wake lock', () => { WakeLock.setEnabled(WakeLock.enabled); WakeLock.acquire(); });
     safe('keep-alive', () => awakeSetEnabled(Awake.enabled));
     safe('spots', () => spotsInit(map));
+    /* A shared-spot link (#s=…), or the shared spot a reload of this tab interrupted (the update
+       reload below, an iOS tab eviction — spots.js keeps it in sessionStorage): before GPS
+       starts, so follow is already off when the first fix lands and the view stays on the spot. */
+    safe('spot links', () => spotLinksInit());
     safe('tracks', () => tracksInit());
+    safe('review', () => noteAppOpen({ Nav, Goto, Voice, Tracks, GPS }));   // rating prompt: days of use + what it must never cover
   } catch (e) {
     console.error('[boot]', e);
     _bootProblems.push('startup');

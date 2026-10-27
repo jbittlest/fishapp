@@ -1,15 +1,18 @@
 /* Map card for a catch marker (card kind 'catch', data { id }). Replaces the legacy Leaflet
  * popup: photo, size/bait, the conditions captured at the moment it was landed, notes, and
- * Share catch card (a 1080x1080 image — the share sheet in the iOS app, a download on the web),
- * Navigate (Go-To back to the spot) and Delete (confirmed). */
-import { useState, type ReactNode } from 'react';
+ * Share (the share options sheet: a post or story image, position off unless turned on — the
+ * share sheet in the iOS app, a download on the web), Navigate (Go-To back to the spot) and
+ * Delete (confirmed). */
+import { useCallback, useState, type ReactNode } from 'react';
 import { MapCard } from '../../shell/MapCard';
 import type { CardProps } from '../../shell/registry';
 import { Button, Hint, IconButton, Num, useStoreValue } from '../../ui';
-import { catchStore, cleanMoonName, deleteCatch, makeCatchCard, type CatchView } from '../../engine/catch.js';
+import { catchStore, cleanMoonName, deleteCatch, type CatchView } from '../../engine/catch.js';
 import { formatCoord } from '../../engine/gps.js';
 import { compass } from '../../engine/weather.js';
 import { navigateToCatch } from './catchActions';
+import { CatchShareSheet } from './CatchShareSheet';
+import { OpenMeteoCredit } from '../weather/DataCredit';
 import './tides.css';
 
 /* Belt and braces: catchToView (condToView) already keeps only strings for these keys, but a
@@ -53,8 +56,9 @@ export function conditionRows(c: CatchView): Array<{ key: string; k: string; v: 
 export default function CatchCard({ data }: CardProps) {
   const id = data?.id as number | undefined;
   const c = useStoreValue(catchStore, (s) => s.items.find((x) => x.id === id) ?? null);
-  const [sharing, setSharing] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const closeShare = useCallback(() => setShareOpen(false), []);
 
   if (!c) return <MapCard eyebrow="Catch" title="Catch not found" subtitle="It may have been deleted." />;
 
@@ -65,11 +69,6 @@ export default function CatchCard({ data }: CardProps) {
   const conds = conditionRows(c);
   const when = new Date(c.ts).toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 
-  const share = async () => {
-    if (sharing) return;
-    setSharing(true);
-    try { await makeCatchCard(c); } finally { setSharing(false); }
-  };
   const del = async () => {
     if (deleting) return;
     setDeleting(true);
@@ -88,7 +87,7 @@ export default function CatchCard({ data }: CardProps) {
       )}
       actions={(
         <div className={'tide-card__acts' + (hasPos ? '' : ' is-two')}>
-          <Button icon="share" busy={sharing} aria-label="Share catch card" onClick={() => { void share(); }}>Share</Button>
+          <Button icon="share" aria-label="Share catch card" aria-haspopup="dialog" onClick={() => setShareOpen(true)}>Share</Button>
           {hasPos && <Button icon="navigation" onClick={() => { void navigateToCatch(c); }}>Navigate</Button>}
           <IconButton icon="trash" label="Delete this catch" className="tide-card__del" disabled={deleting} onClick={() => { void del(); }} />
         </div>
@@ -99,6 +98,8 @@ export default function CatchCard({ data }: CardProps) {
         <>
           <div className="ui-label tide-card__label">Conditions when landed</div>
           <FactGrid items={conds} />
+          {/* water temp, swell, wind, pressure and air were Open-Meteo data: its CC BY credit, linked */}
+          {conds.some((r) => ['sst', 'wave', 'wind', 'pres', 'air'].includes(r.key)) && <OpenMeteoCredit className="wx-credit--tight" />}
         </>
       ) : (
         <Hint>No conditions were captured for this catch.</Hint>
@@ -107,6 +108,7 @@ export default function CatchCard({ data }: CardProps) {
       {hasPos
         ? <p className="ui-caption tide-card__pos tnum">{formatCoord(c.lat, 'lat')} {formatCoord(c.lng, 'lon')}</p>
         : <Hint>No usable position is saved with this catch, so it isn’t on the chart.</Hint>}
+      {shareOpen && <CatchShareSheet c={c} onClose={closeShare} />}
     </MapCard>
   );
 }

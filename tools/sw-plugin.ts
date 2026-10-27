@@ -35,8 +35,9 @@ export function swManifest(build: string): Plugin {
         hash.update(item.type === 'chunk' ? item.code : typeof item.source === 'string' ? item.source : Buffer.from(item.source));
       }
       const publicDir = config.publicDir;
-      // dotfiles (.nojekyll) are hosting hints, not app files — never part of the offline shell
-      const pub = walk(publicDir).filter((f) => f !== 'sw.js' && !path.basename(f).startsWith('.')).sort();
+      // dotfiles (.nojekyll) are hosting hints, not app files — never part of the offline shell;
+      // nor is og.png, the ~400 KB link-preview image only crawlers fetch
+      const pub = walk(publicDir).filter((f) => f !== 'sw.js' && f !== 'og.png' && !path.basename(f).startsWith('.')).sort();
       for (const f of pub) { hash.update(f); hash.update(fs.readFileSync(path.join(publicDir, f))); }
 
       const shell = [...new Set(['./', './index.html', ...[...emitted, ...pub].map((f) => './' + f)])];

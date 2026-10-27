@@ -32,6 +32,7 @@ export const CARDS: Record<string, Lazy<CardProps>> = {
   inspect: lazy(() => import('../features/weather/InspectCard')),
   fish: lazy(() => import('../features/weather/FishCard')),
   spot: lazy(() => import('../features/spots/SpotCard')),
+  'shared-spot': lazy(() => import('../features/spots/SharedSpotCard')),
   reef: lazy(() => import('../features/spots/ReefCard')),
   mpa: lazy(() => import('../features/spots/MpaCard')),
   catch: lazy(() => import('../features/tides/CatchCard')),

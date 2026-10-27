@@ -19,6 +19,12 @@
   max-width: 168px; overflow: hidden; text-overflow: ellipsis;
 }
 
+/* a spot shared by link, not saved yet: the same disc with a dashed keyline instead of the
+   solid one — a shape cue, so it reads the same in the red-safe night theme */
+.spot-mk--shared .spot-mk__disc { box-shadow: none; outline: 1.5px dashed var(--text-1); outline-offset: 1.5px; }
+/* a shared hazard is still a safety mark: its alert keyline stays, the dashed ring sits outside it */
+.spot-mk--shared.spot-mk--hazard .spot-mk__disc { box-shadow: 0 0 0 2px var(--alert); outline-offset: 3.5px; }
+
 /* ---- artificial reefs: shape-coded rounded square (spots are discs) ---- */
 .spot-reefmk-wrap { background: none; border: 0; }
 .spot-reefmk {

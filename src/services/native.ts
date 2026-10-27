@@ -11,12 +11,25 @@ interface FishNativeApi {
   post(cmd: string, extra?: Record<string, unknown>): void;
 }
 
+/** How the shell answers requestReview (NativeBridge.swift). */
+interface ReviewAnswer { requested?: unknown }
+
 declare global {
-  interface Window { FishNative?: FishNativeApi }
+  interface Window {
+    FishNative?: FishNativeApi;
+    __fishNativeReviewRequested?: (r: ReviewAnswer) => void;
+  }
 }
 
 export function isNativeShell(): boolean {
   return typeof window !== 'undefined' && !!window.FishNative;
+}
+
+/** Bridge.js version of the iOS shell, 0 in a browser. 3 added requestReview and shareText; an
+ *  older installed shell silently drops commands it doesn't know, so gate new ones on this. */
+export function nativeBridgeVersion(): number {
+  const n = typeof window !== 'undefined' ? window.FishNative : undefined;
+  return n && typeof n.version === 'number' ? n.version : 0;
 }
 
 function post(cmd: string, extra?: Record<string, unknown>): boolean {
@@ -40,6 +53,36 @@ export function nativeAnchorSilence(): void { post('anchorSilence'); }
 
 /** Light warning haptic (alarms, arming). No-op on the web. */
 export function haptic(): void { post('haptic'); }
+
+/* The shell answers within a main-thread hop; past this, treat the request as lost. */
+export const REVIEW_ANSWER_MS = 5000;
+let reviewAsk: Promise<boolean> | null = null;
+
+/** Ask iOS for the App Store rating prompt. Resolves true once the shell has handed the request to
+ *  StoreKit — iOS still decides whether the prompt appears (at most three times a year) and never
+ *  says. False in a browser, on an older shell, when the app wasn't the active foreground scene
+ *  (the shell drops it then), or with no answer in time. One request at a time: a second call
+ *  while one is out shares its answer. WHEN to ask is services/review's job — never call this
+ *  from a button. */
+export function requestReview(): Promise<boolean> {
+  if (nativeBridgeVersion() < 3) return Promise.resolve(false);
+  if (reviewAsk) return reviewAsk;
+  let settle!: (requested: boolean) => void;
+  const ask = new Promise<boolean>((resolve) => { settle = resolve; });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const done = (requested: boolean) => {
+    clearTimeout(timer);
+    if (window.__fishNativeReviewRequested === answer) delete window.__fishNativeReviewRequested;
+    if (reviewAsk === ask) reviewAsk = null;
+    settle(requested);
+  };
+  const answer = (r: ReviewAnswer) => done(!!r && r.requested === true);
+  window.__fishNativeReviewRequested = answer;
+  if (!post('requestReview')) { done(false); return ask; }
+  reviewAsk = ask;
+  timer = setTimeout(() => done(false), REVIEW_ANSWER_MS);
+  return ask;
+}
 
 /** Open a link outside the app (Safari / Phone / Messages in the iOS shell; a new tab on the web). */
 export function openExternal(url: string): void {
@@ -76,6 +119,38 @@ function blobToBase64(b: Blob): Promise<string> {
   });
 }
 
+/* Web Share only where it opens a real share sheet: desktop browsers that have it show a thin
+   system dialog, and there the clipboard is what people expect. */
+const PHONE_UA = /iPhone|iPad|Android/i;
+
+/** Share a short message and a link (a spot, a catch, the app itself).
+ *  iOS shell → native share sheet. Phone browser → Web Share. Anywhere else, or when sharing is
+ *  refused, the message and link go to the clipboard: on 'copied' the caller should say so.
+ *  'cancelled' means nothing happened — the user closed the sheet, or no clipboard either.
+ *  `title` is used by Web Share only (the iOS sheet has no title line). */
+export async function shareText(opts: { text: string; url?: string; title?: string }): Promise<'shared' | 'copied' | 'cancelled'> {
+  const text = String(opts.text ?? '').trim();
+  const url = String(opts.url ?? '').trim();
+  if (!text && !url) return 'cancelled';
+  if (isNativeShell()) {
+    if (nativeBridgeVersion() >= 3 && post('shareText', { text, url })) return 'shared';
+  } else if (typeof navigator !== 'undefined' && typeof navigator.share === 'function' && PHONE_UA.test(navigator.userAgent)) {
+    const data: ShareData = {};
+    if (text) data.text = text;
+    if (url) data.url = url;
+    if (opts.title) data.title = opts.title;
+    try {
+      await navigator.share(data);
+      return 'shared';
+    } catch (e) {
+      if ((e as DOMException)?.name === 'AbortError') return 'cancelled';
+      // NotAllowedError (no user gesture left after an await) and the like: copy instead
+    }
+  }
+  const line = !url || text.includes(url) ? text : text ? text + ' ' + url : url;
+  return (await copyText(line)) ? 'copied' : 'cancelled';
+}
+
 /** Save a generated file (backup export, catch card, motor session).
  *  iOS shell → native share sheet (Save to Files, AirDrop, Messages…).
  *  Browser → Web Share with files when available (iPhone Safari), else a normal download. */
@@ -88,7 +163,7 @@ export async function saveOrShareFile(opts: { name: string; mime: string; data: 
   try {
     const file = new File([blob], opts.name, { type: opts.mime });
     const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
-    if (nav.canShare && nav.canShare({ files: [file] }) && /iPhone|iPad|Android/i.test(navigator.userAgent)) {
+    if (nav.canShare && nav.canShare({ files: [file] }) && PHONE_UA.test(navigator.userAgent)) {
       await navigator.share({ files: [file], title: opts.title ?? opts.name });
       return 'shared';
     }

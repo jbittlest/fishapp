@@ -60,6 +60,16 @@ describe('awakeBannerModel', () => {
     expect(awakeBannerModel({ ...healthy, gpsOk: false, fixAgeS: 90, screenLock: false, keepAlive: false }, true, true).detail)
       .toBe('no GPS for 90s · screen may sleep · background keep-alive not running');
   });
+  it('iPhone app: an anchor watch says it is OK to lock the screen, not "keep the screen on"', () => {
+    const native = { ...healthy, native: true, keepAliveWanted: false };
+    expect(awakeBannerModel(native, true, false)).toEqual({ visible: true, warn: false, what: 'Anchor watch', detail: 'GPS 4s ago · OK to lock the screen' });
+    expect(awakeBannerModel({ ...native, fixAgeS: null }, true, false).detail).toBe('OK to lock the screen');
+    expect(awakeBannerModel(native, true, true).detail).toBe('GPS 4s ago · OK to lock the screen');
+    // a recording alone has no native monitor behind it: browser wording
+    expect(awakeBannerModel(native, false, true).detail).toBe('GPS 4s ago · keep the screen on');
+    // problems still win over the calm line
+    expect(awakeBannerModel({ ...native, gpsOk: false, fixAgeS: 75 }, true, false)).toMatchObject({ warn: true, detail: 'no GPS for 75s' });
+  });
 });
 
 describe('watch band store', () => {
@@ -133,6 +143,19 @@ describe('FIX: no silent keep-alive audio inside the iPhone app (App Review 2.5.
     const s = awakeStore.getState();
     expect(s.detail).not.toContain('background keep-alive not running');
     expect(s.warn).toBe(false);
+    Nav.anchor.watching = false;
+  });
+
+  it('the band tells an anchor watch it can lock the screen (the native monitor keeps watching)', () => {
+    isNativeShell.mockReturnValue(true);
+    GPS.lastFixTs = Date.now() - 2000;
+    Nav.anchor.watching = true;
+    awakeAcquire('anchor');
+    expect(awakeHealth().native).toBe(true);
+    expect(awakeStore.getState()).toMatchObject({ warn: false, detail: 'GPS 2s ago · OK to lock the screen' });
+    isNativeShell.mockReturnValue(false);
+    awakeApply();                                   // a browser: the keep-alive loop starts, then the band
+    expect(awakeStore.getState().detail).toBe('GPS 2s ago · keep the screen on');
     Nav.anchor.watching = false;
   });
 

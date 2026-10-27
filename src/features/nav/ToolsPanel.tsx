@@ -7,11 +7,12 @@ import {
 } from '../../ui';
 import { CatchLogSection } from '../tides/CatchLogSection';
 import {
-  anchorRadiusChanged, anchorStatusText, anchorToggle, fmtDur, navSetMode, navStore, routeClear, routeStart,
-  routeUndo, setRouteGph, setRouteSpeedKn, tripDurationMs, tripReset, tripToggle,
+  anchorRadiusChanged, anchorScreenCopy, anchorStatusText, anchorToggle, fmtDur, navSetMode, navStore, routeClear,
+  routeStart, routeUndo, setRouteGph, setRouteSpeedKn, tripDurationMs, tripReset, tripToggle,
 } from '../../engine/nav.js';
 import { setDetent } from '../../services/ui';
 import { isNativeShell } from '../../services/native';
+import { SITE } from '../../services/site';
 import { useNow } from './useNow';
 import './nav.css';
 
@@ -171,7 +172,7 @@ function AnchorWatch() {
         <Notice tone="alert" title={status}>
           {snoozedBlind
             ? `Alarm silenced — it sounds again in ${snoozeMin} min if GPS is still gone.`
-            : 'Keep the app in front with the screen on until GPS comes back.'}
+            : anchorScreenCopy(native).blind}
         </Notice>
       ) : dragging ? (
         <Notice tone="alert" title="Anchor dragging">{alarmText || status}</Notice>
@@ -186,7 +187,7 @@ function AnchorWatch() {
         <div className="nav-status" role="status"><Icon name="circle-dot" size={16} />{status}</div>
       ))}
       {native ? (
-        <Hint>In the FishApp iPhone app the watch keeps GPS running with the screen locked, and iOS shows the location indicator while it does. If you drag while the phone is locked, it sounds an alarm tone and shows a notification. Keep the volume up and don't swipe the app away — a closed app can't sound the alarm.</Hint>
+        <Hint>In the {SITE.brandName} app the watch keeps GPS running with the screen locked, and iOS shows the location indicator while it does. If you drag while the phone is locked, it sounds an alarm tone and shows a notification. Keep the volume up and don't swipe the app away — a closed app can't sound the alarm.</Hint>
       ) : (
         <Hint>Keep the app open with the screen on — iOS pauses GPS when the phone locks, so a background alarm isn't possible in a web app.</Hint>
       )}

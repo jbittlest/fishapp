@@ -15,6 +15,7 @@ import {
   wxOnReconnect, wxStore,
 } from '../../engine/weather.js';
 import type { WxCurrent, WxDay, WxHour } from '../../engine/weather.js';
+import { OpenMeteoCredit } from './DataCredit';
 import './weather.css';
 
 type Tab = 'now' | '10day';
@@ -77,8 +78,9 @@ function useStale(ts: number): boolean {
   return ts > 0 && wxIsStale(ts);
 }
 
-/** "Forecast: Open-Meteo · updated just now", or the stale badge with its age. Rendered right
- *  under the location line — above the numbers — so it is visible at the medium detent. */
+/** "Forecast updated just now", or the stale badge with its age. Rendered right under the
+ *  location line — above the numbers — so it is visible at the medium detent. (The source is
+ *  credited, linked, under the data: OpenMeteoCredit.) */
 function AgeNote({ ts, fresh, failed, refreshing, onRetry }: { ts: number; fresh: string; failed: boolean; refreshing: boolean; onRetry: () => void }) {
   const online = useUi((s) => s.online);
   const stale = useStale(ts);
@@ -178,8 +180,9 @@ function NowTab() {
   return (
     <>
       <LocLine text={now.locLabel} />
-      <AgeNote ts={now.ts} fresh="Forecast: Open-Meteo · updated just now" failed={now.refreshFailed} refreshing={now.refreshing} onRetry={retry} />
+      <AgeNote ts={now.ts} fresh="Forecast updated just now" failed={now.refreshFailed} refreshing={now.refreshing} onRetry={retry} />
       {body}
+      {now.status === 'ready' && now.current && <OpenMeteoCredit />}
     </>
   );
 }
@@ -262,9 +265,10 @@ function TenDayTab() {
   return (
     <>
       {fc.forArea ? <AreaBar label={fc.locLabel} hereAtBoat={fc.hereAtBoat} /> : <LocLine text={fc.locLabel} />}
-      <AgeNote ts={fc.ts} fresh="Open-Meteo · updated just now" failed={fc.refreshFailed} refreshing={fc.refreshing} onRetry={retry} />
+      <AgeNote ts={fc.ts} fresh="Updated just now" failed={fc.refreshFailed} refreshing={fc.refreshing} onRetry={retry} />
       {fc.status === 'ready' && fc.days.length > 0 && <Hint className="wx-legendhint">Tap a day for its 3-hourly breakdown.</Hint>}
       {body}
+      {fc.status === 'ready' && fc.days.length > 0 && <OpenMeteoCredit />}
     </>
   );
 }

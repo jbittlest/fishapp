@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<!-- Link-preview image (Open Graph / Twitter), 1200x630. Rendered to public/og.png by
+     tools/web/render-og.mjs, which fills the {{…}} slots from src/site.config.json and inlines the
+     bundled Barlow fonts. Same visual language as the app icon (tools/icon/icon.html). -->
+<style>
+  @font-face { font-family: 'Barlow'; font-weight: 500; src: url({{FONT_500}}) format('woff2'); }
+  @font-face { font-family: 'Barlow'; font-weight: 600; src: url({{FONT_600}}) format('woff2'); }
+  @font-face { font-family: 'Barlow Semi Condensed'; font-weight: 600; src: url({{FONT_INST}}) format('woff2'); }
+  html, body { margin: 0; width: 1200px; height: 630px; overflow: hidden; background: #060B11; }
+  .card { position: relative; width: 1200px; height: 630px; color: #F3F6F9; font-family: 'Barlow', system-ui, sans-serif; }
+  .art { position: absolute; inset: 0; }
+  .copy { position: absolute; left: 72px; top: 64px; width: 690px; }
+  .brand { display: flex; align-items: center; gap: 22px; }
+  .brand img { display: block; border-radius: 19px; box-shadow: 0 0 0 1px rgba(196, 214, 232, .16); }
+  .brand span { font-size: 54px; font-weight: 600; letter-spacing: -.01em; }
+  h1 { margin: 44px 0 0; font-size: 62px; line-height: 1.04; font-weight: 600; letter-spacing: -.015em; max-width: 600px; }
+  h1 em { font-style: normal; color: #FFB547; }
+  .chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 38px; }
+  .chip { font-size: 20px; font-weight: 500; color: #B4C0CC; padding: 8px 16px; border-radius: 999px; background: rgba(21, 34, 48, .92);
+    box-shadow: inset 0 0 0 1px rgba(196, 214, 232, .16); }
+  .url { position: absolute; left: 72px; bottom: 54px; font: 600 26px 'Barlow Semi Condensed', sans-serif; letter-spacing: .02em; color: #8493A3; }
+  .url b { color: #FFB547; font-weight: 600; }
+</style></head>
+<body>
+<div class="card">
+  <svg class="art" width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="bg" x1="0" y1="0" x2="0.5" y2="1">
+        <stop offset="0" stop-color="#13283A"/>
+        <stop offset="1" stop-color="#060B11"/>
+      </linearGradient>
+      <radialGradient id="glow" cx="0.79" cy="0.44" r="0.34">
+        <stop offset="0" stop-color="#FFB547" stop-opacity=".13"/>
+        <stop offset="1" stop-color="#FFB547" stop-opacity="0"/>
+      </radialGradient>
+      <linearGradient id="fade" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#060B11" stop-opacity=".92"/>
+        <stop offset=".52" stop-color="#060B11" stop-opacity=".55"/>
+        <stop offset=".72" stop-color="#060B11" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+    <rect width="1200" height="630" fill="url(#bg)"/>
+    <!-- depth contours around a shoal off to the right -->
+    <g fill="none" stroke-width="5" transform="rotate(-14 900 470)">
+      <ellipse cx="900" cy="470" rx="120" ry="76" stroke="#2A4E6C" opacity=".95"/>
+      <ellipse cx="900" cy="470" rx="210" ry="136" stroke="#22425D" opacity=".85"/>
+      <ellipse cx="900" cy="470" rx="310" ry="204" stroke="#1C374F" opacity=".75"/>
+      <ellipse cx="900" cy="470" rx="420" ry="278" stroke="#183044" opacity=".65"/>
+      <ellipse cx="900" cy="470" rx="540" ry="360" stroke="#15293A" opacity=".55"/>
+      <ellipse cx="900" cy="470" rx="670" ry="448" stroke="#13253A" opacity=".45"/>
+    </g>
+    <rect width="1200" height="630" fill="url(#glow)"/>
+    <rect width="1200" height="630" fill="url(#fade)"/>
+    <!-- Go-To leg: ink casing under an amber core, from ahead of the bow to the destination -->
+    <g fill="none" stroke-linecap="round">
+      <path d="M1000 205 L1088 112" stroke="#0B131C" stroke-width="11"/>
+      <path d="M1000 205 L1088 112" stroke="#FFB547" stroke-width="5" stroke-dasharray="1 13"/>
+    </g>
+    <circle cx="1096" cy="104" r="17" fill="#0B131C"/>
+    <circle cx="1096" cy="104" r="12" fill="none" stroke="#FFB547" stroke-width="4.5"/>
+    <circle cx="1096" cy="104" r="4.5" fill="#F3F6F9"/>
+    <!-- own-ship underway, the in-app hull mark with its wake -->
+    <g transform="translate(905 300) rotate(43) scale(11) translate(-12 -11.75)">
+      <g fill="none" stroke-linecap="round">
+        <path d="M8.9 21.2 C 7.6 25.5, 5.4 29.5, 2.2 33.5" stroke="#A9CBE4" stroke-width=".6" opacity=".42"/>
+        <path d="M15.1 21.2 C 16.4 25.5, 18.6 29.5, 21.8 33.5" stroke="#A9CBE4" stroke-width=".6" opacity=".42"/>
+        <path d="M10.6 21.6 C 10.2 24.5, 9.6 27.5, 8.6 30.5" stroke="#A9CBE4" stroke-width=".45" opacity=".22"/>
+        <path d="M13.4 21.6 C 13.8 24.5, 14.4 27.5, 15.4 30.5" stroke="#A9CBE4" stroke-width=".45" opacity=".22"/>
+      </g>
+      <path d="M12 2.5c2.6 2.6 4 6 4 10v8.5H8v-8.5c0-4 1.4-7.4 4-10z" fill="#FFB547" stroke="#0B131C" stroke-width=".5" stroke-linejoin="round"/>
+      <path d="M10 11.2h4v3.4a.8.8 0 0 1-.8.8h-2.4a.8.8 0 0 1-.8-.8z" fill="#0B131C" opacity=".82"/>
+    </g>
+  </svg>
+  <div class="copy">
+    <div class="brand">
+      <img src="{{ICON}}" width="80" height="80" alt="">
+      <span>{{BRAND}}</span>
+    </div>
+    <h1>{{TAGLINE_HTML}}</h1>
+    <div class="chips"><span class="chip">Works with no signal</span><span class="chip">Tides &amp; solunar</span><span class="chip">CA reefs &amp; MPAs</span></div>
+  </div>
+  <div class="url">{{SHORT_URL_HTML}}</div>
+</div>
+</body></html>

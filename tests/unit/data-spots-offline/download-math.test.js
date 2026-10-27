@@ -87,24 +87,24 @@ describe('tile ranges / counting / jobs', () => {
   });
 });
 
-describe('activeLayerIds — download exactly what the chart shows', () => {
+describe('activeLayerIds — what the chart shows', () => {
   beforeEach(() => layersStoreMock.setState({ base: 'ocean', enc: false, seamark: false }));
   it('plain bases carry no companions', () => {
     expect(dl.activeLayerIds({ base: 'ocean', enc: false, seamark: false })).toEqual(['ocean']);
     expect(dl.activeLayerIds({ base: 'street', enc: false, seamark: false })).toEqual(['street']);
   });
-  it('satellite brings the labels', () => {
-    expect(dl.activeLayerIds({ base: 'sat', enc: false, seamark: true })).toEqual(['sat', 'labels', 'seamark']);
+  it('satellite no longer brings the retired CARTO labels', () => {
+    expect(dl.activeLayerIds({ base: 'sat', enc: false, seamark: true })).toEqual(['sat', 'seamark']);
   });
-  it('GMRT relief brings labels + its hillshade', () => {
-    expect(dl.activeLayerIds({ base: 'gmrt', enc: true, seamark: false })).toEqual(['gmrt', 'labels', 'reliefhi', 'enc']);
+  it('GMRT relief brings its hillshade', () => {
+    expect(dl.activeLayerIds({ base: 'gmrt', enc: true, seamark: false })).toEqual(['gmrt', 'reliefhi', 'enc']);
   });
-  it('BlueTopo brings labels + blueshade (the legacy list dropped both)', () => {
-    expect(dl.activeLayerIds({ base: 'bluetint', enc: true, seamark: true })).toEqual(['bluetint', 'labels', 'blueshade', 'enc', 'seamark']);
+  it('BlueTopo brings blueshade (the legacy list dropped it)', () => {
+    expect(dl.activeLayerIds({ base: 'bluetint', enc: true, seamark: true })).toEqual(['bluetint', 'blueshade', 'enc', 'seamark']);
   });
   it('reads the layer owner store when no state is passed', () => {
     layersStoreMock.setState({ base: 'bluetint', enc: true, seamark: false });
-    expect(dl.activeLayerIds()).toEqual(['bluetint', 'labels', 'blueshade', 'enc']);
+    expect(dl.activeLayerIds()).toEqual(['bluetint', 'blueshade', 'enc']);
   });
 });
 
@@ -133,6 +133,40 @@ describe('deleting an area keeps tiles another saved area still needs', () => {
     const a = rec(1, 33.70, -118.50, 33.76, -118.44, ['seamark']);
     const b = rec(2, 33.70, -118.50, 33.76, -118.44, ['labels']);
     expect(dl.keysToDelete(a, [a, b]).kept).toBe(0);
+  });
+
+  /* Two boxes that do not overlap can still share a coarse tile, and with the native-zoom floor
+     that tile can be the other area's only base level. The old box-overlap test deleted it. */
+  const floored = (id, w, e, s, n, minZ, maxZ, layerIds) => ({ id, name: 'F' + id, bounds: { w, e, s, n }, minZ, maxZ, layerIds, nativeFloor: true });
+  it('keeps the GEBCO z10 tile a nearby (not overlapping) area still needs', () => {
+    // default Ocean base, Standard detail at map z13: z12-14 with GEBCO kept in the base's place
+    const a = floored(1, -118.30, -118.27, 33.70, 33.72, 12, 14, ['gmrt', 'enc']);
+    const b = floored(2, -118.20, -118.17, 33.70, 33.72, 12, 14, ['gmrt', 'enc']);
+    expect(a.bounds.e < b.bounds.w).toBe(true);
+    const bKeys = new Set(dl.areaTileKeys(b));
+    expect([...bKeys].filter((k) => k.startsWith('gmrt/'))).toEqual(['gmrt/10/175/410']);   // B's only base level
+    const { del, kept } = dl.keysToDelete(a, [a, b]);
+    expect(del).not.toContain('gmrt/10/175/410');
+    expect(del.some((k) => bKeys.has(k))).toBe(false);
+    expect(kept).toBe(dl.areaTileKeys(a).filter((k) => bKeys.has(k)).length);
+    expect(del.length + kept).toBe(dl.areaTileKeys(a).length);
+  });
+  it('keeps the shared GMRT z12 detail tile of two relief areas a couple of km apart', () => {
+    // relief base, Maximum detail at map z15: z14-16, GMRT detail floored to its z12
+    const a = floored(1, -118.300, -118.290, 33.700, 33.705, 14, 16, ['gmrt', 'reliefhi', 'enc']);
+    const b = floored(2, -118.270, -118.260, 33.700, 33.705, 14, 16, ['gmrt', 'reliefhi', 'enc']);
+    const bKeys = new Set(dl.areaTileKeys(b));
+    const shared = dl.areaTileKeys(a).filter((k) => bKeys.has(k));
+    expect(shared).toEqual(expect.arrayContaining(['gmrt/10/175/410']));
+    expect(shared.some((k) => k.startsWith('reliefhi/12/'))).toBe(true);
+    const { del } = dl.keysToDelete(a, [a, b]);
+    expect(del.some((k) => bKeys.has(k))).toBe(false);
+  });
+  it('a far-away area still protects nothing, and a lone area deletes everything', () => {
+    const a = floored(1, -118.30, -118.27, 33.70, 33.72, 12, 14, ['gmrt', 'enc']);
+    const far = floored(2, -120.00, -119.97, 34.50, 34.52, 12, 14, ['gmrt', 'enc']);
+    expect(dl.keysToDelete(a, [a, far])).toEqual({ del: dl.areaTileKeys(a), kept: 0 });
+    expect(dl.keysToDelete(a, [a])).toEqual({ del: dl.areaTileKeys(a), kept: 0 });
   });
 });
 

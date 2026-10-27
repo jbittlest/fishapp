@@ -51,6 +51,38 @@ self.addEventListener('message', (e) => {
   if (e.data === 'version' && e.source) e.source.postMessage({ type: 'version', cache: CACHE });
 });
 
+/* The public web pages (get/, places/, privacy, support — tools/make-web-pages.mjs) are separate
+   documents that only happen to sit inside this worker's scope. A search visitor must get THAT
+   page: fresh from the network, else its last copy, else an honest offline note. Never the app
+   shell booting under a place page's URL, which is what the navigation fallback below would do. */
+const WEB_PAGES = /^(?:get(?:\/|$)|places(?:\/|$)|privacy\.html$|support\.html$|sitemap\.xml$|robots\.txt$)/;
+
+function isWebPage(url) {
+  const base = new URL(self.registration.scope).pathname;
+  return url.pathname.startsWith(base) && WEB_PAGES.test(url.pathname.slice(base.length));
+}
+
+function webPage(request, url) {
+  const key = url.origin + url.pathname;   // ?c=<campaign> variants of get/ share one copy
+  return fetch(request).then((resp) => {
+    if (resp.ok) {
+      const copy = resp.clone();
+      caches.open(CACHE).then((c) => c.put(key, copy)).catch(() => {});
+    }
+    return resp;
+  }).catch(() => caches.match(key).then((hit) => hit || offlinePage()));
+}
+
+function offlinePage() {
+  return new Response('<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">' +
+    '<meta name="viewport" content="width=device-width, initial-scale=1"><title>Offline</title>' +
+    '<style>html{background:#0F1A25;color:#F3F6F9;font:16px/1.55 system-ui,-apple-system,sans-serif}' +
+    'body{max-width:560px;margin:0 auto;padding:48px 22px}a{color:#FFB547}</style></head><body>' +
+    '<h1>You are offline</h1><p>This page needs an internet connection. The app itself works offline.</p>' +
+    '<p><a href="' + self.registration.scope + '">Open the app</a></p></body></html>',
+    { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+}
+
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (url.origin !== location.origin) return; // chart tiles are handled by IndexedDB, not here
@@ -58,6 +90,10 @@ self.addEventListener('fetch', (e) => {
      buffered and never read. A same-origin proxy URL in the assistant settings is
      enough to hit this on every POST. */
   if (e.request.method !== 'GET') return;
+  if (e.request.mode === 'navigate' && isWebPage(url)) {
+    e.respondWith(webPage(e.request, url));
+    return;
+  }
 
   e.respondWith(
     caches.match(e.request, { ignoreSearch: true }).then((cached) => {

@@ -1,0 +1,72 @@
+{
+  "notes": "App Store screenshot captions, in listing order (the first three show in search results). screen = raw capture name from tests/visual/appstore.spec.ts; accent = the phrase drawn in the signal colour; theme night = the night signal for a night-mode screen. Headlines <= 5 words, sublines one line and device-neutral (the iPad set uses them too). Every claim must be something the iOS app really does (guideline 2.3): tests/unit/storeshots/claims.test.js checks forecast lengths, the night chart and the MPA data against the code. held = names kept out of the captions until the owner decides on them; each says why.",
+  "held": {
+    "First Mate": "the assistant's name is open (docs/launch/aso.md, owner decisions 2 and 5): Mercury and Furuno ship First Mate marine apps"
+  },
+  "screens": [
+    {
+      "id": "offline",
+      "screen": "01-goto",
+      "headline": "Works with zero bars",
+      "accent": "zero bars",
+      "subline": "Saved charts, GPS and the assistant, no signal"
+    },
+    {
+      "id": "mpa",
+      "screen": "07-mpa",
+      "headline": "Know where the lines are",
+      "accent": "the lines",
+      "subline": "California MPAs and no-take zones, built in"
+    },
+    {
+      "id": "anchor",
+      "screen": "08-anchor",
+      "headline": "Anchor alarm that wakes you",
+      "accent": "wakes you",
+      "subline": "Sounds the moment you drag past your circle"
+    },
+    {
+      "id": "inspect",
+      "screen": "02-inspect",
+      "headline": "Tap the chart, see conditions",
+      "accent": "see conditions",
+      "subline": "Chart depth, wind, swell and water temp"
+    },
+    {
+      "id": "weather",
+      "screen": "03-weather",
+      "headline": "10-day wind, 8-day waves",
+      "accent": "10-day wind",
+      "subline": "Plan the run before you leave the dock"
+    },
+    {
+      "id": "tides",
+      "screen": "04-tides",
+      "headline": "Tides & bite times",
+      "accent": "bite times",
+      "subline": "NOAA tides, sun, moon and solunar periods"
+    },
+    {
+      "id": "first-mate",
+      "screen": "05-first-mate",
+      "headline": "Got a question? Just ask",
+      "accent": "Just ask",
+      "subline": "Answers from your boat data, even offline"
+    },
+    {
+      "id": "night",
+      "screen": "06-night",
+      "headline": "Easier on your night vision",
+      "accent": "night vision",
+      "subline": "Red controls, dimmed chart, less glare",
+      "theme": "night"
+    },
+    {
+      "id": "download",
+      "screen": "09-offline",
+      "headline": "Save your grounds offline",
+      "accent": "offline",
+      "subline": "Charts plus a 7-day wind, wave and tide pack"
+    }
+  ]
+}

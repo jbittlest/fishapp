@@ -175,7 +175,8 @@
    them (the same treatment the radar / SST overlays get), so a photo never blows dark adaptation. */
 :root[data-theme="night"] .tide-photo__img,
 :root[data-theme="night"] .tide-catch__thumb img,
-:root[data-theme="night"] .tide-card__photo {
+:root[data-theme="night"] .tide-card__photo,
+:root[data-theme="night"] .tide-share__preview img {
   filter: grayscale(1) sepia(1) saturate(3.5) hue-rotate(-28deg) brightness(.42);
 }
 
@@ -201,3 +202,17 @@
 .tide-card__acts.is-two { grid-template-columns: 1fr auto; }
 .tide-card__acts > .ui-btn { min-width: 0; }
 .tide-card__acts > .tide-card__del { width: 48px; height: 48px; margin-left: 4px; border-radius: var(--r-md); color: var(--alert-text); }   /* ≥12px from Navigate */
+
+/* ---------------------------------------------------------- share options sheet */
+/* The preview is the image itself (drawn in the Day palette for strangers' eyes), framed on the
+   sheet's raised well; the old one dims while the next option's card draws. */
+.tide-share__preview {
+  display: grid; place-items: center; gap: 8px; height: 236px; margin: 2px 0 14px; padding: 12px;
+  border-radius: var(--r-lg); background: var(--raised); box-shadow: inset 0 0 0 1px var(--line);
+}
+.tide-share__preview img {
+  display: block; height: 212px; width: auto; max-width: 100%; object-fit: contain;
+  border-radius: var(--r-sm); box-shadow: var(--e1); transition: opacity var(--t-base);
+}
+.tide-share__preview img.is-stale { opacity: .45; }
+.tide-share__opts { margin-top: 12px; }

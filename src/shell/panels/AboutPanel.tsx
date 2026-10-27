@@ -3,10 +3,12 @@
 import { Disclosure, Group, Icon, ListRow, Notice, Section, Sheet } from '../../ui';
 import { useUi } from '../../services/ui';
 import { openExternal, isNativeShell } from '../../services/native';
+import { appStoreReviewUrl } from '../../services/review';
 import { NOT_FOR_NAVIGATION, POLICY, POLICY_UPDATED, SOURCES, SUPPORT_URL } from '../../legal/privacy.js';
 
 export default function AboutPanel() {
   const build = useUi((s) => s.build);
+  const rateUrl = appStoreReviewUrl();      // null until the App Store listing exists
   return (
     <Sheet title="About FishApp">
       <div className="about-head">
@@ -41,6 +43,7 @@ export default function AboutPanel() {
       <Section label="Help">
         <Group>
           <ListRow icon="message" title="Report a problem or ask a question" subtitle="Opens the FishApp issue tracker" chevron onPress={() => openExternal(SUPPORT_URL)} />
+          {rateUrl && <ListRow icon="star" title="Rate on the App Store" chevron onPress={() => openExternal(rateUrl)} />}
         </Group>
       </Section>
     </Sheet>

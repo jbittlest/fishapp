@@ -13,6 +13,8 @@ import { useUi } from '../../services/ui';
 import { formatCoord } from '../../engine/gps.js';
 import { compass } from '../../engine/weather.js';
 import { depthInfo, inspectAreaForecast, inspectAt, inspectNavigate, inspectSaveSpot, inspectStore } from '../../engine/inspect.js';
+import { OPEN_METEO_CREDIT, OPEN_METEO_URL } from '../../engine/datasources.js';
+import { CreditLink } from './DataCredit';
 import './weather.css';
 
 type Reading = unknown;
@@ -135,7 +137,11 @@ export default function InspectCard({ data }: CardProps) {
           <Water v={res.sst} />
         </div>
         <div className="wx-ins__foot">
-          <p className="wx-ins__note">Chart depth is from survey data, not your sounder. Conditions are model estimates.</p>
+          <p className="wx-ins__note">
+            Chart depth is from survey data, not your sounder. Conditions are model estimates.{' '}
+            {/* wind, swell and water temp are Open-Meteo data: its CC BY credit, linked, right here */}
+            <CreditLink href={OPEN_METEO_URL}>{OPEN_METEO_CREDIT}</CreditLink>
+          </p>
           {canRetry && (
             <Button variant="ghost" compact icon="refresh" className="wx-ins__retry" onClick={() => inspectAt({ lat, lng })}>Retry</Button>
           )}
