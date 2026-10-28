@@ -61,7 +61,7 @@ self.addEventListener('message', (e) => {
    documents that only happen to sit inside this worker's scope. A search visitor must get THAT
    page: fresh from the network, else its last copy, else an honest offline note. Never the app
    shell booting under a place page's URL, which is what the navigation fallback below would do. */
-const WEB_PAGES = /^(?:get(?:\/|$)|places(?:\/|$)|privacy\.html$|support\.html$|sitemap\.xml$|robots\.txt$)/;
+const WEB_PAGES = /^(?:get(?:\/|$)|places(?:\/|$)|privacy\.html$|support\.html$|reset\.html$|sitemap\.xml$|robots\.txt$)/;
 
 function isWebPage(url) {
   const base = new URL(self.registration.scope).pathname;

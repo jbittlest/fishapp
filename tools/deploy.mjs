@@ -30,9 +30,9 @@ const di = argv.indexOf('--dist');
 const DIST = path.resolve(di >= 0 ? argv[di + 1] : path.join(ROOT, 'dist'));
 
 /* Paths the build owns in the deploy checkout: replaced wholesale on every deploy. */
-const MANAGED = ['index.html', 'sw.js', 'manifest.webmanifest', '.nojekyll', 'assets', 'icons', 'data', 'privacy.html', 'support.html', 'classic', 'og.png', ...WEB_OUTPUTS];
+const MANAGED = ['index.html', 'sw.js', 'manifest.webmanifest', '.nojekyll', 'assets', 'icons', 'data', 'privacy.html', 'support.html', 'reset.html', 'classic', 'og.png', ...WEB_OUTPUTS];
 /* Website-only files: crawlers, link previews and the public pages. Never part of the iOS bundle. */
-const WEB_ONLY = ['sw.js', '.nojekyll', 'og.png', ...WEB_OUTPUTS];
+const WEB_ONLY = ['sw.js', '.nojekyll', 'og.png', 'reset.html', ...WEB_OUTPUTS];
 /* The pre-React vanilla app. Removed if present; they are not part of the new build. */
 const LEGACY = ['js', 'css', 'libs'];
 /* Docs + infra that live in this source tree and are mirrored so the public repo stays readable. */
