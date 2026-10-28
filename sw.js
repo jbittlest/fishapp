@@ -5,37 +5,37 @@
    a new worker automatically; there is no version number to remember to bump any more. */
 'use strict';
 
-const CACHE = "fishapp-2026.10.27-1943-22dc425a";
+const CACHE = "fishapp-2026.10.27-1944-83eba4d2";
 const SHELL = [
   "./",
   "./index.html",
-  "./assets/AboutPanel-dGg1MH39.js",
-  "./assets/AssistantPanel-CM4VC93o.js",
+  "./assets/AboutPanel-CQec0GYG.js",
+  "./assets/AssistantPanel-DcSLwD2s.js",
   "./assets/AssistantPanel-Gv6AocjK.css",
-  "./assets/CatchCard-DGPVbvnC.js",
-  "./assets/CatchModal-C5A0kIhx.js",
-  "./assets/DownloadPanel-fhvoEWml.js",
-  "./assets/EmergencyPanel-CA1QvmkY.js",
-  "./assets/FishCard-DJAUc7ew.js",
-  "./assets/GuidesPanel-CuLSGp4w.js",
+  "./assets/CatchCard-C1y-JYxn.js",
+  "./assets/CatchModal-CoHNr1s-.js",
+  "./assets/DownloadPanel-DMrwHYpe.js",
+  "./assets/EmergencyPanel-MzlrsvnK.js",
+  "./assets/FishCard-CbVViH9c.js",
+  "./assets/GuidesPanel-CAvMrI_E.js",
   "./assets/GuidesPanel-DaMDjdbD.css",
-  "./assets/HistoryCard-Oy53iexL.js",
-  "./assets/InspectCard-lIgfbCwr.js",
-  "./assets/LayersPanel-CB5R2zRg.js",
-  "./assets/LicensesModal-aqcoda_C.js",
-  "./assets/MorePanel-CRDB4g7Q.js",
-  "./assets/MotorPanel-Dd2-16Kz.js",
-  "./assets/MpaCard-Dzp7HOCE.js",
-  "./assets/ReefCard-CuCDtw-U.js",
-  "./assets/RetryState-BAnXzo3X.js",
-  "./assets/SharedSpotCard-BkXLVABE.js",
-  "./assets/SpotCard-Cqu5rIQW.js",
-  "./assets/SpotGlyph-BhEJG66h.js",
-  "./assets/SpotModal-DfbDiDWh.js",
-  "./assets/SpotsPanel-CwVAfzDi.js",
-  "./assets/TidesPanel-DoUqIugF.js",
-  "./assets/ToolsPanel-DOrPuZPk.js",
-  "./assets/WeatherPanel-i9eSpp5g.js",
+  "./assets/HistoryCard-DT9_Kkw9.js",
+  "./assets/InspectCard-DQp2BqrV.js",
+  "./assets/LayersPanel-Bx70UxZo.js",
+  "./assets/LicensesModal-sYp9p53K.js",
+  "./assets/MorePanel-qoldsMKi.js",
+  "./assets/MotorPanel-CaSML60h.js",
+  "./assets/MpaCard-Dd9GIc11.js",
+  "./assets/ReefCard-CO2RGHEL.js",
+  "./assets/RetryState-BpgMi63S.js",
+  "./assets/SharedSpotCard-BV5Jv4Fo.js",
+  "./assets/SpotCard-DY8ahR_S.js",
+  "./assets/SpotGlyph-BTbMYNzX.js",
+  "./assets/SpotModal-CKKbAC0L.js",
+  "./assets/SpotsPanel-DmBpPm5H.js",
+  "./assets/TidesPanel-lXZB-Qf2.js",
+  "./assets/ToolsPanel-CPSuDUaL.js",
+  "./assets/WeatherPanel-BlaUc_cu.js",
   "./assets/barlow-latin-400-normal-fsAxiSwU.woff",
   "./assets/barlow-latin-400-normal-qiz4-Cze.woff2",
   "./assets/barlow-latin-500-normal-BPAOfeC8.woff2",
@@ -50,24 +50,24 @@ const SHELL = [
   "./assets/barlow-semi-condensed-latin-600-normal-DyOfdMBA.woff",
   "./assets/barlow-semi-condensed-latin-700-normal-BMyZXq_9.woff",
   "./assets/barlow-semi-condensed-latin-700-normal-BpqDG8I9.woff2",
-  "./assets/catchActions-Bz4h-0FD.js",
-  "./assets/download-BkZiMR67.js",
+  "./assets/catchActions-DxctS93A.js",
+  "./assets/download-9v_843CI.js",
   "./assets/fish-id-BBhzpHWG.js",
   "./assets/format-CByDRuXD.js",
-  "./assets/goto-CptTSl7F.js",
+  "./assets/goto-BtBmp26A.js",
   "./assets/goto-qFgsZmkf.css",
-  "./assets/index-CX1t8nkU.js",
+  "./assets/index-DBXiyu-H.js",
   "./assets/index-boW4UEW4.css",
   "./assets/layers-2x-Bpkbi35X.png",
   "./assets/layers-BWBAp2CZ.png",
   "./assets/marker-icon-hN30_KVU.png",
   "./assets/native-WZNc8FW3.js",
-  "./assets/review-gUGMIWL9.js",
+  "./assets/review-CmIUomNB.js",
   "./assets/spots-CA-3KImd.css",
   "./assets/tides-DGhdK2nv.css",
-  "./assets/ui-D2lXvsEV.js",
-  "./assets/ui-DiVOw-1l.js",
-  "./assets/useFix-DfVQ5-Qk.js",
+  "./assets/ui-CHndZwgB.js",
+  "./assets/ui-DU0DLtWC.js",
+  "./assets/useFix-CagCODw7.js",
   "./assets/weather-CwzQRbJF.css",
   "./data/mpa-ca.json",
   "./data/reefs-ca.json",
@@ -77,6 +77,7 @@ const SHELL = [
   "./icons/icon-512.png",
   "./manifest.webmanifest",
   "./privacy.html",
+  "./reset.html",
   "./support.html"
 ];
 
@@ -87,7 +88,7 @@ const SHELL = [
    or a file renamed later) would 404, reject the install, and leave the app with NO
    service worker and no offline mode at all. Intersecting means a stale entry
    silently drops out of the critical set instead of bricking offline support. */
-const CRITICAL = ["./","./index.html","./assets/index-CX1t8nkU.js","./assets/AssistantPanel-Gv6AocjK.css","./assets/GuidesPanel-DaMDjdbD.css","./assets/goto-qFgsZmkf.css","./assets/index-boW4UEW4.css","./assets/spots-CA-3KImd.css","./assets/tides-DGhdK2nv.css","./assets/weather-CwzQRbJF.css"].filter((u) => SHELL.indexOf(u) !== -1);
+const CRITICAL = ["./","./index.html","./assets/index-DBXiyu-H.js","./assets/AssistantPanel-Gv6AocjK.css","./assets/GuidesPanel-DaMDjdbD.css","./assets/goto-qFgsZmkf.css","./assets/index-boW4UEW4.css","./assets/spots-CA-3KImd.css","./assets/tides-DGhdK2nv.css","./assets/weather-CwzQRbJF.css"].filter((u) => SHELL.indexOf(u) !== -1);
 
 /* Cache lookups ignore Vary. Everything in this cache is a same-origin static file, but a host can
    still send Vary: Origin (vite preview does; so do some CDNs and custom-domain proxies), and the
@@ -133,7 +134,7 @@ self.addEventListener('message', (e) => {
    documents that only happen to sit inside this worker's scope. A search visitor must get THAT
    page: fresh from the network, else its last copy, else an honest offline note. Never the app
    shell booting under a place page's URL, which is what the navigation fallback below would do. */
-const WEB_PAGES = /^(?:get(?:\/|$)|places(?:\/|$)|privacy\.html$|support\.html$|sitemap\.xml$|robots\.txt$)/;
+const WEB_PAGES = /^(?:get(?:\/|$)|places(?:\/|$)|privacy\.html$|support\.html$|reset\.html$|sitemap\.xml$|robots\.txt$)/;
 
 function isWebPage(url) {
   const base = new URL(self.registration.scope).pathname;

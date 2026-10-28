@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Fix loading problems</title>
+<style>
+  html { background: #0F1A25; color: #F3F6F9; font: 17px/1.55 system-ui, -apple-system, sans-serif; }
+  body { max-width: 560px; margin: 0 auto; padding: 48px 22px; }
+  a { color: #FFB547; }
+  .btn { display: inline-block; margin-top: 18px; padding: 14px 22px; border-radius: 12px; background: #FFB547; color: #0B131C; font-weight: 700; text-decoration: none; }
+</style>
+</head>
+<body>
+<h1>Fix loading problems</h1>
+<p id="status">Clearing the app's stored copy of itself…</p>
+<p>Your spots, tracks, catches, downloaded charts and settings are kept — only the app's own files are refreshed.</p>
+<a class="btn" id="open" href="./" hidden>Open the app</a>
+<script>
+/* Unregisters this site's service worker and deletes the app-shell caches, so the next launch
+   fetches the current build fresh. IndexedDB and localStorage (the user's data) are not touched. */
+(async () => {
+  const status = document.getElementById('status');
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister()));
+    }
+    if (window.caches) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+    }
+    status.textContent = 'Done. Open the app — it will load the latest version (needs internet this once).';
+  } catch (e) {
+    status.textContent = 'Could not finish (' + (e && e.message ? e.message : e) + '). Try closing the app completely and opening this page again.';
+  }
+  document.getElementById('open').hidden = false;
+})();
+</script>
+</body>
+</html>
