@@ -185,6 +185,9 @@ export function canSaveOffline(id) {
  * this origin) left in IndexedDB is never shown, and the launch sweep removes it.
  * maxNativeZoom lets Leaflet upscale downloaded tiles when zooming past the stored detail.
  */
+/* Generous: the NOAA chart and relief layers are rendered on demand and can be slow. */
+const TILE_TIMEOUT_MS = 25000;
+const IDB_TILE_TIMEOUT_MS = 4000;
 export const OfflineTileLayer = L.TileLayer.extend({
   createTile: function (coords, done) {
     const img = document.createElement('img');
@@ -207,9 +210,17 @@ export const OfflineTileLayer = L.TileLayer.extend({
       const url = def.urlFor(coords.z, coords.x, coords.y, def.tilePx || 256);
       // Retry the slow on-demand render servers once before giving up to a blank tile,
       // so a transient timeout/500 doesn't leave a permanent hole in the map.
-      const tryFetch = (attempt) =>
-        fetch(url)
+      /* A stalled connection never rejects a fetch on its own, and every tile waiting on one left
+         the chart black. Abort after TILE_TIMEOUT_MS so the retry / blank-tile path runs. */
+      const timedFetch = () => {
+        const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+        const timer = ctl && setTimeout(() => ctl.abort(), TILE_TIMEOUT_MS);
+        return fetch(url, ctl ? { signal: ctl.signal } : undefined)
           .then((r) => (r.ok ? r.blob() : null))
+          .finally(() => { if (timer) clearTimeout(timer); });
+      };
+      const tryFetch = (attempt) =>
+        timedFetch()
           .then((b) => {
             /* `size > 0` is not enough for every source. BlueTopo serves TWO different
                fully-transparent blanks outside its survey coverage — 256 bytes and 2266 bytes,
@@ -239,7 +250,14 @@ export const OfflineTileLayer = L.TileLayer.extend({
     // A layer that may not be kept never reads IndexedDB at all (see above).
     if (!def.offline || (tileKeysReady && !TileKeys.has(key))) { fromNetwork(); return img; }
 
+    /* iOS can hand back an IndexedDB connection that never answers after a long background; a
+       stored-tile read that hangs must not hold the tile — fall through to the network. */
+    let settled = false;
+    const idbTimer = setTimeout(() => { if (!settled) { settled = true; fromNetwork(); } }, IDB_TILE_TIMEOUT_MS);
     getTileBlob(key).then((blob) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(idbTimer);
       if (blob instanceof Blob) {
         img._objUrl = URL.createObjectURL(blob);
         img.src = img._objUrl;

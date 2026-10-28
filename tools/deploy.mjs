@@ -71,11 +71,40 @@ if (dry) {
 }
 try { await makeWebPages({ outDir: SRC }); } catch (e) { fail('web pages: ' + e.message); }
 
+/* Keep the hashed files of the last few builds. A phone that had the app open (or a stale offline
+   copy) across a deploy still asks for ITS build's lazy chunks; deleting them left panels on
+   "Loading…" / "Failed to fetch dynamically imported module" until the app was force-closed.
+   assets/builds.json lists each kept build's files; older builds' files are dropped. */
+const KEEP_BUILDS = 5;
+const HISTORY = 'assets/builds.json';
+const prevAssets = path.join(TARGET, 'assets');
+let history = [];
+try { history = JSON.parse(fs.readFileSync(path.join(TARGET, HISTORY), 'utf8')); } catch {
+  if (fs.existsSync(prevAssets)) history = [fs.readdirSync(prevAssets).filter((n) => n !== 'builds.json')];
+}
+const ls = (d) => (fs.existsSync(d) ? fs.readdirSync(d) : []);
+history = [ls(path.join(SRC, 'assets')), ...history].slice(0, KEEP_BUILDS);
+const keepOld = new Set(history.slice(1).flat());
+const stash = fs.mkdtempSync(path.join(os.tmpdir(), 'fishapp-assets-'));
+for (const f of keepOld) {
+  const p = path.join(prevAssets, f);
+  if (fs.existsSync(p) && fs.statSync(p).isFile()) fs.copyFileSync(p, path.join(stash, f));
+}
+
 for (const rel of [...MANAGED, ...LEGACY]) rm(rel);
 for (const name of fs.readdirSync(SRC)) {
   if (!MANAGED.includes(name)) fail(`dist/${name} is not in the MANAGED list — add it to tools/deploy.mjs so it is cleaned up on the next deploy`);
   cp(path.join(SRC, name), name);
 }
+if (!dry && fs.existsSync(path.join(TARGET, 'assets'))) {
+  for (const f of fs.readdirSync(stash)) {
+    const dest = path.join(TARGET, 'assets', f);
+    if (!fs.existsSync(dest)) fs.copyFileSync(path.join(stash, f), dest);
+  }
+  fs.writeFileSync(path.join(TARGET, HISTORY), JSON.stringify(history));
+}
+fs.rmSync(stash, { recursive: true, force: true });
+console.log(`${dry ? '[dry] ' : ''}assets  kept ${keepOld.size} files from ${history.length - 1} earlier build(s)`);
 for (const rel of DOCS) if (fs.existsSync(path.join(ROOT, rel))) { rm(rel); cp(path.join(ROOT, rel), rel); }
 
 /* The pre-React app, kept reachable at /classic/ as a rollback while the new UI earns trust on the
