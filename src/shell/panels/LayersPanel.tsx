@@ -8,8 +8,22 @@ import { fishStore } from '../../engine/fish.js';
 import { setThemeMode, useTheme, type ThemeMode } from '../../services/theme';
 import { isNativeShell } from '../../services/native';
 import { SITE } from '../../services/site';
+import { toast } from '../../services/ui';
 
 const BASE_ICON: Record<string, IconName> = { ocean: 'waves', sat: 'satellite', street: 'pin', bluetint: 'fish', gmrt: 'waves' };
+
+/* The NOAA chart is opaque over every base except the two fishing charts (which blend it in), so
+   picking Ocean, Satellite or Street with it on looked like the picker did nothing. Picking one
+   of those hides the chart, with an undo. */
+const RELIEF_BASES = new Set(['bluetint', 'gmrt']);
+function pickBase(id: string) {
+  const prev = layersStore.getState() as { base: string; enc: boolean };
+  setBase(id, true);
+  if (RELIEF_BASES.has(id) || !prev.enc || id === prev.base) return;
+  setOverlay('enc', false);
+  const title = BASES.find((b: { id: string }) => b.id === id)?.title ?? 'base map';
+  toast(`NOAA chart hidden so you can see ${title}`, { action: { label: 'Show chart', run: () => setOverlay('enc', true) } });
+}
 
 function useLayer(id: string) { return useStoreValue(layersStore, (s) => !!(s as Record<string, unknown>)[id]); }
 
@@ -52,9 +66,10 @@ export default function LayersPanel() {
         <Group>
           {BASES.map((b: { id: string; title: string; detail: string | null }) => (
             <RadioRow key={b.id} icon={BASE_ICON[b.id] ?? 'layers'} title={b.title} detail={withOfflineNote(b.id, b.detail) || undefined}
-              checked={base === b.id} onSelect={() => setBase(b.id, true)} />
+              checked={base === b.id} onSelect={() => pickBase(b.id)} />
           ))}
         </Group>
+        {enc && !RELIEF_BASES.has(base) && <Hint>The NOAA chart is drawn over the base map in US waters — turn it off below to see this map.</Hint>}
       </Section>
 
       <Section label="Chart overlays">
